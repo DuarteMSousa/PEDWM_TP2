@@ -1,0 +1,262 @@
+@startuml
+
+' =======================
+' ENUMS
+' =======================
+
+enum CourierStatus {
+    AVAILABLE
+    BUSY
+    OFFLINE
+}
+
+enum OrderStatus {
+    PENDING
+    CONFIRMED
+    PREPARING
+    READY
+    OUT_FOR_DELIVERY
+    DELIVERED
+    CANCELLED
+}
+
+enum OrderItemStatus {
+    PENDING
+    PREPARING
+    READY
+    CANCELLED
+}
+
+enum PaymentMethod {
+    CASH
+    CARD
+    MBWAY
+    PAYPAL
+}
+
+enum PaymentStatus {
+    PENDING
+    COMPLETED
+    FAILED
+    REFUNDED
+}
+
+enum DeliveryStatus {
+    PENDING
+    PICKED_UP
+    IN_TRANSIT
+    DELIVERED
+    FAILED
+}
+
+enum NotificationType {
+    ORDER_UPDATE
+    PROMOTION
+    SYSTEM
+}
+
+enum PromotionType {
+    PERCENTAGE
+    FIXED_AMOUNT
+    FREE_DELIVERY
+}
+
+' =======================
+' USERS
+' =======================
+
+class User {
+    +id: UUID
+    +name: string
+    +email: string
+    +password: string
+    +createdAt: datetime
+}
+
+class Customer {
+    +address: string
+}
+
+class Restaurant {
+    +id: UUID
+    +name: string
+    +location: string
+}
+
+class RestaurantManager {
+    +restaurantId: UUID
+}
+
+class Courier {
+    +status: CourierStatus
+    +currentLocation: string
+}
+
+User <|-- Customer
+User <|-- Courier
+User <|-- RestaurantManager
+
+' =======================
+' MENU
+' =======================
+
+class Category {
+    +id: UUID
+    +name: string
+}
+
+class Product {
+    +id: UUID
+    +name: string
+    +price: float
+    +description: string
+}
+
+class OptionGroup {
+    +id: UUID
+    +name: string
+}
+
+class Option {
+    +id: UUID
+    +name: string
+    +extraPrice: float
+}
+
+Product "1" -- "*" OptionGroup
+OptionGroup "1" -- "*" Option
+
+Restaurant "1" -- "1" RestaurantManager
+Restaurant "1" -- "*" Category
+Category "1" -- "*" Product
+
+' =======================
+' CART
+' =======================
+
+class Cart {
+    +id: UUID
+    +total: float
+    +createdAt: datetime
+}
+
+class CartItem {
+    +quantity: int
+    +unitPrice: float
+    +subtotal: float
+}
+
+Customer "1" -- "1" Cart
+Cart "1" -- "*" CartItem
+CartItem "*" -- "1" Product
+
+' =======================
+' ORDER
+' =======================
+
+class Order {
+    +id: UUID
+    +status: OrderStatus
+    +total: float
+    +createdAt: datetime
+}
+
+class OrderItem {
+    +status: OrderItemStatus
+    +quantity: int
+    +unitPrice: float
+}
+
+Customer "1" -- "*" Order
+Restaurant "1" -- "*" Order
+Order "1" -- "*" OrderItem
+OrderItem "*" -- "1" Product
+
+' =======================
+' PAYMENT
+' =======================
+
+class Payment {
+    +id: UUID
+    +method: PaymentMethod
+    +status: PaymentStatus
+}
+
+Order "1" -- "1" Payment
+
+' =======================
+' DELIVERY
+' =======================
+
+class Delivery {
+    +status: DeliveryStatus
+    +pickupTime: datetime
+    +deliveryTime: datetime
+}
+
+Courier "1" -- "*" Delivery
+Order "1" -- "1" Delivery
+
+' =======================
+' LOGS
+' =======================
+
+class Log {
+    +id: UUID
+    +event: string
+    +timestamp: datetime
+}
+
+Order "1" -- "*" Log
+
+' =======================
+' NOTIFICATIONS & CHAT
+' =======================
+
+class Notification {
+    +id: UUID
+    +type: NotificationType
+    +message: string
+}
+
+User "1" -- "*" Notification
+
+class Message {
+    +id: UUID
+    +senderId: UUID
+    +receiverId: UUID
+    +content: string
+    +timestamp: datetime
+}
+
+User "1" -- "*" Message
+Message "*" -- "1" Order
+
+' =======================
+' PROMOTIONS
+' =======================
+
+class Coupon {
+    +id: UUID
+    +code: string
+    +discount: float
+    +expiryDate: datetime
+}
+
+class Promotion {
+    +id: UUID
+    +name: string
+    +description: string
+    +type: PromotionType
+    +startDate: datetime
+    +endDate: datetime
+}
+
+class PromotionItem {
+    +id: UUID
+    +discount: float
+}
+
+Promotion "1" -- "*" PromotionItem
+
+@enduml
