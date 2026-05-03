@@ -61,6 +61,16 @@ enum PromotionType {
     FREE_DELIVERY
 }
 
+enum OrderEventType {
+    ORDER_CREATED
+    ORDER_CONFIRMED
+    ORDER_PREPARING
+    ORDER_READY
+    ORDER_OUT_FOR_DELIVERY
+    ORDER_DELIVERED
+    ORDER_CANCELLED
+}
+
 ' =======================
 ' USERS
 ' =======================
@@ -77,25 +87,43 @@ class Customer {
     +address: string
 }
 
+class RestaurantChain {
+    +id: UUID
+    +name: string
+    +logoUrl: string
+    +legalTaxId: string
+}
+
 class Restaurant {
     +id: UUID
     +name: string
-    +location: string
+    +address: string
+    +openingHours: string
+    +closingHours: string
+    +deliveryRadius: float
+    +rating: float
 }
 
-class RestaurantManager {
+class ChainManager {
+    +chainId: UUID
+}
+
+class LocalManager {
     +restaurantId: UUID
 }
-
 class Courier {
     +status: CourierStatus
-    +currentLocation: string
+    +currentCoordinates: Coordinates
 }
 
 User <|-- Customer
 User <|-- Courier
-User <|-- RestaurantManager
+User <|-- ChainManager
+User <|-- LocalManager
+ChainManager "*" -- "1" RestaurantChain
+LocalManager "*" -- "1" Restaurant
 
+User "1"-- "*" Address
 ' =======================
 ' MENU
 ' =======================
@@ -115,20 +143,40 @@ class Product {
 class OptionGroup {
     +id: UUID
     +name: string
+    +isRequired: boolean
+    +maxOptions: int
+    +minOptions: int
 }
 
 class Option {
     +id: UUID
     +name: string
     +extraPrice: float
+    +defaultOption : boolean
 }
 
 Product "1" -- "*" OptionGroup
 OptionGroup "1" -- "*" Option
 
-Restaurant "1" -- "1" RestaurantManager
-Restaurant "1" -- "*" Category
+Restaurant "1"-- "1" Address
 Category "1" -- "*" Product
+
+class RestaurantProduct {
+    +id: UUID
+    +localPrice: float
+    +isAvailable: boolean
+}
+
+' Relacionamentos da Cadeia
+RestaurantChain "1" -- "*" Restaurant
+RestaurantChain "1" -- "*" Category
+RestaurantChain "1" -- "*" Promotion
+RestaurantChain "1" -- "*" Coupon
+Category "1" -- "*" Product
+
+' Lógica de Preços Locais (Ponte)
+Restaurant "1" -- "*" RestaurantProduct
+Product "1" -- "*" RestaurantProduct
 
 ' =======================
 ' CART
@@ -167,9 +215,17 @@ class OrderItem {
     +unitPrice: float
 }
 
+class OrderEvent {
+    +id: UUID
+    +type: OrderEventType
+    +timestamp: datetime
+    +payload
+}
+
 Customer "1" -- "*" Order
 Restaurant "1" -- "*" Order
 Order "1" -- "*" OrderItem
+Order "1" -- "*" OrderEvent
 OrderItem "*" -- "1" Product
 
 ' =======================
@@ -180,10 +236,21 @@ class Payment {
     +id: UUID
     +method: PaymentMethod
     +status: PaymentStatus
+    +transactionId: string
+    +paidAt: datetime
+    +expiredAt: datetime
+}
+
+class PaymentEvent {
+    +id: UUID
+    +paymentId: UUID
+    +type: PaymentEventType
+    +payload: string   // JSON do provider (webhook, por exemplo)
+    +createdAt: datetime
 }
 
 Order "1" -- "1" Payment
-
+Payment "1" -- "*" PaymentEvent
 ' =======================
 ' DELIVERY
 ' =======================
@@ -192,6 +259,7 @@ class Delivery {
     +status: DeliveryStatus
     +pickupTime: datetime
     +deliveryTime: datetime
+    +delivery_fee: float
 }
 
 Courier "1" -- "*" Delivery
@@ -217,6 +285,8 @@ class Notification {
     +id: UUID
     +type: NotificationType
     +message: string
+    +sentAt : datetime
+    +readAt: datetime
 }
 
 User "1" -- "*" Notification
@@ -258,5 +328,41 @@ class PromotionItem {
 }
 
 Promotion "1" -- "*" PromotionItem
+
+
+' =======================
+' Reviews
+' =======================
+
+class Review {
+    +id: UUID
+    +rating: int
+    +comment: string
+    +createdAt: datetime
+}
+
+Customer "1" -- "*" Review
+Restaurant "1" -- "*" Review
+
+' =======================
+' Address
+' =======================
+
+class Coordinates {
+    +latitude: float
+    +longitude: float
+}
+
+class Address {
+    +street: string
+    +city: string
+    +state: string
+    +postalCode: string
+    +country: string
+    +coordinates: Coordinates
+}
+
+Address "1" -- "1" Coordinates
+Courier "1" -- "1" Coordinates
 
 @enduml
