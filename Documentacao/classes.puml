@@ -121,6 +121,7 @@ class Courier {
     +status: CourierStatus
     +currentLatitude: float
     +currentLongitude: float
+    +lasLocationUpdate: datetime
 }
 
 User <|-- Customer
