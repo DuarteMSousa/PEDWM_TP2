@@ -58,7 +58,13 @@ enum NotificationType {
 enum PromotionType {
     PERCENTAGE
     FIXED_AMOUNT
-    FREE_DELIVERY
+}
+
+enum PromotionTarget {
+    ORDER
+    PRODUCT
+    DELIVERY
+    CATEGORY
 }
 
 enum OrderEventType {
@@ -113,7 +119,8 @@ class LocalManager {
 }
 class Courier {
     +status: CourierStatus
-    +currentCoordinates: Coordinates
+    +currentLatitude: float
+    +currentLongitude: float
 }
 
 User <|-- Customer
@@ -172,7 +179,6 @@ RestaurantChain "1" -- "*" Restaurant
 RestaurantChain "1" -- "*" Category
 RestaurantChain "1" -- "*" Promotion
 RestaurantChain "1" -- "*" Coupon
-Category "1" -- "*" Product
 
 ' Lógica de Preços Locais (Ponte)
 Restaurant "1" -- "*" RestaurantProduct
@@ -219,7 +225,7 @@ class OrderEvent {
     +id: UUID
     +type: OrderEventType
     +timestamp: datetime
-    +payload
+    +payload: JSON
 }
 
 Customer "1" -- "*" Order
@@ -245,7 +251,7 @@ class PaymentEvent {
     +id: UUID
     +paymentId: UUID
     +type: PaymentEventType
-    +payload: string   // JSON do provider (webhook, por exemplo)
+    +payload: JSON
     +createdAt: datetime
 }
 
@@ -264,18 +270,6 @@ class Delivery {
 
 Courier "1" -- "*" Delivery
 Order "1" -- "1" Delivery
-
-' =======================
-' LOGS
-' =======================
-
-class Log {
-    +id: UUID
-    +event: string
-    +timestamp: datetime
-}
-
-Order "1" -- "*" Log
 
 ' =======================
 ' NOTIFICATIONS & CHAT
@@ -309,7 +303,8 @@ Message "*" -- "1" Order
 class Coupon {
     +id: UUID
     +code: string
-    +discount: float
+    +type: PromotionType
+    +target: PromotionTarget
     +expiryDate: datetime
 }
 
@@ -318,6 +313,7 @@ class Promotion {
     +name: string
     +description: string
     +type: PromotionType
+    +target: PromotionTarget
     +startDate: datetime
     +endDate: datetime
 }
@@ -328,6 +324,9 @@ class PromotionItem {
 }
 
 Promotion "1" -- "*" PromotionItem
+Coupon "1" -- "*" PromotionItem
+PromotionItem "*" -- "1" Product
+PromotionItem "*" -- "1" Category
 
 
 ' =======================
@@ -343,15 +342,11 @@ class Review {
 
 Customer "1" -- "*" Review
 Restaurant "1" -- "*" Review
+Courier "1" -- "*" Review
 
 ' =======================
 ' Address
 ' =======================
-
-class Coordinates {
-    +latitude: float
-    +longitude: float
-}
 
 class Address {
     +street: string
@@ -359,10 +354,8 @@ class Address {
     +state: string
     +postalCode: string
     +country: string
-    +coordinates: Coordinates
+    +latitude: float
+    +longitude: float
 }
-
-Address "1" -- "1" Coordinates
-Courier "1" -- "1" Coordinates
 
 @enduml
