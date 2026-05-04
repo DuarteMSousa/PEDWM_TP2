@@ -77,6 +77,14 @@ enum OrderEventType {
     ORDER_CANCELLED
 }
 
+
+enum PaymentEventType {
+    PAYMENT_CREATED
+    PAYMENT_COMPLETED
+    PAYMENT_FAILED
+    PAYMENT_EXPIRED
+}
+
 ' =======================
 ' USERS
 ' =======================
@@ -90,24 +98,21 @@ class User {
 }
 
 class Customer {
-    +address: string
 }
 
 class RestaurantChain {
     +id: UUID
     +name: string
-    +logoUrl: string
-    +legalTaxId: string
 }
 
 class Restaurant {
     +id: UUID
     +name: string
-    +address: string
     +openingHours: string
     +closingHours: string
     +deliveryRadius: float
-    +rating: float
+    +ratingSum: float
+    +ratingCount: int
 }
 
 class ChainManager {
@@ -117,11 +122,14 @@ class ChainManager {
 class LocalManager {
     +restaurantId: UUID
 }
+
 class Courier {
     +status: CourierStatus
     +currentLatitude: float
     +currentLongitude: float
-    +lasLocationUpdate: datetime
+    +lastLocationUpdate: datetime
+    +ratingSum: float
+    +ratingCount: int
 }
 
 User <|-- Customer
@@ -198,12 +206,17 @@ class Cart {
 class CartItem {
     +quantity: int
     +unitPrice: float
-    +subtotal: float
+    +totalPrice: float
+}
+
+class CartItemOption {
+    +extraPrice: float
 }
 
 Customer "1" -- "1" Cart
 Cart "1" -- "*" CartItem
-CartItem "*" -- "1" Product
+CartItem "*" -- "1" RestaurantProduct
+CartItem "1" -- "*" CartItemOption
 
 ' =======================
 ' ORDER
@@ -214,12 +227,20 @@ class Order {
     +status: OrderStatus
     +total: float
     +createdAt: datetime
+    +restaurantNameSnapshot: string
 }
 
 class OrderItem {
     +status: OrderItemStatus
     +quantity: int
     +unitPrice: float
+    +productNameSnapshot: string
+    +totalPrice: float
+}
+
+class OrderItemOption {
+    +optionNameSnapshot: string
+    +extraPrice: float
 }
 
 class OrderEvent {
@@ -233,7 +254,10 @@ Customer "1" -- "*" Order
 Restaurant "1" -- "*" Order
 Order "1" -- "*" OrderItem
 Order "1" -- "*" OrderEvent
-OrderItem "*" -- "1" Product
+OrderItem "*" -- "1" RestaurantProduct
+OrderItem "1" -- "*" OrderItemOption
+OrderItemOption "*" -- "1" Option
+Order "1" -- "1" Address
 
 ' =======================
 ' PAYMENT
@@ -246,6 +270,7 @@ class Payment {
     +transactionId: string
     +paidAt: datetime
     +expiredAt: datetime
+    +amount: float
 }
 
 class PaymentEvent {
@@ -269,8 +294,16 @@ class Delivery {
     +delivery_fee: float
 }
 
+class CourierPositionHistory {
+    +id: UUID
+    +latitude: float
+    +longitude: float
+    +timestamp: datetime
+}
+
 Courier "1" -- "*" Delivery
 Order "1" -- "1" Delivery
+Delivery "1" -- "*" CourierPositionHistory
 
 ' =======================
 ' NOTIFICATIONS & CHAT
@@ -334,22 +367,31 @@ PromotionItem "*" -- "1" Category
 ' Reviews
 ' =======================
 
-class Review {
+abstract class Review {
     +id: UUID
     +rating: int
     +comment: string
     +createdAt: datetime
 }
 
+class RestaurantReview extends Review {
+    +restaurantId: UUID
+}
+
+class CourierReview extends Review {
+    +courierId: UUID
+}
+
 Customer "1" -- "*" Review
-Restaurant "1" -- "*" Review
-Courier "1" -- "*" Review
+Restaurant "1" -- "*" RestaurantReview
+Courier "1" -- "*" CourierReview
 
 ' =======================
 ' Address
 ' =======================
 
 class Address {
+    +label:string
     +street: string
     +city: string
     +state: string

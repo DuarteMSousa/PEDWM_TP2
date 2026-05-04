@@ -1,0 +1,179 @@
+@startuml
+hide circle
+skinparam classAttributeIconSize 0
+
+' =====================
+' USERS
+' =====================
+
+class User {
+  +id: UUID
+  name: string
+  email: string
+  password: string
+  role: UserRole
+}
+
+enum UserRole {
+  CUSTOMER
+  COURIER
+  CHAIN_MANAGER
+  LOCAL_MANAGER
+}
+
+class Address {
+  +id: UUID
+  street: string
+  city: string
+  zipCode: string
+  country: string
+}
+
+class UserAddress {
+  +id: UUID
+  label: string
+}
+
+User "1" -- "*" UserAddress
+UserAddress "*" -- "1" Address
+
+' =====================
+' RESTAURANTS
+' =====================
+
+class RestaurantChain {
+  +id: UUID
+  name: string
+}
+
+class Restaurant {
+  +id: UUID
+  name: string
+}
+
+RestaurantChain "1" -- "*" Restaurant
+Restaurant "*" -- "1" Address
+
+class Category {
+  +id: UUID
+  name: string
+}
+
+Restaurant "1" -- "*" Category
+
+class Product {
+  +id: UUID
+  name: string
+  description: string
+}
+
+class RestaurantProduct {
+  +id: UUID
+  price: decimal
+  isAvailable: boolean
+}
+
+Restaurant "1" -- "*" RestaurantProduct
+Product "1" -- "*" RestaurantProduct
+Category "1" -- "*" Product
+
+' =====================
+' CART
+' =====================
+
+class Cart {
+  +id: UUID
+  createdAt: datetime
+}
+
+class CartItem {
+  +id: UUID
+  quantity: int
+}
+
+User "1" -- "1" Cart
+Cart "1" -- "*" CartItem
+CartItem "*" -- "1" RestaurantProduct
+
+' =====================
+' ORDER
+' =====================
+
+class Order {
+  +id: UUID
+  status: string
+  createdAt: datetime
+  totalAmount: decimal
+}
+
+User "1" -- "*" Order
+Restaurant "1" -- "*" Order
+
+class OrderItem {
+  +id: UUID
+  quantity: int
+  unitPriceSnapshot: decimal
+  productNameSnapshot: string
+}
+
+Order "1" -- "*" OrderItem
+OrderItem "*" -- "1" RestaurantProduct
+
+class Delivery {
+  +id: UUID
+  status: string
+  pickedAt: datetime
+  deliveredAt: datetime
+}
+
+Order "1" -- "0..1" Delivery
+
+class Courier {
+  +id: UUID
+}
+
+User "1" -- "0..1" Courier
+Courier "1" -- "*" Delivery
+
+' =====================
+' PAYMENT
+' =====================
+
+class Payment {
+  +id: UUID
+  amount: decimal
+  status: string
+  method: string
+}
+
+Order "1" -- "1" Payment
+
+' =====================
+' REVIEWS (HERANÇA)
+' =====================
+
+class Review {
+  +id: UUID
+  rating: int
+  comment: string
+  createdAt: datetime
+}
+
+User "1" -- "*" Review
+Order "1" -- "1" Review
+
+class RestaurantReview {
+  +reviewId: UUID
+}
+
+class CourierReview {
+  +reviewId: UUID
+}
+
+Review <|-- RestaurantReview
+Review <|-- CourierReview
+
+RestaurantReview "*" -- "1" Restaurant
+CourierReview "*" -- "1" Courier
+
+@enduml
