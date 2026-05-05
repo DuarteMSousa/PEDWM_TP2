@@ -55,12 +55,12 @@ enum NotificationType {
     SYSTEM
 }
 
-enum PromotionType {
+enum DiscountType {
     PERCENTAGE
     FIXED_AMOUNT
 }
 
-enum PromotionTarget {
+enum DiscountTarget {
     ORDER
     PRODUCT
     DELIVERY
@@ -73,8 +73,16 @@ enum OrderEventType {
     ORDER_PREPARING
     ORDER_READY
     ORDER_OUT_FOR_DELIVERY
-    ORDER_DELIVERED
+    ORDER_COMPLETED
     ORDER_CANCELLED
+}
+
+enum DeliveryEventType {
+    DELIVERY_ACCEPTED
+    DELIVERY_PICKED_UP
+    DELIVERY_IN_TRANSIT
+    DELIVERY_DELIVERED
+    DELIVERY_FAILED
 }
 
 
@@ -83,6 +91,28 @@ enum PaymentEventType {
     PAYMENT_COMPLETED
     PAYMENT_FAILED
     PAYMENT_EXPIRED
+}
+
+enum ReviewTargetType {
+    RESTAURANT
+    COURIER
+}
+
+enum DiscountOriginType {
+    PROMOTION
+    COUPON
+}
+
+enum ChatType {
+    CUSTOMER_RESTAURANT
+    CUSTOMER_COURIER
+}
+
+enum UserType {
+    CUSTOMER
+    COURIER
+    CHAIN_MANAGER
+    LOCAL_MANAGER
 }
 
 ' =======================
@@ -125,8 +155,7 @@ class LocalManager {
 
 class Courier {
     +status: CourierStatus
-    +currentLatitude: float
-    +currentLongitude: float
+    +currentLocation: Point
     +lastLocationUpdate: datetime
     +ratingSum: float
     +ratingCount: int
@@ -156,23 +185,22 @@ class Product {
     +description: string
 }
 
-class OptionGroup {
+class ProductOptionGroup {
     +id: UUID
     +name: string
-    +isRequired: boolean
     +maxOptions: int
     +minOptions: int
 }
 
-class Option {
+class ProductOption {
     +id: UUID
     +name: string
     +extraPrice: float
     +defaultOption : boolean
 }
 
-Product "1" -- "*" OptionGroup
-OptionGroup "1" -- "*" Option
+Product "1" -- "*" ProductOptionGroup
+ProductOptionGroup "1" -- "*" ProductOption
 
 Restaurant "1"-- "1" Address
 Category "1" -- "*" Product
@@ -181,6 +209,7 @@ class RestaurantProduct {
     +id: UUID
     +localPrice: float
     +isAvailable: boolean
+    +estimatedPreparationTimeMin: int
 }
 
 ' Relacionamentos da Cadeia
@@ -214,9 +243,11 @@ class CartItemOption {
 }
 
 Customer "1" -- "1" Cart
+Restaurant "1" -- "*" Cart
 Cart "1" -- "*" CartItem
 CartItem "*" -- "1" RestaurantProduct
 CartItem "1" -- "*" CartItemOption
+CartItemOption "1" -- "1" ProductOption
 
 ' =======================
 ' ORDER
@@ -228,6 +259,18 @@ class Order {
     +total: float
     +createdAt: datetime
     +restaurantNameSnapshot: string
+}
+
+class OrderDiscount {
+    +orderId: UUID
+    +nameSnapshot: string
+    +descriptionSnapshot: string
+    +discountAmount: float
+    +discountType: DiscountType
+    +discountTarget: DiscountTarget
+    +orderItemId: UUID?
+    +originType:DiscountOriginType
+    +originId: UUID
 }
 
 class OrderItem {
@@ -256,8 +299,13 @@ Order "1" -- "*" OrderItem
 Order "1" -- "*" OrderEvent
 OrderItem "*" -- "1" RestaurantProduct
 OrderItem "1" -- "*" OrderItemOption
-OrderItemOption "*" -- "1" Option
+OrderItemOption "*" -- "1" ProductOption
 Order "1" -- "1" Address
+Coupon "1" -- "*" OrderDiscount
+Promotion "1" -- "*" OrderDiscount
+OrderDiscount "*" -- "1" OrderItem
+OrderDiscount "*" -- "1" Order
+
 
 ' =======================
 ' PAYMENT
@@ -296,8 +344,7 @@ class Delivery {
 
 class CourierPositionHistory {
     +id: UUID
-    +latitude: float
-    +longitude: float
+    +location: Point
     +timestamp: datetime
 }
 
@@ -319,17 +366,36 @@ class Notification {
 
 User "1" -- "*" Notification
 
-class Message {
-    +id: UUID
-    +senderId: UUID
-    +receiverId: UUID
-    +content: string
-    +timestamp: datetime
+class Chat{
+    - id: UUID
+    - orderId: UUID
+    - type: ChatType
+    - createdAt: datetime
+    - closedAt: datetime?
 }
 
-User "1" -- "*" Message
-Message "*" -- "1" Order
+class ConversationParticipant {
+    - id: UUID
+    - conversationId: UUID
+    - userId: UUID?
+    - userType: UserType
+    - joinedAt: datetime
+    - lastReadAt: datetime?
+}
 
+class Message{
+    - id: UUID
+    - conversationId: UUID
+    - senderParticipantId: UUID
+    - content: string
+    - timestamp: datetime
+    - readAt: datetime?
+}
+
+User "1" -- "*" ConversationParticipant
+Chat "1" -- "*" ConversationParticipant
+Chat "1" -- "*" Message
+Chat "*" -- "1" Order
 ' =======================
 ' PROMOTIONS
 ' =======================
@@ -337,8 +403,9 @@ Message "*" -- "1" Order
 class Coupon {
     +id: UUID
     +code: string
-    +type: PromotionType
-    +target: PromotionTarget
+    +description: string
+    +type: DiscountType
+    +target: DiscountTarget
     +expiryDate: datetime
 }
 
@@ -346,8 +413,8 @@ class Promotion {
     +id: UUID
     +name: string
     +description: string
-    +type: PromotionType
-    +target: PromotionTarget
+    +type: DiscountType
+    +target: DiscountTarget
     +startDate: datetime
     +endDate: datetime
 }
@@ -367,38 +434,50 @@ PromotionItem "*" -- "1" Category
 ' Reviews
 ' =======================
 
-abstract class Review {
+class Review {
     +id: UUID
     +rating: int
     +comment: string
     +createdAt: datetime
+    +targetType: ReviewTargetType
+    +targetId: UUID
 }
 
-class RestaurantReview extends Review {
-    +restaurantId: UUID
-}
 
-class CourierReview extends Review {
-    +courierId: UUID
-}
 
 Customer "1" -- "*" Review
-Restaurant "1" -- "*" RestaurantReview
-Courier "1" -- "*" CourierReview
+Restaurant "1" -- "*" Review
+Courier "1" -- "*" Review
 
 ' =======================
 ' Address
 ' =======================
 
-class Address {
-    +label:string
+abstract class Address {
+    +id: UUID
     +street: string
     +city: string
-    +state: string
     +postalCode: string
     +country: string
-    +latitude: float
-    +longitude: float
+    +location:Point
 }
+
+class CustomerAddress extends Address {
+    +customerId: UUID
+    +isDefault: bool
+    +label:string
+}
+
+class OrderAddress extends Address {
+    +orderId: UUID
+}
+
+class RestaurantAddress extends Address {
+    +restaurantId: UUID
+}
+
+Order "1" -- "1" OrderAddress
+Customer "1" -- "*" CustomerAddress
+Restaurant "1" -- "*" RestaurantAddress
 
 @enduml
