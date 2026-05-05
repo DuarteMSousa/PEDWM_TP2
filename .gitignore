@@ -1,5 +1,7 @@
 /vendor/
 node_modules/
+Frontend/web/dist/
+Frontend/mobile/dist/
 npm-debug.log
 yarn-error.log
 
