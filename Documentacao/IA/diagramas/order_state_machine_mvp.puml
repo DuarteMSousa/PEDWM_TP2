@@ -1,0 +1,33 @@
+@startuml
+title FastBite MVP - Maquina de Estado de Order
+
+[*] --> PENDING : checkout submitted
+
+PENDING --> CONFIRMED : payment completed\n(or cash validated)
+PENDING --> CANCELLED : payment failed/timeout
+
+CONFIRMED --> PREPARING : restaurant accepted
+CONFIRMED --> CANCELLED : restaurant rejected/no courier policy
+
+PREPARING --> READY : all items ready
+PREPARING --> CANCELLED : exceptional cancel
+
+READY --> OUT_FOR_DELIVERY : courier picked up
+
+OUT_FOR_DELIVERY --> DELIVERED : courier delivered
+OUT_FOR_DELIVERY --> CANCELLED : delivery failed critical
+
+DELIVERED --> [*]
+CANCELLED --> [*]
+
+note right of PREPARING
+Order can move to READY only when:
+- all OrderItems are READY or CANCELLED
+end note
+
+note right of CANCELLED
+Terminal state.
+No transition out.
+end note
+
+@enduml

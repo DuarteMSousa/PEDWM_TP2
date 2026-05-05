@@ -1,0 +1,56 @@
+@startuml
+title FastBite MVP - Canais Realtime e Autorizacao
+skinparam packageStyle rectangle
+left to right direction
+
+actor Customer
+actor "Restaurant Staff" as Staff
+actor Courier
+
+rectangle "Reverb Channels" {
+  rectangle "customer.{customerId}.orders" as CChan
+  rectangle "restaurant.{restaurantId}.orders" as RChan
+  rectangle "courier.{courierId}.jobs" as JChan
+  rectangle "order.{orderId}.tracking" as TChan
+}
+
+Customer --> CChan : subscribe own only
+Customer --> TChan : subscribe own order only
+
+Staff --> RChan : subscribe own restaurant only
+Staff --> TChan : subscribe orders from own restaurant
+
+Courier --> JChan : subscribe own only
+Courier --> TChan : subscribe assigned orders only
+
+note bottom of CChan
+Events:
+- ORDER_*
+- PAYMENT_*
+end note
+
+note bottom of RChan
+Events:
+- ORDER_CREATED
+- ORDER_CONFIRMED
+- ORDER_REJECTED
+- ORDER_READY
+end note
+
+note bottom of JChan
+Events:
+- JOB_OFFERED
+- JOB_EXPIRED
+- JOB_ACCEPTED
+end note
+
+note bottom of TChan
+Events:
+- ORDER_PREPARING
+- ORDER_READY
+- ORDER_OUT_FOR_DELIVERY
+- COURIER_POSITION_UPDATED
+- ORDER_DELIVERED
+end note
+
+@enduml

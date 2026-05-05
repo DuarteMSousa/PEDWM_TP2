@@ -1,0 +1,31 @@
+@startuml
+title FastBite MVP - Sequencia Checkout ate Realtime
+
+actor Customer
+participant "Web/Mobile App" as App
+participant "GraphQL API" as API
+participant "Order Service" as OrderSvc
+participant "Payment Service" as PaySvc
+database DB
+participant "Outbox Worker" as Outbox
+participant Reverb
+participant "Restaurant UI" as RestUI
+
+Customer -> App : Confirm checkout
+App -> API : mutation checkout(cartId, paymentMethod)
+API -> OrderSvc : createPendingOrder()
+OrderSvc -> DB : insert order(PENDING)\ninsert event ORDER_CREATED
+OrderSvc --> API : orderId
+
+API -> PaySvc : processPayment(orderId, method)
+PaySvc -> DB : update payment COMPLETED\ninsert PAYMENT_COMPLETED
+PaySvc -> DB : update order CONFIRMED\ninsert ORDER_CONFIRMED
+PaySvc --> API : payment ok
+API --> App : order confirmed + tracking data
+
+Outbox -> DB : read pending outbox events
+Outbox -> Reverb : publish ORDER_CREATED/CONFIRMED
+Reverb --> RestUI : new order notification
+Reverb --> App : order status update
+
+@enduml

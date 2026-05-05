@@ -1,0 +1,32 @@
+@startuml
+title FastBite MVP - Sequencia de Atribuicao de Estafeta
+
+participant "Order Service" as OrderSvc
+participant "Delivery Service" as DeliverySvc
+database DB
+participant "Matching Worker" as MatchWorker
+participant Reverb
+participant "Courier App A" as CourierA
+participant "Courier App B" as CourierB
+
+OrderSvc -> DB : order status = CONFIRMED
+OrderSvc -> MatchWorker : dispatch findCourier(orderId)
+
+MatchWorker -> DB : query couriers AVAILABLE by distance
+MatchWorker -> Reverb : publish JOB_OFFERED to courier A
+Reverb --> CourierA : new delivery offer (30s timeout)
+
+alt Courier A accepts in time
+  CourierA -> Reverb : accept job
+  Reverb -> DeliverySvc : acceptDelivery(orderId, courierA)
+  DeliverySvc -> DB : create/update delivery(PENDING)
+  DeliverySvc -> DB : set courier BUSY
+  DeliverySvc -> DB : insert ORDER_COURIER_ASSIGNED
+  DeliverySvc -> Reverb : publish assignment updates
+else Courier A timeout/reject
+  MatchWorker -> Reverb : publish JOB_EXPIRED A
+  MatchWorker -> Reverb : publish JOB_OFFERED B
+  Reverb --> CourierB : new delivery offer (30s timeout)
+end
+
+@enduml
