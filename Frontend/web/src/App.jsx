@@ -1,7 +1,7 @@
-import { HomeScreen } from './screens/HomeScreen'
+import { RestaurantWebShell } from './screens/restaurant/RestaurantWebShell'
 
 function App() {
-  return <HomeScreen />
+  return <RestaurantWebShell />
 }
 
 export default App
