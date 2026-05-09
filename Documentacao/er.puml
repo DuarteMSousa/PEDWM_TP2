@@ -14,11 +14,9 @@ entity users {
   email : string
   password : string
   created_at : datetime
+  user_type : enum
 }
 
-entity customers {
-  *user_id : UUID <<PK, FK>>
-}
 
 entity couriers {
   *user_id : UUID <<PK, FK>>
@@ -39,7 +37,6 @@ entity local_managers {
   restaurant_id : UUID <<FK>>
 }
 
-users ||--|| customers
 users ||--|| couriers
 users ||--|| chain_managers
 users ||--|| local_managers
@@ -67,7 +64,8 @@ entity restaurants {
 }
 
 restaurant_chains ||--o{ restaurants
-
+chain_managers ||--|| restaurant_chains
+local_managers ||--|| restaurants
 ' =======================
 ' MENU
 ' =======================
@@ -130,7 +128,7 @@ products ||--o{ restaurant_products
 entity carts {
   *id : UUID <<PK>>
   --
-  customer_id : UUID <<FK>>
+  user_id : UUID <<FK>>
   total : float
   created_at : datetime
 }
@@ -153,7 +151,7 @@ entity cart_item_options {
   extra_price : float
 }
 
-customers ||--|| carts
+users ||--|| carts
 carts ||--o{ cart_items
 restaurant_products ||--o{ cart_items
 cart_items ||--o{ cart_item_options
@@ -166,7 +164,7 @@ product_options ||--o{ cart_item_options
 entity orders {
   *id : UUID <<PK>>
   --
-  customer_id : UUID <<FK>>
+  user_id : UUID <<FK>>
   restaurant_id : UUID <<FK>>
   status : string
   total : float
@@ -195,7 +193,7 @@ entity order_item_options {
   extra_price : float
 }
 
-customers ||--o{ orders
+users ||--o{ orders
 restaurants ||--o{ orders
 orders ||--o{ order_items
 restaurant_products ||--o{ order_items
@@ -285,6 +283,7 @@ entity promotion_items {
 
 restaurant_chains ||--o{ coupons
 restaurant_chains ||--o{ promotions
+coupons ||--o{ promotion_items
 promotions ||--o{ promotion_items
 products ||--o{ promotion_items
 categories ||--o{ promotion_items
@@ -296,7 +295,7 @@ categories ||--o{ promotion_items
 entity reviews {
   *id : UUID <<PK>>
   --
-  customer_id : UUID <<FK>>
+  user_id : UUID <<FK>>
   rating : int
   comment : string
   created_at : datetime
@@ -304,7 +303,7 @@ entity reviews {
   target_id : UUID
 }
 
-customers ||--o{ reviews
+users ||--o{ reviews
 
 ' =======================
 ' CHAT
@@ -319,10 +318,10 @@ entity chats {
   closed_at : datetime
 }
 
-entity conversation_participants {
+entity chat_participants {
   *id : UUID <<PK>>
   --
-  conversation_id : UUID <<FK>>
+  chat_id : UUID <<FK>>
   user_id : UUID <<FK>>
   user_type : string
   joined_at : datetime
@@ -332,7 +331,7 @@ entity conversation_participants {
 entity messages {
   *id : UUID <<PK>>
   --
-  conversation_id : UUID <<FK>>
+  chat_id : UUID <<FK>>
   sender_participant_id : UUID <<FK>>
   content : string
   timestamp : datetime
@@ -340,15 +339,16 @@ entity messages {
 }
 
 orders ||--o{ chats
-chats ||--o{ conversation_participants
-users ||--o{ conversation_participants
+chats ||--o{ chat_participants
+users ||--o{ chat_participants
 chats ||--o{ messages
 
 ' =======================
 ' ADDRESS
 ' =======================
 
-entity addresses {
+
+entity user_addresses {
   *id : UUID <<PK>>
   --
   street : string
@@ -356,13 +356,6 @@ entity addresses {
   postal_code : string
   country : string
   location : Point
-}
-
-entity customer_addresses {
-  *id : UUID <<PK>>
-  --
-  customer_id : UUID <<FK>>
-  address_id : UUID <<FK>>
   is_default : boolean
   label : string
 }
@@ -371,21 +364,76 @@ entity restaurant_addresses {
   *id : UUID <<PK>>
   --
   restaurant_id : UUID <<FK>>
-  address_id : UUID <<FK>>
+  street : string
+  city : string
+  postal_code : string
+  country : string
+  location : Point
 }
 
 entity order_addresses {
   *id : UUID <<PK>>
   --
   order_id : UUID <<FK>>
-  address_id : UUID <<FK>>
+  street : string
+  city : string
+  postal_code : string
+  country : string
+  location : Point
 }
 
-customers ||--o{ customer_addresses
+users ||--o{ user_addresses
 restaurants ||--o{ restaurant_addresses
 orders ||--|| order_addresses
-addresses ||--o{ customer_addresses
-addresses ||--o{ restaurant_addresses
-addresses ||--o{ order_addresses
+
+
+entity order_events{
+  *id : UUID <<PK>>
+  --
+  order_id : UUID <<FK>>
+  event_type : enum
+  timestamp : datetime
+  payload : JSONB
+}
+
+entity payment_events{
+  *id : UUID <<PK>>
+  --
+  payment_id : UUID <<FK>>
+  event_type : enum
+  timestamp : datetime
+  payload : JSONB
+}
+
+orders ||--o{ order_events
+payments ||--o{ payment_events
+
+entity OrderDiscount {
+    +orderId: UUID
+    +nameSnapshot: string
+    +descriptionSnapshot: string
+    +discountAmount: float
+    +discountType: DiscountType
+    +discountTarget: DiscountTarget
+    +orderItemId: UUID?
+    +originType:DiscountOriginType
+    +originId: UUID
+}
+
+orders ||--o{ OrderDiscount
+order_items ||--o{ OrderDiscount
+coupons ||--o{ OrderDiscount
+promotions ||--o{ OrderDiscount
+
+
+entity Notification {
+    +id: UUID
+    +type: NotificationType
+    +message: string
+    +sentAt : datetime
+    +readAt: datetime
+}
+
+users ||--o{ Notification
 
 @enduml

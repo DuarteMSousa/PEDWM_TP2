@@ -374,9 +374,9 @@ class Chat{
     - closedAt: datetime?
 }
 
-class ConversationParticipant {
+class chatParticipant {
     - id: UUID
-    - conversationId: UUID
+    - chatId: UUID
     - userId: UUID?
     - userType: UserType
     - joinedAt: datetime
@@ -385,15 +385,15 @@ class ConversationParticipant {
 
 class Message{
     - id: UUID
-    - conversationId: UUID
+    - chatId: UUID
     - senderParticipantId: UUID
     - content: string
     - timestamp: datetime
     - readAt: datetime?
 }
 
-User "1" -- "*" ConversationParticipant
-Chat "1" -- "*" ConversationParticipant
+User "1" -- "*" chatParticipant
+Chat "1" -- "*" chatParticipant
 Chat "1" -- "*" Message
 Chat "*" -- "1" Order
 ' =======================
