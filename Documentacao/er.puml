@@ -1,179 +1,391 @@
 @startuml
-hide circle
-skinparam classAttributeIconSize 0
+hide methods
+hide stereotypes
+skinparam linetype ortho
 
-' =====================
+' =======================
 ' USERS
-' =====================
+' =======================
 
-class User {
-  +id: UUID
-  name: string
-  email: string
-  password: string
-  role: UserRole
+entity users {
+  *id : UUID <<PK>>
+  --
+  name : string
+  email : string
+  password : string
+  created_at : datetime
 }
 
-enum UserRole {
-  CUSTOMER
-  COURIER
-  CHAIN_MANAGER
-  LOCAL_MANAGER
+entity customers {
+  *user_id : UUID <<PK, FK>>
 }
 
-class Address {
-  +id: UUID
-  street: string
-  city: string
-  zipCode: string
-  country: string
+entity couriers {
+  *user_id : UUID <<PK, FK>>
+  status : string
+  current_location : Point
+  last_location_update : datetime
+  rating_sum : float
+  rating_count : int
 }
 
-class UserAddress {
-  +id: UUID
-  label: string
+entity chain_managers {
+  *user_id : UUID <<PK, FK>>
+  chain_id : UUID <<FK>>
 }
 
-User "1" -- "*" UserAddress
-UserAddress "*" -- "1" Address
+entity local_managers {
+  *user_id : UUID <<PK, FK>>
+  restaurant_id : UUID <<FK>>
+}
 
-' =====================
+users ||--|| customers
+users ||--|| couriers
+users ||--|| chain_managers
+users ||--|| local_managers
+
+' =======================
 ' RESTAURANTS
-' =====================
+' =======================
 
-class RestaurantChain {
-  +id: UUID
-  name: string
+entity restaurant_chains {
+  *id : UUID <<PK>>
+  --
+  name : string
 }
 
-class Restaurant {
-  +id: UUID
-  name: string
+entity restaurants {
+  *id : UUID <<PK>>
+  --
+  chain_id : UUID <<FK>>
+  name : string
+  opening_hours : string
+  closing_hours : string
+  delivery_radius : float
+  rating_sum : float
+  rating_count : int
 }
 
-RestaurantChain "1" -- "*" Restaurant
-Restaurant "*" -- "1" Address
+restaurant_chains ||--o{ restaurants
 
-class Category {
-  +id: UUID
-  name: string
+' =======================
+' MENU
+' =======================
+
+entity categories {
+  *id : UUID <<PK>>
+  --
+  chain_id : UUID <<FK>>
+  name : string
 }
 
-Restaurant "1" -- "*" Category
-
-class Product {
-  +id: UUID
-  name: string
-  description: string
+entity products {
+  *id : UUID <<PK>>
+  --
+  category_id : UUID <<FK>>
+  name : string
+  price : float
+  description : string
 }
 
-class RestaurantProduct {
-  +id: UUID
-  price: decimal
-  isAvailable: boolean
+entity restaurant_products {
+  *id : UUID <<PK>>
+  --
+  restaurant_id : UUID <<FK>>
+  product_id : UUID <<FK>>
+  local_price : float
+  is_available : boolean
+  estimated_preparation_time_min : int
 }
 
-Restaurant "1" -- "*" RestaurantProduct
-Product "1" -- "*" RestaurantProduct
-Category "1" -- "*" Product
+entity product_option_groups {
+  *id : UUID <<PK>>
+  --
+  product_id : UUID <<FK>>
+  name : string
+  max_options : int
+  min_options : int
+}
 
-' =====================
+entity product_options {
+  *id : UUID <<PK>>
+  --
+  option_group_id : UUID <<FK>>
+  name : string
+  extra_price : float
+  default_option : boolean
+}
+
+restaurant_chains ||--o{ categories
+categories ||--o{ products
+products ||--o{ product_option_groups
+product_option_groups ||--o{ product_options
+restaurants ||--o{ restaurant_products
+products ||--o{ restaurant_products
+
+' =======================
 ' CART
-' =====================
+' =======================
 
-class Cart {
-  +id: UUID
-  createdAt: datetime
+entity carts {
+  *id : UUID <<PK>>
+  --
+  customer_id : UUID <<FK>>
+  total : float
+  created_at : datetime
 }
 
-class CartItem {
-  +id: UUID
-  quantity: int
+entity cart_items {
+  *id : UUID <<PK>>
+  --
+  cart_id : UUID <<FK>>
+  restaurant_product_id : UUID <<FK>>
+  quantity : int
+  unit_price : float
+  total_price : float
 }
 
-User "1" -- "1" Cart
-Cart "1" -- "*" CartItem
-CartItem "*" -- "1" RestaurantProduct
-
-' =====================
-' ORDER
-' =====================
-
-class Order {
-  +id: UUID
-  status: string
-  createdAt: datetime
-  totalAmount: decimal
+entity cart_item_options {
+  *id : UUID <<PK>>
+  --
+  cart_item_id : UUID <<FK>>
+  product_option_id : UUID <<FK>>
+  extra_price : float
 }
 
-User "1" -- "*" Order
-Restaurant "1" -- "*" Order
+customers ||--|| carts
+carts ||--o{ cart_items
+restaurant_products ||--o{ cart_items
+cart_items ||--o{ cart_item_options
+product_options ||--o{ cart_item_options
 
-class OrderItem {
-  +id: UUID
-  quantity: int
-  unitPriceSnapshot: decimal
-  productNameSnapshot: string
+' =======================
+' ORDERS
+' =======================
+
+entity orders {
+  *id : UUID <<PK>>
+  --
+  customer_id : UUID <<FK>>
+  restaurant_id : UUID <<FK>>
+  status : string
+  total : float
+  created_at : datetime
+  restaurant_name_snapshot : string
 }
 
-Order "1" -- "*" OrderItem
-OrderItem "*" -- "1" RestaurantProduct
-
-class Delivery {
-  +id: UUID
-  status: string
-  pickedAt: datetime
-  deliveredAt: datetime
+entity order_items {
+  *id : UUID <<PK>>
+  --
+  order_id : UUID <<FK>>
+  restaurant_product_id : UUID <<FK>>
+  status : string
+  quantity : int
+  unit_price : float
+  product_name_snapshot : string
+  total_price : float
 }
 
-Order "1" -- "0..1" Delivery
-
-class Courier {
-  +id: UUID
+entity order_item_options {
+  *id : UUID <<PK>>
+  --
+  order_item_id : UUID <<FK>>
+  product_option_id : UUID <<FK>>
+  option_name_snapshot : string
+  extra_price : float
 }
 
-User "1" -- "0..1" Courier
-Courier "1" -- "*" Delivery
+customers ||--o{ orders
+restaurants ||--o{ orders
+orders ||--o{ order_items
+restaurant_products ||--o{ order_items
+order_items ||--o{ order_item_options
+product_options ||--o{ order_item_options
 
-' =====================
+' =======================
 ' PAYMENT
-' =====================
+' =======================
 
-class Payment {
-  +id: UUID
-  amount: decimal
-  status: string
-  method: string
+entity payments {
+  *id : UUID <<PK>>
+  --
+  order_id : UUID <<FK>>
+  method : string
+  status : string
+  transaction_id : string
+  paid_at : datetime
+  expired_at : datetime
+  amount : float
 }
 
-Order "1" -- "1" Payment
+orders ||--|| payments
 
-' =====================
-' REVIEWS (HERANÇA)
-' =====================
+' =======================
+' DELIVERY
+' =======================
 
-class Review {
-  +id: UUID
-  rating: int
-  comment: string
-  createdAt: datetime
+entity deliveries {
+  *id : UUID <<PK>>
+  --
+  order_id : UUID <<FK>>
+  courier_id : UUID <<FK>>
+  status : string
+  pickup_time : datetime
+  delivery_time : datetime
+  delivery_fee : float
 }
 
-User "1" -- "*" Review
-Order "1" -- "1" Review
-
-class RestaurantReview {
-  +reviewId: UUID
+entity courier_position_history {
+  *id : UUID <<PK>>
+  --
+  delivery_id : UUID <<FK>>
+  location : Point
+  timestamp : datetime
 }
 
-class CourierReview {
-  +reviewId: UUID
+orders ||--|| deliveries
+couriers ||--o{ deliveries
+deliveries ||--o{ courier_position_history
+
+' =======================
+' PROMOTIONS
+' =======================
+
+entity coupons {
+  *id : UUID <<PK>>
+  --
+  chain_id : UUID <<FK>>
+  code : string
+  description : string
+  type : string
+  target : string
+  expiry_date : datetime
 }
 
-Review <|-- RestaurantReview
-Review <|-- CourierReview
+entity promotions {
+  *id : UUID <<PK>>
+  --
+  chain_id : UUID <<FK>>
+  name : string
+  description : string
+  type : string
+  target : string
+  start_date : datetime
+  end_date : datetime
+}
 
-RestaurantReview "*" -- "1" Restaurant
-CourierReview "*" -- "1" Courier
+entity promotion_items {
+  *id : UUID <<PK>>
+  --
+  promotion_id : UUID <<FK>>
+  product_id : UUID <<FK>>
+  category_id : UUID <<FK>>
+  discount : float
+}
+
+restaurant_chains ||--o{ coupons
+restaurant_chains ||--o{ promotions
+promotions ||--o{ promotion_items
+products ||--o{ promotion_items
+categories ||--o{ promotion_items
+
+' =======================
+' REVIEWS
+' =======================
+
+entity reviews {
+  *id : UUID <<PK>>
+  --
+  customer_id : UUID <<FK>>
+  rating : int
+  comment : string
+  created_at : datetime
+  target_type : string
+  target_id : UUID
+}
+
+customers ||--o{ reviews
+
+' =======================
+' CHAT
+' =======================
+
+entity chats {
+  *id : UUID <<PK>>
+  --
+  order_id : UUID <<FK>>
+  type : string
+  created_at : datetime
+  closed_at : datetime
+}
+
+entity conversation_participants {
+  *id : UUID <<PK>>
+  --
+  conversation_id : UUID <<FK>>
+  user_id : UUID <<FK>>
+  user_type : string
+  joined_at : datetime
+  last_read_at : datetime
+}
+
+entity messages {
+  *id : UUID <<PK>>
+  --
+  conversation_id : UUID <<FK>>
+  sender_participant_id : UUID <<FK>>
+  content : string
+  timestamp : datetime
+  read_at : datetime
+}
+
+orders ||--o{ chats
+chats ||--o{ conversation_participants
+users ||--o{ conversation_participants
+chats ||--o{ messages
+
+' =======================
+' ADDRESS
+' =======================
+
+entity addresses {
+  *id : UUID <<PK>>
+  --
+  street : string
+  city : string
+  postal_code : string
+  country : string
+  location : Point
+}
+
+entity customer_addresses {
+  *id : UUID <<PK>>
+  --
+  customer_id : UUID <<FK>>
+  address_id : UUID <<FK>>
+  is_default : boolean
+  label : string
+}
+
+entity restaurant_addresses {
+  *id : UUID <<PK>>
+  --
+  restaurant_id : UUID <<FK>>
+  address_id : UUID <<FK>>
+}
+
+entity order_addresses {
+  *id : UUID <<PK>>
+  --
+  order_id : UUID <<FK>>
+  address_id : UUID <<FK>>
+}
+
+customers ||--o{ customer_addresses
+restaurants ||--o{ restaurant_addresses
+orders ||--|| order_addresses
+addresses ||--o{ customer_addresses
+addresses ||--o{ restaurant_addresses
+addresses ||--o{ order_addresses
 
 @enduml
