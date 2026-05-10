@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "clickbar/laravel-magellan": "^2.1",
         "laravel/framework": "^13.0",
         "laravel/tinker": "^3.0",
         "mll-lab/laravel-graphql-playground": "^1.1",
