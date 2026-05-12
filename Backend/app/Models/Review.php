@@ -22,6 +22,7 @@ class Review extends Model
     {
         return [
             'rating' => 'integer',
+            'target_type' => \App\Enums\ReviewTargetType::class,
         ];
     }
 

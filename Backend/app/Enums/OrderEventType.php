@@ -1,0 +1,14 @@
+<?php
+
+namespace App\Enums;
+
+enum OrderEventType: string
+{
+    case ORDER_CREATED = 'ORDER_CREATED';
+    case ORDER_CONFIRMED = 'ORDER_CONFIRMED';
+    case ORDER_PREPARING = 'ORDER_PREPARING';
+    case ORDER_READY = 'ORDER_READY';
+    case ORDER_OUT_FOR_DELIVERY = 'ORDER_OUT_FOR_DELIVERY';
+    case ORDER_COMPLETED = 'ORDER_COMPLETED';
+    case ORDER_CANCELLED = 'ORDER_CANCELLED';
+}

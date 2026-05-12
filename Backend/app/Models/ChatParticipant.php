@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
+use \App\Enums\UserType;
 class ChatParticipant extends Model
 {
     use HasUuids;
@@ -24,6 +24,7 @@ class ChatParticipant extends Model
         return [
             'joined_at' => 'datetime',
             'last_read_at' => 'datetime',
+            'user_type' => UserType::class,
         ];
     }
 

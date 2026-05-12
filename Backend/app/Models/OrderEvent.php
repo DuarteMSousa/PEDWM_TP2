@@ -24,6 +24,7 @@ class OrderEvent extends Model
         return [
             'timestamp' => 'datetime',
             'payload' => 'array',
+            'event_type' => \App\Enums\OrderEventType::class,
         ];
     }
 

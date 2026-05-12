@@ -26,6 +26,9 @@ class OrderDiscount extends Model
     {
         return [
             'discount_amount' => 'float',
+            'discount_type' => \App\Enums\DiscountType::class,
+            'discount_target' => \App\Enums\DiscountTarget::class,
+            'origin_type' => \App\Enums\DiscountOriginType::class,
         ];
     }
 

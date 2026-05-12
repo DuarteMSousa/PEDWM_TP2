@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
+use \App\Enums\DeliveryStatus;
 class Delivery extends Model
 {
     use HasUuids;
@@ -26,6 +26,7 @@ class Delivery extends Model
             'pickup_time' => 'datetime',
             'delivery_time' => 'datetime',
             'delivery_fee' => 'float',
+            'status' => ::class,
         ];
     }
 

@@ -30,6 +30,7 @@ class User extends Model
     {
         return [
             'password' => 'hashed',
+            'user_type' => \App\Enums\UserType::class,
         ];
     }
 

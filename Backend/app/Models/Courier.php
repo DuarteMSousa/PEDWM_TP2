@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use \App\Enums\CourierStatus;
 
 class Courier extends Model
 {
@@ -33,6 +34,7 @@ class Courier extends Model
             'rating_count' => 'integer',
             'latitude' => 'float',
             'longitude' => 'float',
+            'status' => ::class,
         ];
     }
 

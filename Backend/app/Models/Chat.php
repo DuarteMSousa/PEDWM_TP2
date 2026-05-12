@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-
+use \App\Enums\ChatType;
 class Chat extends Model
 {
     use HasUuids;
@@ -21,6 +21,7 @@ class Chat extends Model
     {
         return [
             'closed_at' => 'datetime',
+            'type' => ChatType::class,
         ];
     }
 

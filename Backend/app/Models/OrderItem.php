@@ -27,6 +27,7 @@ class OrderItem extends Model
             'quantity' => 'integer',
             'unit_price' => 'float',
             'total_price' => 'float',
+            'status' => \App\Enums\OrderItemStatus::class,
         ];
     }
 

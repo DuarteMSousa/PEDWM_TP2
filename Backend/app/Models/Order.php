@@ -24,6 +24,7 @@ class Order extends Model
     {
         return [
             'total' => 'float',
+            'status' => \App\Enums\OrderStatus::class,
         ];
     }
 

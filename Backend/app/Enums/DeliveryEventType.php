@@ -1,0 +1,12 @@
+<?php
+
+namespace App\Enums;
+
+enum DeliveryEventType: string
+{
+    case DELIVERY_ACCEPTED = 'DELIVERY_ACCEPTED';
+    case DELIVERY_PICKED_UP = 'DELIVERY_PICKED_UP';
+    case DELIVERY_IN_TRANSIT = 'DELIVERY_IN_TRANSIT';
+    case DELIVERY_DELIVERED = 'DELIVERY_DELIVERED';
+    case DELIVERY_FAILED = 'DELIVERY_FAILED';
+}

@@ -27,6 +27,8 @@ class Payment extends Model
             'paid_at' => 'datetime',
             'expired_at' => 'datetime',
             'amount' => 'float',
+            'status' => \App\Enums\PaymentStatus::class,
+            'method' => \App\Enums\PaymentMethod::class,
         ];
     }
 

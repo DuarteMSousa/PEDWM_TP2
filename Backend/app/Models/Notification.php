@@ -25,6 +25,7 @@ class Notification extends Model
         return [
             'sent_at' => 'datetime',
             'read_at' => 'datetime',
+            'type' => \App\Enums\NotificationType::class,
         ];
     }
 
