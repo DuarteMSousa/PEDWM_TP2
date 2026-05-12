@@ -1,0 +1,35 @@
+# graphql/user.graphql
+
+type User {
+    id: ID!
+    name: String!
+    email: String!
+    created_at: String
+    updated_at: String
+}
+
+input CreateUserInput {
+    name: String!
+    email: String!
+    password: String!
+}
+
+input UpdateUserInput {
+    name: String
+    email: String
+}
+
+extend type Query {
+    user(id: ID! @eq): User @field(resolver: "App\\GraphQL\\Queries\\UserQueries@getById")
+}
+
+extend type Mutation {
+    createUser(input: CreateUserInput!): User! 
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@create")
+
+    updateUser(id: ID!, input: UpdateUserInput!): User! 
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@update")
+
+    deleteUser(id: ID!): Boolean! 
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@delete")
+}
