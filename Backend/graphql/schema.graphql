@@ -64,6 +64,10 @@ type Mutation {
 
     "Create a local manager profile."
     createLocalManager(input: CreateLocalManagerInput! @spread): LocalManager! @create
+
+    "Update courier location and broadcast tracking event."
+    updateCourierLocation(input: UpdateCourierLocationInput!): UpdateCourierLocationPayload!
+        @field(resolver: "App\\GraphQL\\Mutations\\UpdateCourierLocation")
 }
 
 input CreateUserInput {
@@ -96,6 +100,23 @@ input CreateChainManagerInput {
 input CreateLocalManagerInput {
     user_id: ID! @rules(apply: ["required", "exists:users,id"])
     restaurant_id: ID
+}
+
+input UpdateCourierLocationInput {
+    delivery_id: ID! @rules(apply: ["required", "exists:deliveries,id"])
+    lat: Float! @rules(apply: ["required", "numeric", "between:-90,90"])
+    lng: Float! @rules(apply: ["required", "numeric", "between:-180,180"])
+    heading: Float @rules(apply: ["nullable", "numeric", "between:0,360"])
+    speed: Float @rules(apply: ["nullable", "numeric", "min:0"])
+    accuracy: Float @rules(apply: ["nullable", "numeric", "min:0"])
+    recorded_at: DateTime
+}
+
+type UpdateCourierLocationPayload {
+    ok: Boolean!
+    delivery_id: ID!
+    order_id: ID!
+    recorded_at: DateTime!
 }
 
 "Account of a person who uses this application."
