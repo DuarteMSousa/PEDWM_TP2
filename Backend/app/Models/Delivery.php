@@ -26,7 +26,7 @@ class Delivery extends Model
             'pickup_time' => 'datetime',
             'delivery_time' => 'datetime',
             'delivery_fee' => 'float',
-            'status' => ::class,
+            'status' => DeliveryStatus::class,
         ];
     }
 

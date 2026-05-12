@@ -34,7 +34,7 @@ class Courier extends Model
             'rating_count' => 'integer',
             'latitude' => 'float',
             'longitude' => 'float',
-            'status' => ::class,
+            'status' => CourierStatus::class,
         ];
     }
 
