@@ -348,6 +348,14 @@ class CourierPositionHistory {
     +timestamp: datetime
 }
 
+class DeliveryEvent {
+    +id: UUID
+    +deliveryId: UUID
+    +type: DeliveryEventType
+    +payload: JSON
+    +createdAt: datetime
+}
+
 Courier "1" -- "*" Delivery
 Order "1" -- "1" Delivery
 Delivery "1" -- "*" CourierPositionHistory

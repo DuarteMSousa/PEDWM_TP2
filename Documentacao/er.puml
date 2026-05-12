@@ -404,9 +404,20 @@ entity payment_events{
   timestamp : datetime
   payload : JSONB
 }
+  
+
+entity delivery_events{
+  *id : UUID <<PK>>
+  --
+  delivery_id : UUID <<FK>>
+  event_type : enum
+  timestamp : datetime
+  payload : JSONB
+}
 
 orders ||--o{ order_events
 payments ||--o{ payment_events
+deliveries ||--o{ delivery_events
 
 entity OrderDiscount {
     +orderId: UUID
