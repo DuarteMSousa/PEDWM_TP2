@@ -68,6 +68,14 @@ type Mutation {
     "Update courier location and broadcast tracking event."
     updateCourierLocation(input: UpdateCourierLocationInput!): UpdateCourierLocationPayload!
         @field(resolver: "App\\GraphQL\\Mutations\\UpdateCourierLocation")
+
+    "Send a chat message and broadcast to chat topic."
+    sendChatMessage(input: SendChatMessageInput!): SendChatMessagePayload!
+        @field(resolver: "App\\GraphQL\\Mutations\\SendChatMessage")
+
+    "Create and broadcast user notification to notifications topic."
+    publishUserNotification(input: PublishUserNotificationInput!): PublishUserNotificationPayload!
+        @field(resolver: "App\\GraphQL\\Mutations\\PublishUserNotification")
 }
 
 input CreateUserInput {
@@ -117,6 +125,31 @@ type UpdateCourierLocationPayload {
     delivery_id: ID!
     order_id: ID!
     recorded_at: DateTime!
+}
+
+input SendChatMessageInput {
+    chat_id: ID! @rules(apply: ["required", "exists:chats,id"])
+    content: String! @rules(apply: ["required", "string", "min:1", "max:2000"])
+}
+
+type SendChatMessagePayload {
+    ok: Boolean!
+    chat_id: ID!
+    message_id: ID!
+    sent_at: DateTime!
+}
+
+input PublishUserNotificationInput {
+    user_id: ID! @rules(apply: ["required", "exists:users,id"])
+    type: String! @rules(apply: ["required", "string", "max:100"])
+    title: String! @rules(apply: ["required", "string", "max:255"])
+    message: String! @rules(apply: ["required", "string", "max:2000"])
+}
+
+type PublishUserNotificationPayload {
+    ok: Boolean!
+    notification_id: ID!
+    sent_at: DateTime!
 }
 
 "Account of a person who uses this application."

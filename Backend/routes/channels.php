@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Delivery;
+use App\Models\ChatParticipant;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
@@ -86,4 +87,27 @@ Broadcast::channel('order.{orderId}.tracking', function (?User $user, string $or
     }
 
     return false;
+});
+
+Broadcast::channel('chat.{chatId}', function (?User $user, string $chatId): bool {
+    $user = resolveBroadcastUser($user);
+
+    if (! $user) {
+        return false;
+    }
+
+    return ChatParticipant::query()
+        ->where('chat_id', $chatId)
+        ->where('user_id', $user->id)
+        ->exists();
+});
+
+Broadcast::channel('user.{userId}.notifications', function (?User $user, string $userId): bool {
+    $user = resolveBroadcastUser($user);
+
+    if (! $user) {
+        return false;
+    }
+
+    return $user->id === $userId;
 });
