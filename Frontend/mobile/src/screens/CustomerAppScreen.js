@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { RealtimeTopicsCard } from '../components/realtime/RealtimeTopicsCard'
 
 const RESTAURANTS = [
   {
@@ -431,6 +432,8 @@ function TrackingScreen({ subtotal, deliveryFee, total, showSuccessAlert, onBack
             </View>
           </View>
         </View>
+
+        <RealtimeTopicsCard />
       </ScrollView>
     </View>
   )

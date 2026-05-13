@@ -1,6 +1,8 @@
 import { RestaurantOrdersQueueScreen } from './screens/RestaurantOrdersQueueScreen'
 import { RestaurantVirtualKitchenScreen } from './screens/RestaurantVirtualKitchenScreen'
 import { RestaurantMenuCatalogScreen } from './screens/RestaurantMenuCatalogScreen'
+import { RestaurantChatScreen } from './screens/RestaurantChatScreen'
+import { RestaurantNotificationsScreen } from './screens/RestaurantNotificationsScreen'
 
 export const RESTAURANT_VIEWS = [
   {
@@ -21,5 +23,17 @@ export const RESTAURANT_VIEWS = [
     label: 'Gestao de menu',
     icon: 'GM',
     Component: RestaurantMenuCatalogScreen,
+  },
+  {
+    id: 'chat',
+    label: 'Chat',
+    icon: 'CH',
+    Component: RestaurantChatScreen,
+  },
+  {
+    id: 'notifications',
+    label: 'Notificacoes',
+    icon: 'NT',
+    Component: RestaurantNotificationsScreen,
   },
 ]

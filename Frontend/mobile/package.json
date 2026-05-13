@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@react-native-community/netinfo": "^12.0.1",
     "expo": "~54.0.33",
     "expo-status-bar": "~3.0.9",
     "laravel-echo": "^2.3.4",

@@ -764,6 +764,249 @@ body {
   font-size: 15px;
 }
 
+.rb-chat {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+}
+
+.rb-chat-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.rb-chat-head h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.rb-chat-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.rb-chat-config {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.rb-chat-config label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.rb-chat-config input {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.rb-chat-stream {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: #fbfcfd;
+}
+
+.rb-chat-stream h4 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.rb-chat-empty {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.rb-chat-item {
+  border-top: 1px solid #ebeff3;
+  margin-top: 10px;
+  padding-top: 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.rb-chat-item strong {
+  font-size: 15px;
+}
+
+.rb-chat-item span,
+.rb-chat-item small {
+  color: var(--muted);
+}
+
+.rb-chat-compose {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+  display: grid;
+  gap: 10px;
+}
+
+.rb-chat-compose label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.rb-chat-compose textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+  resize: vertical;
+}
+
+.rb-chat-error {
+  margin: 10px 0 0;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff1f2;
+  color: #b91c1c;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.rb-notif {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 16px;
+}
+
+.rb-notif-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.rb-notif-head h3 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.rb-notif-head p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.rb-notif-config {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.rb-notif-config label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.rb-notif-config input {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.rb-notif-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.rb-notif-filter {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.rb-notif-filter.active {
+  border-color: #2563eb;
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.rb-notif-list {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcfd;
+  padding: 12px;
+}
+
+.rb-notif-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.rb-notif-item {
+  border-top: 1px solid #ebeff3;
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.rb-notif-item:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.rb-notif-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.rb-notif-item p {
+  margin: 8px 0;
+  color: #334155;
+}
+
+.rb-notif-item-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.rb-notif-item-foot small {
+  color: var(--muted);
+}
+
+.rb-notif-item.unread strong {
+  color: #0f172a;
+}
+
+.rb-notif-item.read strong {
+  color: #64748b;
+}
+
 @media (max-width: 1280px) {
   .rb-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -797,6 +1040,18 @@ body {
   }
 
   .rb-filter-row {
+    flex-wrap: wrap;
+  }
+
+  .rb-chat-config {
+    grid-template-columns: 1fr;
+  }
+
+  .rb-notif-config {
+    grid-template-columns: 1fr;
+  }
+
+  .rb-notif-actions {
     flex-wrap: wrap;
   }
 

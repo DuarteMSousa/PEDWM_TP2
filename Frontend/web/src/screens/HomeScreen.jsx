@@ -10,7 +10,7 @@ export function HomeScreen() {
     try {
       const result = await getApiHealth()
       setStatus(`API online: ${JSON.stringify(result)}`)
-    } catch (error) {
+    } catch {
       setStatus('Falha ao contactar a API. Ajusta VITE_API_BASE_URL e endpoint.')
     }
   }
