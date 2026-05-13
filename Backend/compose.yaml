@@ -1,7 +1,7 @@
 services:
     laravel.test:
         build:
-            context: './vendor/laravel/sail/runtimes/8.5'
+            context: .
             dockerfile: Dockerfile
             args:
                 WWWGROUP: '${WWWGROUP}'
@@ -19,7 +19,14 @@ services:
             XDEBUG_CONFIG: '${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}'
             IGNITION_LOCAL_SITES_PATH: '${PWD}'
         volumes:
-            - '.:/var/www/html'
+            - './app:/var/www/html/app'
+            - './config:/var/www/html/config'
+            - './routes:/var/www/html/routes'
+            - './graphql:/var/www/html/graphql'
+            - './database:/var/www/html/database'
+            - './resources:/var/www/html/resources'
+            - './storage:/var/www/html/storage'
+            - './.env:/var/www/html/.env'
         networks:
             - sail
         depends_on:
