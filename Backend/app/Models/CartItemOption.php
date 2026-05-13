@@ -13,15 +13,7 @@ class CartItemOption extends Model
     protected $fillable = [
         'cart_item_id',
         'product_option_id',
-        'extra_price',
     ];
-
-    protected function casts(): array
-    {
-        return [
-            'extra_price' => 'float',
-        ];
-    }
 
     public function cartItem(): BelongsTo
     {

@@ -18,12 +18,4 @@ class UpdateProductDTO extends Data
     ) {
     }
 
-    public function toArray(): array
-    {
-        return array_filter([
-            'name' => $this->name,
-            'price' => $this->price,
-            'description' => $this->description,
-        ], static fn ($value) => $value !== null);
-    }
 }

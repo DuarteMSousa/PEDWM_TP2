@@ -12,11 +12,11 @@ interface RestaurantRepositoryInterface
 
     public function searchRestaurants(SearchRestaurantsDTO $filters);
 
-    public function createRestaurantChain(CreateRestaurantDTO $data);
+    public function createRestaurant(CreateRestaurantDTO $data);
 
-    public function updateRestaurantChain(string $id, UpdateRestaurantDTO $data);
+    public function updateRestaurant(string $id, UpdateRestaurantDTO $data);
 
-    public function deleteRestaurantChain(string $id);
+    public function deleteRestaurant(string $id);
 }
 
 

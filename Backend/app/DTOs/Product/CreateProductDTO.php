@@ -20,13 +20,4 @@ class CreateProductDTO extends Data
     ) {
     }
 
-    public function toArray(): array
-    {
-        return [
-            'category_id' => $this->category_id,
-            'name' => $this->name,
-            'price' => $this->price,
-            'description' => $this->description,
-        ];
-    }
 }
