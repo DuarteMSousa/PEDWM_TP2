@@ -1,7 +1,10 @@
 <?php
 
 namespace App\DTOs\RestaurantChain;
-class CreateRestaurantChainDTO
+
+use Spatie\LaravelData\Data;
+
+class CreateRestaurantChainDTO extends Data
 {
 
     public function __construct(
@@ -10,10 +13,4 @@ class CreateRestaurantChainDTO
     ) {
     }
 
-    public function toArray(): array
-    {
-        return [
-            "name" => $this->name,
-        ];
-    }
 }

@@ -1,20 +1,19 @@
 <?php
 
-namespace App\DTOs\User;
+namespace App\DTOs\Review;
 
-class UpdateReviewDTO
+use Spatie\LaravelData\Data;
+
+class UpdateReviewDTO extends Data
 {
     public function __construct(
-        public readonly ?string $name = null,
-        public readonly ?string $email = null
+        public readonly ?int $rating = null,
+        public readonly ?string $comment = null
     ) {
     }
 
     public function toArray(): array
     {
-        return array_filter([
-            'name' => $this->name,
-            'email' => $this->email,
-        ], static fn ($value) => $value !== null);
+        return array_filter(parent::toArray(), static fn ($value) => $value !== null);
     }
 }

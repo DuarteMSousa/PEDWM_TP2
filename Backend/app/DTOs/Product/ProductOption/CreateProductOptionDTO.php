@@ -1,8 +1,10 @@
 <?php
 
-namespace App\DTOs\Product;
+namespace App\DTOs\Product\ProductOption;
 
-class CreateProductOptionDTO
+use Spatie\LaravelData\Data;
+
+class CreateProductOptionDTO extends Data
 {
     public function __construct(
         public readonly string $name,
@@ -11,12 +13,4 @@ class CreateProductOptionDTO
     ) {
     }
 
-    public function toArray(): array
-    {
-        return [
-            'name' => $this->name,
-            'extra_price' => $this->extra_price,
-            'default_option' => $this->default_option,
-        ];
-    }
 }

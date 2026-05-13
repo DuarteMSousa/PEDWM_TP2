@@ -5,7 +5,6 @@ namespace App\Repositories\ProductRepository;
 use App\DTOs\Product\CreateProductDTO;
 use App\DTOs\Product\UpdateProductDTO;
 use App\Models\Product;
-use Illuminate\Support\Facades\DB;
 
 class ProductRepository implements ProductRepositoryInterface
 {
@@ -44,58 +43,52 @@ class ProductRepository implements ProductRepositoryInterface
             return null;
         }
 
-        DB::transaction(function () use ($product, $data): void {
-            $product->update($data->toArray());
+        $product->update($data->toArray());
 
-            if ($data->option_groups === null) {
-                return;
+        if ($data->option_groups === null) {
+            return $product->load('optionGroups.options');
+        }
+
+        $existingGroupsById = $product->optionGroups->keyBy('id');
+        $keptGroupIds = [];
+
+        foreach ($data->option_groups as $groupDTO) {
+            $group = $groupDTO->id !== null ? $existingGroupsById->get($groupDTO->id) : null;
+
+            if ($group) {
+                $group->update($groupDTO->toArray());
+            } else {
+                $group = $product->optionGroups()->create($groupDTO->toArray());
             }
 
-            $keptGroupIds = [];
+            $keptGroupIds[] = $group->id;
+            $existingOptionsById = $group->relationLoaded('options') ? $group->options->keyBy('id') : collect();
+            $keptOptionIds = [];
 
-            foreach ($data->option_groups as $groupDTO) {
-                $group = null;
-                if ($groupDTO->id !== null) {
-                    $group = $product->optionGroups()->where('id', $groupDTO->id)->first();
-                }
+            foreach ($groupDTO->options as $optionDTO) {
+                $option = $optionDTO->id !== null ? $existingOptionsById->get($optionDTO->id) : null;
 
-                if ($group) {
-                    $group->update($groupDTO->toArray());
+                if ($option) {
+                    $option->update($optionDTO->toArray());
                 } else {
-                    $group = $product->optionGroups()->create($groupDTO->toArray());
+                    $option = $group->options()->create($optionDTO->toArray());
                 }
 
-                $keptGroupIds[] = $group->id;
-
-                $keptOptionIds = [];
-                foreach ($groupDTO->options as $optionDTO) {
-                    $option = null;
-                    if ($optionDTO->id !== null) {
-                        $option = $group->options()->where('id', $optionDTO->id)->first();
-                    }
-
-                    if ($option) {
-                        $option->update($optionDTO->toArray());
-                    } else {
-                        $option = $group->options()->create($optionDTO->toArray());
-                    }
-
-                    $keptOptionIds[] = $option->id;
-                }
-
-                if (count($keptOptionIds) === 0) {
-                    $group->options()->delete();
-                } else {
-                    $group->options()->whereNotIn('id', $keptOptionIds)->delete();
-                }
+                $keptOptionIds[] = $option->id;
             }
 
-            $groupsToDelete = $product->optionGroups()->whereNotIn('id', $keptGroupIds)->get();
-            $groupsToDelete->each(function ($group): void {
+            if (count($keptOptionIds) === 0) {
                 $group->options()->delete();
-                $group->delete();
-            });
-        });
+            } else {
+                $group->options()->whereNotIn('id', $keptOptionIds)->delete();
+            }
+        }
+
+        if (count($keptGroupIds) === 0) {
+            $product->optionGroups()->delete();
+        } else {
+            $product->optionGroups()->whereNotIn('id', $keptGroupIds)->delete();
+        }
 
         return $product->load('optionGroups.options');
     }

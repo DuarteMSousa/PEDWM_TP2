@@ -2,7 +2,9 @@
 
 namespace App\DTOs\RestaurantChain;
 
-class UpdateRestaurantChainDTO
+use Spatie\LaravelData\Data;
+
+class UpdateRestaurantChainDTO extends Data
 {
     public function __construct(
         public readonly ?string $name = null
@@ -11,8 +13,6 @@ class UpdateRestaurantChainDTO
 
     public function toArray(): array
     {
-        return array_filter([
-            'name' => $this->name,
-        ], static fn ($value) => $value !== null);
+        return array_filter(parent::toArray(), static fn ($value) => $value !== null);
     }
 }

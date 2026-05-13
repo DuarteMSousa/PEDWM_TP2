@@ -2,7 +2,9 @@
 
 namespace App\DTOs\User;
 
-class UpdateUserDTO
+use Spatie\LaravelData\Data;
+
+class UpdateUserDTO extends Data
 {
     public function __construct(
         public readonly ?string $name = null,
@@ -12,9 +14,6 @@ class UpdateUserDTO
 
     public function toArray(): array
     {
-        return array_filter([
-            'name' => $this->name,
-            'email' => $this->email,
-        ], static fn ($value) => $value !== null);
+        return array_filter(parent::toArray(), static fn ($value) => $value !== null);
     }
 }

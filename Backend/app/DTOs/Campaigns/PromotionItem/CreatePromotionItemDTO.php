@@ -1,21 +1,16 @@
 <?php
 
-namespace App\DTOs\Product;
+namespace App\DTOs\Campaigns\PromotionItem;
 
-class CreateProductOptionDTO
+use Spatie\LaravelData\Data;
+
+class CreatePromotionItemDTO extends Data
 {
     public function __construct(
-        public readonly string $id,
-        
+        public readonly string $promotion_id,
+        public readonly ?string $product_id,
+        public readonly ?string $category_id,
+        public readonly float $discount,
     ) {
-    }
-
-    public function toArray(): array
-    {
-        return [
-            'id' => $this->id,
-            'extra_price' => $this->extra_price,
-            'default_option' => $this->default_option,
-        ];
     }
 }

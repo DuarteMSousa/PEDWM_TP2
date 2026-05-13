@@ -2,12 +2,14 @@
 
 namespace App\DTOs\User;
 
-class CreateUserDTO
+use Spatie\LaravelData\Data;
+
+class CreateUserDTO extends Data
 {
     public function __construct(
         public readonly string $name,
         public readonly string $email,
-        public readonly string $password
+        public readonly string $password,
     ) {
     }
 
@@ -16,16 +18,7 @@ class CreateUserDTO
         return new self(
             name: $this->name,
             email: $this->email,
-            password: bcrypt($this->password)
+            password: bcrypt($this->password),
         );
-    }
-
-    public function toArray(): array
-    {
-        return [
-            'name' => $this->name,
-            'email' => $this->email,
-            'password' => $this->password,
-        ];
     }
 }

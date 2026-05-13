@@ -1,7 +1,10 @@
 <?php
 
 namespace App\DTOs\Category;
-class CreateCategoryDTO
+
+use Spatie\LaravelData\Data;
+
+class CreateCategoryDTO extends Data
 {
 
     public function __construct(
@@ -10,11 +13,4 @@ class CreateCategoryDTO
     ) {
     }
 
-    public function toArray(): array
-    {
-        return [
-            "name" => $this->name,
-            "chain_id" => $this->chain_id,
-        ];
-    }
 }

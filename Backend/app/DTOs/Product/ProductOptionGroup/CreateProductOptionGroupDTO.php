@@ -1,12 +1,13 @@
 <?php
 
-namespace App\DTOs\Product;
+namespace App\DTOs\Product\ProductOptionGroup;
 
-use Spatie\LaravelData\Data;
+use App\DTOs\Product\ProductOption\CreateProductOptionDTO;
 use Spatie\LaravelData\DataCollection;
 use Spatie\LaravelData\Attributes\DataCollectionOf;
+use Spatie\LaravelData\Data;
 
-class CreateProductOptionGroupDTO
+class CreateProductOptionGroupDTO extends Data
 {
 
     public function __construct(
