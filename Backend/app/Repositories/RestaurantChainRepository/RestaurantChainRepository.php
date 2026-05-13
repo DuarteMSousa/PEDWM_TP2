@@ -2,6 +2,8 @@
 
 namespace App\Repositories\RestaurantChainRepository;
 
+use App\DTOs\RestaurantChain\CreateRestaurantChainDTO;
+use App\DTOs\RestaurantChain\UpdateRestaurantChainDTO;
 use App\Models\RestaurantChain;
 
 class RestaurantChainRepository implements RestaurantChainRepositoryInterface
