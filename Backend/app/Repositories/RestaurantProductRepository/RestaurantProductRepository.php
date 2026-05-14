@@ -15,8 +15,9 @@ class RestaurantProductRepository implements RestaurantProductRepositoryInterfac
 
     public function findByRestaurantId(string $restaurantId)
     {
-        return RestaurantProduct::with(['product'])
+        return RestaurantProduct::with(['product.category'])
             ->where('restaurant_id', $restaurantId)
+            ->orderBy('created_at')
             ->get();
     }
 

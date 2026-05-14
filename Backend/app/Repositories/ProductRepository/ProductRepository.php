@@ -22,13 +22,26 @@ class ProductRepository implements ProductRepositoryInterface
 
     public function createProduct(CreateProductDTO $data)
     {
-        $product = Product::create($data->toArray());
+        $product = Product::create([
+            'category_id' => $data->category_id,
+            'name' => $data->name,
+            'price' => $data->price,
+            'description' => $data->description,
+        ]);
 
         foreach ($data->option_groups as $groupDTO) {
-            $group = $product->optionGroups()->create($groupDTO->toArray());
+            $group = $product->optionGroups()->create([
+                'name' => $groupDTO->name,
+                'min_options' => $groupDTO->min_options,
+                'max_options' => $groupDTO->max_options,
+            ]);
 
             foreach ($groupDTO->options as $optionDTO) {
-                $group->options()->create($optionDTO->toArray());
+                $group->options()->create([
+                    'name' => $optionDTO->name,
+                    'extra_price' => $optionDTO->extra_price,
+                    'default_option' => $optionDTO->default_option,
+                ]);
             }
         }
 
@@ -43,7 +56,11 @@ class ProductRepository implements ProductRepositoryInterface
             return null;
         }
 
-        $product->update($data->toArray());
+        $product->update(array_filter([
+            'name' => $data->name,
+            'price' => $data->price,
+            'description' => $data->description,
+        ], static fn ($value) => $value !== null));
 
         if ($data->option_groups === null) {
             return $product->load('optionGroups.options');
@@ -56,9 +73,17 @@ class ProductRepository implements ProductRepositoryInterface
             $group = $groupDTO->id !== null ? $existingGroupsById->get($groupDTO->id) : null;
 
             if ($group) {
-                $group->update($groupDTO->toArray());
+                $group->update([
+                    'name' => $groupDTO->name,
+                    'min_options' => $groupDTO->min_options,
+                    'max_options' => $groupDTO->max_options,
+                ]);
             } else {
-                $group = $product->optionGroups()->create($groupDTO->toArray());
+                $group = $product->optionGroups()->create([
+                    'name' => $groupDTO->name,
+                    'min_options' => $groupDTO->min_options,
+                    'max_options' => $groupDTO->max_options,
+                ]);
             }
 
             $keptGroupIds[] = $group->id;
@@ -69,9 +94,17 @@ class ProductRepository implements ProductRepositoryInterface
                 $option = $optionDTO->id !== null ? $existingOptionsById->get($optionDTO->id) : null;
 
                 if ($option) {
-                    $option->update($optionDTO->toArray());
+                    $option->update([
+                        'name' => $optionDTO->name,
+                        'extra_price' => $optionDTO->extra_price,
+                        'default_option' => $optionDTO->default_option,
+                    ]);
                 } else {
-                    $option = $group->options()->create($optionDTO->toArray());
+                    $option = $group->options()->create([
+                        'name' => $optionDTO->name,
+                        'extra_price' => $optionDTO->extra_price,
+                        'default_option' => $optionDTO->default_option,
+                    ]);
                 }
 
                 $keptOptionIds[] = $option->id;

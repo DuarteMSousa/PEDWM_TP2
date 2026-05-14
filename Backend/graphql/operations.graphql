@@ -16,6 +16,7 @@ type ToggleCourierAvailabilityPayload {
 
 input AcceptDeliveryJobInput {
   delivery_id: ID!
+  offer_token: String!
 }
 
 type AcceptDeliveryJobPayload {
@@ -28,6 +29,7 @@ type AcceptDeliveryJobPayload {
 
 input RestaurantOrderActionInput {
   order_id: ID!
+  reason: String
 }
 
 type RestaurantOrderActionPayload {
@@ -98,6 +100,8 @@ type CourierDeliveryOffer {
   estimated_pickup_time_min: Int
   pickup_address: String
   dropoff_address: String
+  offer_token: String!
+  offer_expires_at: String!
   created_at: String
 }
 

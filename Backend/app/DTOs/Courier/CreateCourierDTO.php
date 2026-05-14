@@ -15,15 +15,4 @@ class CreateCourierDTO extends Data
         public readonly ?string $last_location_update = null,
     ) {
     }
-
-    public function toArray(): array
-    {
-        return [
-            'user_id' => $this->user_id,
-            'status' => $this->status->value,
-            'latitude' => $this->latitude,
-            'longitude' => $this->longitude,
-            'last_location_update' => $this->last_location_update,
-        ];
-    }
 }

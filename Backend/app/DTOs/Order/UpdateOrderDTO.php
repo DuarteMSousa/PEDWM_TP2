@@ -11,11 +11,4 @@ class UpdateOrderDTO extends Data
         public readonly OrderStatus $status,
     ) {
     }
-
-    public function toArray(): array
-    {
-        return [
-            'status' => $this->status->value,
-        ];
-    }
 }

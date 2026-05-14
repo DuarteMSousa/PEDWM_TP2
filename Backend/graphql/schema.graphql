@@ -9,3 +9,4 @@ type Mutation
 #import operations.graphql
 #import notifications.graphql
 #import commerce.graphql
+#import reviews.graphql

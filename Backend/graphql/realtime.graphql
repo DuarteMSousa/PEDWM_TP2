@@ -27,6 +27,59 @@ type SendChatMessagePayload {
   sent_at: String!
 }
 
+enum ChatTypeInput {
+  CUSTOMER_RESTAURANT
+  CUSTOMER_COURIER
+}
+
+input CreateOrderChatInput {
+  order_id: ID!
+  type: ChatTypeInput!
+}
+
+type ChatParticipantView {
+  user_id: ID!
+  user_type: String!
+  name: String
+  last_read_at: String
+}
+
+type ChatMessageView {
+  id: ID!
+  chat_id: ID!
+  sender_user_id: ID!
+  sender_user_type: String!
+  sender_name: String
+  content: String!
+  sent_at: String!
+  read_at: String
+}
+
+type ChatView {
+  id: ID!
+  order_id: ID!
+  type: String!
+  closed_at: String
+  participants: [ChatParticipantView!]!
+  last_message: ChatMessageView
+  unread_count: Int!
+}
+
+type CreateOrderChatPayload {
+  ok: Boolean!
+  chat_id: ID!
+}
+
+input MarkChatReadInput {
+  chat_id: ID!
+}
+
+type MarkChatReadPayload {
+  ok: Boolean!
+  chat_id: ID!
+  read_at: String!
+}
+
 enum NotificationTypeInput {
   ORDER_UPDATE
   PROMOTION
@@ -53,6 +106,20 @@ extend type Mutation {
   sendChatMessage(input: SendChatMessageInput!): SendChatMessagePayload!
     @field(resolver: "App\\GraphQL\\Mutations\\SendChatMessage")
 
+  createOrderChat(input: CreateOrderChatInput!): CreateOrderChatPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\CreateOrderChat")
+
+  markChatRead(input: MarkChatReadInput!): MarkChatReadPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\MarkChatRead")
+
   publishUserNotification(input: PublishUserNotificationInput!): PublishUserNotificationPayload!
     @field(resolver: "App\\GraphQL\\Mutations\\PublishUserNotification")
+}
+
+extend type Query {
+  myChats(limit: Int = 20): [ChatView!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@myChats")
+
+  chatMessages(chat_id: ID!, limit: Int = 50): [ChatMessageView!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@chatMessages")
 }

@@ -13,6 +13,8 @@ interface OrderRepositoryInterface
 
     public function findByRestaurantId(string $restaurantId, int $pageNumber, int $pageSize);
 
+    public function findByUserIdWithFilters(string $userId, int $limit, ?array $statuses = null);
+
     public function createOrder(CreateOrderDTO $data);
 
     public function updateOrder(string $id, UpdateOrderDTO $data);

@@ -17,6 +17,7 @@ class Coupon extends Model
         'description',
         'type',
         'target',
+        'discount',
         'expiry_date',
     ];
 
@@ -24,6 +25,7 @@ class Coupon extends Model
     {
         return [
             'expiry_date' => 'datetime',
+            'discount' => 'float',
         ];
     }
 

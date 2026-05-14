@@ -1,0 +1,47 @@
+enum ReviewTargetTypeInput {
+  RESTAURANT
+  COURIER
+}
+
+type ReviewView {
+  id: ID!
+  user_id: ID!
+  rating: Int!
+  comment: String
+  target_type: String!
+  target_id: ID!
+  created_at: String
+  updated_at: String
+}
+
+input CreateReviewInput {
+  rating: Int!
+  comment: String
+  target_type: ReviewTargetTypeInput!
+  target_id: ID!
+}
+
+input UpdateReviewInput {
+  rating: Int
+  comment: String
+}
+
+extend type Query {
+  myReviews(page: Int = 1, per_page: Int = 20): [ReviewView!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ReviewQueries@myReviews")
+
+  targetReviews(target_type: ReviewTargetTypeInput!, target_id: ID!, page: Int = 1, per_page: Int = 20): [ReviewView!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ReviewQueries@targetReviews")
+}
+
+extend type Mutation {
+  createReview(input: CreateReviewInput!): ReviewView!
+    @field(resolver: "App\\GraphQL\\Mutations\\ReviewMutations@createReview")
+
+  updateReview(review_id: ID!, input: UpdateReviewInput!): ReviewView!
+    @field(resolver: "App\\GraphQL\\Mutations\\ReviewMutations@updateReview")
+
+  deleteReview(review_id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\ReviewMutations@deleteReview")
+}
+

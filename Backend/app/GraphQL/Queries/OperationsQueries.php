@@ -9,6 +9,8 @@ use App\Models\Order;
 use App\Models\User;
 use GraphQL\Error\UserError;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class OperationsQueries
 {
@@ -95,6 +97,9 @@ class OperationsQueries
 
         $limit = max(1, min((int) ($args['limit'] ?? 20), 100));
         $courier = $user->courier;
+        if (! $courier) {
+            throw new UserError('Courier profile not found.');
+        }
 
         $deliveries = Delivery::query()
             ->with([
@@ -119,9 +124,10 @@ class OperationsQueries
                 $order = $delivery->order;
                 $pickupAddress = $order?->restaurant?->address;
                 $dropoffAddress = $order?->address;
+                $offer = $this->issueCourierOfferToken($delivery->id, $courier->user_id);
                 $distanceKm = $this->calculateDistanceKm(
-                    $courier?->latitude,
-                    $courier?->longitude,
+                    $courier->latitude,
+                    $courier->longitude,
                     $pickupAddress?->latitude,
                     $pickupAddress?->longitude
                 );
@@ -145,6 +151,8 @@ class OperationsQueries
                         $dropoffAddress?->city,
                         $dropoffAddress?->country
                     ),
+                    'offer_token' => $offer['token'],
+                    'offer_expires_at' => $offer['expires_at'],
                     'created_at' => $delivery->created_at?->toIso8601String(),
                 ];
             })
@@ -244,5 +252,29 @@ class OperationsQueries
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadiusKm * $c;
+    }
+
+    /**
+     * @return array{token: string, expires_at: string}
+     */
+    private function issueCourierOfferToken(string $deliveryId, ?string $courierId): array
+    {
+        $token = (string) Str::uuid();
+        $expiresAt = now()->addSeconds(30);
+
+        if ($courierId) {
+            $cacheKey = $this->getOfferCacheKey($deliveryId, $courierId);
+            Cache::put($cacheKey, ['token' => $token], $expiresAt);
+        }
+
+        return [
+            'token' => $token,
+            'expires_at' => $expiresAt->toIso8601String(),
+        ];
+    }
+
+    private function getOfferCacheKey(string $deliveryId, string $courierId): string
+    {
+        return "delivery_offer:{$deliveryId}:{$courierId}";
     }
 }

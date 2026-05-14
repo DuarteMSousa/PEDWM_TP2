@@ -13,13 +13,4 @@ class UpdateProductOptionDTO extends Data
         public readonly ?string $id = null,
     ) {
     }
-
-    public function toArray(): array
-    {
-        return [
-            'name' => $this->name,
-            'extra_price' => $this->extra_price,
-            'default_option' => $this->default_option,
-        ];
-    }
 }

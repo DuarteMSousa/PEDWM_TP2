@@ -71,6 +71,7 @@ enum PaymentMethodInput {
 input CheckoutInput {
   payment_method: PaymentMethodInput!
   address_id: ID
+  coupon_code: String
 }
 
 type CheckoutPayload {
@@ -126,6 +127,10 @@ type ClearCartPayload {
   ok: Boolean!
 }
 
+input ReorderInput {
+  order_id: ID!
+}
+
 extend type Query {
   restaurants(page: Int = 1, per_page: Int = 20, q: String = "", city: String = ""): [RestaurantSummary!]!
     @field(resolver: "App\\GraphQL\\Queries\\CommerceQueries@restaurants")
@@ -161,4 +166,7 @@ extend type Mutation {
 
   updateOrderItemStatus(input: UpdateOrderItemStatusInput!): UpdateOrderItemStatusPayload!
     @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@updateOrderItemStatus")
+
+  reorder(input: ReorderInput!): CartView!
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@reorder")
 }

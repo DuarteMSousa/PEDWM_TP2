@@ -2,17 +2,23 @@
 
 namespace App\GraphQL\Mutations;
 
+use App\Enums\NotificationType;
 use App\Enums\OrderEventType;
 use App\Enums\OrderStatus;
 use App\Enums\UserType;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\NotificationService\NotificationServiceInterface;
 use GraphQL\Error\UserError;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\DB;
 
 class RejectRestaurantOrder
 {
+    public function __construct(private NotificationServiceInterface $notificationService)
+    {
+    }
+
     /**
      * @param  array<string, mixed>  $args
      * @return array<string, mixed>
@@ -26,9 +32,11 @@ class RejectRestaurantOrder
         }
 
         $orderId = $args['input']['order_id'];
+        $reason = isset($args['input']['reason']) ? trim((string) $args['input']['reason']) : null;
+        $reason = $reason !== '' ? $reason : null;
         $updatedOrder = null;
 
-        DB::transaction(function () use ($orderId, $user, &$updatedOrder): void {
+        DB::transaction(function () use ($orderId, $user, $reason, &$updatedOrder): void {
             /** @var Order|null $order */
             $order = Order::query()
                 ->with(['restaurant.localManager', 'restaurant.chain.chainManagers'])
@@ -52,11 +60,30 @@ class RejectRestaurantOrder
             $order->events()->create([
                 'event_type' => OrderEventType::ORDER_CANCELLED->value,
                 'timestamp' => now(),
-                'payload' => ['actor_id' => $user->id],
+                'payload' => [
+                    'actor_id' => $user->id,
+                    'reason' => $reason,
+                ],
             ]);
 
             $updatedOrder = $order->fresh();
         });
+
+        $notificationMessage = $reason
+            ? "O restaurante rejeitou o pedido. Motivo: {$reason}"
+            : 'O restaurante rejeitou o pedido.';
+
+        $this->notificationService->createAndDispatch(
+            userId: $updatedOrder->user_id,
+            type: NotificationType::ORDER_UPDATE,
+            title: 'Pedido rejeitado',
+            message: $notificationMessage,
+            data: [
+                'order_id' => $updatedOrder->id,
+                'reason' => $reason,
+            ],
+            actorId: $user->id
+        );
 
         return [
             'ok' => true,

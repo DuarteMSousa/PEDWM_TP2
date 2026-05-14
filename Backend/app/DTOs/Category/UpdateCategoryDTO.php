@@ -12,9 +12,4 @@ class UpdateCategoryDTO extends Data
 
     ) {
     }
-
-    public function toArray(): array
-    {
-        return array_filter(parent::toArray(), static fn ($value) => $value !== null);
-    }
 }

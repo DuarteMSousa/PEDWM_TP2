@@ -68,8 +68,25 @@ class PublishOutboxEventJob implements ShouldQueue
         match ($eventName) {
             'COURIER_POSITION_UPDATED' => event(new CourierPositionUpdated($payload)),
             'CHAT_MESSAGE_SENT' => event(new ChatMessageSent($payload)),
-            'USER_NOTIFICATION_CREATED' => event(new UserNotificationCreated($payload)),
+            'USER_NOTIFICATION_CREATED' => $this->publishUserNotification($payload),
             default => null,
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function publishUserNotification(array $payload): void
+    {
+        event(new UserNotificationCreated($payload));
+
+        if (! isset($payload['notificationId'])) {
+            return;
+        }
+
+        DispatchNotificationChannelsJob::dispatch(
+            notificationId: (string) $payload['notificationId'],
+            payload: $payload
+        );
     }
 }

@@ -21,16 +21,4 @@ class CreateOrderItemDTO extends Data
         public readonly ?DataCollection $options = null,
     ) {
     }
-
-    public function toArray(): array
-    {
-        return [
-            'restaurant_product_id' => $this->restaurant_product_id,
-            'status' => $this->status->value,
-            'quantity' => $this->quantity,
-            'unit_price' => $this->unit_price,
-            'product_name_snapshot' => $this->product_name_snapshot,
-            'total_price' => $this->total_price,
-        ];
-    }
 }

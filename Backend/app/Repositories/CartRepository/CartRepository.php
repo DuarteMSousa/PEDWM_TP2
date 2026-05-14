@@ -14,12 +14,12 @@ class CartRepository implements CartRepositoryInterface
 {
     public function findById(string $id)
     {
-        return Cart::with(['items.options'])->find($id);
+        return Cart::with(['items.restaurantProduct.product', 'items.options.productOption'])->find($id);
     }
 
     public function findByUserId(string $userId)
     {
-        return Cart::with(['items.options'])
+        return Cart::with(['items.restaurantProduct.product', 'items.options.productOption'])
             ->where('user_id', $userId)
             ->first();
     }

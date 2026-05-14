@@ -9,23 +9,37 @@ use App\Enums\PaymentEventType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\UserType;
-use App\GraphQL\Queries\CommerceQueries;
+use App\Enums\DiscountOriginType;
+use App\Enums\DiscountTarget;
+use App\Enums\DiscountType;
+use App\Enums\NotificationType;
 use App\Models\Cart;
 use App\Models\CartItem;
+use App\Models\Coupon;
 use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
+use App\Models\ProductOption;
+use App\Models\Promotion;
+use App\Models\Restaurant;
 use App\Models\RestaurantProduct;
 use App\Models\User;
 use App\Models\UserAddress;
 use App\Services\IdempotencyService;
+use App\Services\NotificationService\NotificationServiceInterface;
+use Carbon\Carbon;
 use GraphQL\Error\UserError;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class CommerceMutations
 {
+    public function __construct(private NotificationServiceInterface $notificationService)
+    {
+    }
+
     /**
      * @param  array<string, mixed>  $args
      * @return array<string, mixed>
@@ -214,15 +228,18 @@ class CommerceMutations
         }
 
         $paymentMethod = PaymentMethod::from($input['payment_method']);
+        $couponCode = isset($input['coupon_code']) ? trim((string) $input['coupon_code']) : null;
+        $couponCode = $couponCode !== '' ? $couponCode : null;
 
         return app(IdempotencyService::class)->execute(
             user: $user,
             operation: 'checkout',
             requestPayload: $input,
-            callback: function () use ($user, $cart, $address, $restaurantId, $paymentMethod): array {
-                $created = DB::transaction(function () use ($user, $cart, $address, $restaurantId, $paymentMethod): array {
-                    $orderTotal = 0.0;
+            callback: function () use ($user, $cart, $address, $restaurantId, $paymentMethod, $couponCode): array {
+                $created = DB::transaction(function () use ($user, $cart, $address, $restaurantId, $paymentMethod, $couponCode): array {
+                    $subTotal = 0.0;
                     $restaurantName = $cart->items->first()?->restaurantProduct?->restaurant?->name ?? 'Restaurante';
+                    $restaurant = Restaurant::query()->with('chain')->whereKey($restaurantId)->first();
 
                     $order = Order::query()->create([
                         'user_id' => $user->id,
@@ -232,11 +249,14 @@ class CommerceMutations
                         'restaurant_name_snapshot' => $restaurantName,
                     ]);
 
+                    /** @var Collection<string, array{order_item: OrderItem, product_id: ?string, category_id: ?string, line_total: float}> $itemMetadata */
+                    $itemMetadata = collect();
+
                     foreach ($cart->items as $cartItem) {
                         $basePrice = (float) ($cartItem->unit_price ?? $cartItem->restaurantProduct?->local_price ?? $cartItem->restaurantProduct?->product?->price ?? 0);
                         $optionsTotal = $cartItem->options->sum(fn ($option) => (float) ($option->productOption?->extra_price ?? 0));
                         $lineTotal = ((float) $basePrice + (float) $optionsTotal) * (int) $cartItem->quantity;
-                        $orderTotal += $lineTotal;
+                        $subTotal += $lineTotal;
 
                         $orderItem = $order->items()->create([
                             'restaurant_product_id' => $cartItem->restaurant_product_id,
@@ -254,8 +274,30 @@ class CommerceMutations
                                 'extra_price' => (float) ($option->productOption?->extra_price ?? 0),
                             ]);
                         }
+
+                        $itemMetadata->put($orderItem->id, [
+                            'order_item' => $orderItem,
+                            'product_id' => $cartItem->restaurantProduct?->product?->id,
+                            'category_id' => $cartItem->restaurantProduct?->product?->category_id,
+                            'line_total' => $lineTotal,
+                        ]);
                     }
 
+                    $deliveryFee = 0.0;
+                    $discountRows = $this->resolveCheckoutDiscounts(
+                        chainId: $restaurant?->chain_id,
+                        itemMetadata: $itemMetadata,
+                        subTotal: $subTotal,
+                        deliveryFee: $deliveryFee,
+                        couponCode: $couponCode
+                    );
+
+                    foreach ($discountRows as $discountRow) {
+                        $order->discounts()->create($discountRow);
+                    }
+
+                    $totalDiscount = collect($discountRows)->sum('discount_amount');
+                    $orderTotal = max(0, round($subTotal + $deliveryFee - $totalDiscount, 2));
                     $order->update(['total' => $orderTotal]);
 
                     $order->address()->create([
@@ -270,7 +312,11 @@ class CommerceMutations
                     $order->events()->create([
                         'event_type' => OrderEventType::ORDER_CREATED->value,
                         'timestamp' => now(),
-                        'payload' => ['order_total' => $orderTotal],
+                        'payload' => [
+                            'subtotal' => $subTotal,
+                            'discount_total' => $totalDiscount,
+                            'order_total' => $orderTotal,
+                        ],
                     ]);
 
                     $paymentStatus = $paymentMethod === PaymentMethod::CASH ? PaymentStatus::COMPLETED : PaymentStatus::PENDING;
@@ -468,10 +514,11 @@ class CommerceMutations
             throw new UserError("Invalid order item transition: {$currentStatus->value} -> {$nextStatus->value}");
         }
 
-        DB::transaction(function () use ($orderItem, $nextStatus): void {
+        $courierNotificationUserId = null;
+        DB::transaction(function () use ($orderItem, $nextStatus, &$courierNotificationUserId): void {
             $orderItem->update(['status' => $nextStatus]);
 
-            $order = $orderItem->order->fresh(['items']);
+            $order = $orderItem->order->fresh(['items', 'delivery']);
             $statuses = $order->items->pluck('status');
 
             if ($statuses->every(fn ($status) => in_array($status->value, [OrderItemStatus::READY->value, OrderItemStatus::CANCELLED->value], true))) {
@@ -481,6 +528,8 @@ class CommerceMutations
                     'timestamp' => now(),
                     'payload' => ['order_item_id' => $orderItem->id],
                 ]);
+
+                $courierNotificationUserId = $order->delivery?->courier_id;
             } elseif ($statuses->contains(fn ($status) => $status === OrderItemStatus::PREPARING)) {
                 $order->update(['status' => OrderStatus::PREPARING]);
                 $order->events()->create([
@@ -490,6 +539,20 @@ class CommerceMutations
                 ]);
             }
         });
+
+        if ($courierNotificationUserId) {
+            $this->notificationService->createAndDispatch(
+                userId: $courierNotificationUserId,
+                type: NotificationType::ORDER_UPDATE,
+                title: 'Pedido pronto para recolha',
+                message: 'O restaurante marcou o pedido como pronto para recolha.',
+                data: [
+                    'order_id' => $orderItem->order_id,
+                    'order_item_id' => $orderItem->id,
+                ],
+                actorId: $user->id
+            );
+        }
 
         $orderItem->refresh();
         $orderItem->load('order');
@@ -501,6 +564,247 @@ class CommerceMutations
             'order_item_status' => $orderItem->status->value,
             'order_status' => $orderItem->order->status->value,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $args
+     * @return array<string, mixed>
+     */
+    public function reorder(null $_, array $args): array
+    {
+        $user = $this->resolveAuthenticatedUser();
+
+        if ($user->user_type !== UserType::CUSTOMER) {
+            throw new UserError('Only customer users can reorder.');
+        }
+
+        /** @var Order|null $sourceOrder */
+        $sourceOrder = Order::query()
+            ->with(['items.options'])
+            ->whereKey($args['input']['order_id'])
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (! $sourceOrder) {
+            throw new UserError('Order not found.');
+        }
+
+        if ($sourceOrder->items->isEmpty()) {
+            throw new UserError('Source order has no items.');
+        }
+
+        /** @var Cart $cart */
+        $cart = Cart::query()->firstOrCreate(['user_id' => $user->id], ['total' => 0]);
+
+        DB::transaction(function () use ($cart, $sourceOrder): void {
+            $cart->items()->delete();
+
+            foreach ($sourceOrder->items as $sourceItem) {
+                $restaurantProduct = RestaurantProduct::query()
+                    ->with('product')
+                    ->whereKey($sourceItem->restaurant_product_id)
+                    ->first();
+
+                if (! $restaurantProduct || ! $restaurantProduct->is_available) {
+                    throw new UserError("Product {$sourceItem->product_name_snapshot} is no longer available.");
+                }
+
+                $unitPrice = (float) ($restaurantProduct->local_price ?? $restaurantProduct->product?->price ?? 0);
+                $quantity = max(1, (int) $sourceItem->quantity);
+                $lineTotal = $unitPrice * $quantity;
+
+                $cartItem = $cart->items()->create([
+                    'restaurant_product_id' => $restaurantProduct->id,
+                    'quantity' => $quantity,
+                    'unit_price' => $unitPrice,
+                    'total_price' => $lineTotal,
+                ]);
+
+                foreach ($sourceItem->options as $option) {
+                    if (! ProductOption::query()->whereKey($option->product_option_id)->exists()) {
+                        continue;
+                    }
+
+                    $cartItem->options()->create([
+                        'product_option_id' => $option->product_option_id,
+                        'extra_price' => (float) $option->extra_price,
+                    ]);
+                }
+            }
+        });
+
+        return $this->loadCartPayload($cart->id) ?? [
+            'id' => $cart->id,
+            'user_id' => $cart->user_id,
+            'restaurant_id' => null,
+            'total' => 0,
+            'items' => [],
+        ];
+    }
+
+    /**
+     * @param  Collection<string, array{order_item: OrderItem, product_id: ?string, category_id: ?string, line_total: float}>  $itemMetadata
+     * @return array<int, array<string, mixed>>
+     */
+    private function resolveCheckoutDiscounts(
+        ?string $chainId,
+        Collection $itemMetadata,
+        float $subTotal,
+        float $deliveryFee,
+        ?string $couponCode
+    ): array {
+        if (! $chainId) {
+            return [];
+        }
+
+        $discounts = [];
+        $now = Carbon::now();
+
+        $promotions = Promotion::query()
+            ->with('promotionItems')
+            ->where('chain_id', $chainId)
+            ->where(function ($query) use ($now): void {
+                $query->whereNull('start_date')->orWhere('start_date', '<=', $now);
+            })
+            ->where(function ($query) use ($now): void {
+                $query->whereNull('end_date')->orWhere('end_date', '>=', $now);
+            })
+            ->get();
+
+        foreach ($promotions as $promotion) {
+            $promotionType = DiscountType::from($promotion->type);
+            $promotionTarget = DiscountTarget::from($promotion->target);
+
+            if ($promotionTarget === DiscountTarget::ORDER) {
+                $value = (float) ($promotion->promotionItems->first()?->discount ?? 0);
+                $amount = $this->calculateDiscountAmount($subTotal, $promotionType, $value);
+
+                if ($amount > 0) {
+                    $discounts[] = [
+                        'name_snapshot' => $promotion->name,
+                        'description_snapshot' => $promotion->description,
+                        'discount_amount' => $amount,
+                        'discount_type' => $promotionType,
+                        'discount_target' => DiscountTarget::ORDER,
+                        'order_item_id' => null,
+                        'origin_type' => DiscountOriginType::PROMOTION,
+                        'origin_id' => $promotion->id,
+                    ];
+                }
+
+                continue;
+            }
+
+            if ($promotionTarget === DiscountTarget::DELIVERY) {
+                $value = (float) ($promotion->promotionItems->first()?->discount ?? 0);
+                $amount = $this->calculateDiscountAmount($deliveryFee, $promotionType, $value);
+
+                if ($amount > 0) {
+                    $discounts[] = [
+                        'name_snapshot' => $promotion->name,
+                        'description_snapshot' => $promotion->description,
+                        'discount_amount' => $amount,
+                        'discount_type' => $promotionType,
+                        'discount_target' => DiscountTarget::DELIVERY,
+                        'order_item_id' => null,
+                        'origin_type' => DiscountOriginType::PROMOTION,
+                        'origin_id' => $promotion->id,
+                    ];
+                }
+
+                continue;
+            }
+
+            if (! in_array($promotionTarget, [DiscountTarget::PRODUCT, DiscountTarget::CATEGORY], true)) {
+                continue;
+            }
+
+            foreach ($promotion->promotionItems as $promotionItem) {
+                foreach ($itemMetadata as $itemMeta) {
+                    $matchesProduct = $promotionTarget === DiscountTarget::PRODUCT
+                        && $promotionItem->product_id
+                        && $promotionItem->product_id === $itemMeta['product_id'];
+
+                    $matchesCategory = $promotionTarget === DiscountTarget::CATEGORY
+                        && $promotionItem->category_id
+                        && $promotionItem->category_id === $itemMeta['category_id'];
+
+                    if (! $matchesProduct && ! $matchesCategory) {
+                        continue;
+                    }
+
+                    $amount = $this->calculateDiscountAmount(
+                        $itemMeta['line_total'],
+                        $promotionType,
+                        (float) $promotionItem->discount
+                    );
+
+                    if ($amount <= 0) {
+                        continue;
+                    }
+
+                    $discounts[] = [
+                        'name_snapshot' => $promotion->name,
+                        'description_snapshot' => $promotion->description,
+                        'discount_amount' => $amount,
+                        'discount_type' => $promotionType,
+                        'discount_target' => $promotionTarget,
+                        'order_item_id' => $itemMeta['order_item']->id,
+                        'origin_type' => DiscountOriginType::PROMOTION,
+                        'origin_id' => $promotion->id,
+                    ];
+                }
+            }
+        }
+
+        if ($couponCode) {
+            $coupon = Coupon::query()
+                ->where('chain_id', $chainId)
+                ->whereRaw('LOWER(code) = ?', [mb_strtolower($couponCode)])
+                ->first();
+
+            if (! $coupon) {
+                throw new UserError('Coupon not found for this restaurant chain.');
+            }
+
+            if ($coupon->expiry_date && Carbon::parse($coupon->expiry_date)->isPast()) {
+                throw new UserError('Coupon has expired.');
+            }
+
+            $couponType = DiscountType::from($coupon->type);
+            $couponTarget = DiscountTarget::from($coupon->target);
+            $couponValue = (float) ($coupon->discount ?? 0);
+            $couponBase = $couponTarget === DiscountTarget::DELIVERY ? $deliveryFee : $subTotal;
+            $couponAmount = $this->calculateDiscountAmount($couponBase, $couponType, $couponValue);
+
+            if ($couponAmount > 0) {
+                $discounts[] = [
+                    'name_snapshot' => $coupon->code,
+                    'description_snapshot' => $coupon->description,
+                    'discount_amount' => $couponAmount,
+                    'discount_type' => $couponType,
+                    'discount_target' => $couponTarget,
+                    'order_item_id' => null,
+                    'origin_type' => DiscountOriginType::COUPON,
+                    'origin_id' => $coupon->id,
+                ];
+            }
+        }
+
+        return $discounts;
+    }
+
+    private function calculateDiscountAmount(float $baseAmount, DiscountType $discountType, float $discountValue): float
+    {
+        if ($baseAmount <= 0 || $discountValue <= 0) {
+            return 0.0;
+        }
+
+        $amount = $discountType === DiscountType::PERCENTAGE
+            ? ($baseAmount * $discountValue) / 100
+            : $discountValue;
+
+        return round(max(0, min($amount, $baseAmount)), 2);
     }
 
     private function canManageRestaurantOrder(User $user, Order $order): bool
@@ -573,10 +877,43 @@ class CommerceMutations
             return null;
         }
 
-        $payload = app(CommerceQueries::class)->buildCartPayload($cart);
+        $payload = $this->buildCartPayload($cart);
         $cart->update(['total' => $payload['total']]);
 
         return $payload;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function buildCartPayload(Cart $cart): array
+    {
+        $items = $cart->items->map(function ($item): array {
+            $product = $item->restaurantProduct?->product;
+            $basePrice = (float) ($item->unit_price ?? $item->restaurantProduct?->local_price ?? $product?->price ?? 0);
+            $optionsTotal = $item->options->sum(fn ($option) => (float) ($option->productOption?->extra_price ?? 0));
+            $lineTotal = ($basePrice + (float) $optionsTotal) * (int) $item->quantity;
+
+            return [
+                'id' => $item->id,
+                'restaurant_product_id' => $item->restaurant_product_id,
+                'product_name' => $product?->name ?? 'Produto',
+                'quantity' => (int) $item->quantity,
+                'unit_price' => $basePrice,
+                'line_total' => $lineTotal,
+            ];
+        })->values()->all();
+
+        $total = array_sum(array_map(fn ($item) => (float) $item['line_total'], $items));
+        $restaurantId = $cart->items->first()?->restaurantProduct?->restaurant_id;
+
+        return [
+            'id' => $cart->id,
+            'user_id' => $cart->user_id,
+            'restaurant_id' => $restaurantId,
+            'total' => $total,
+            'items' => $items,
+        ];
     }
 
     private function resolveAuthenticatedUser(): User

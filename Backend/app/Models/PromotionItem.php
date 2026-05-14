@@ -12,7 +12,8 @@ class PromotionItem extends Model
 
     protected $fillable = [
         'promotion_id',
-        'target_id',
+        'product_id',
+        'category_id',
         'discount',
     ];
 

@@ -5,41 +5,35 @@ namespace App\GraphQL\Mutations;
 use App\Models\Chat;
 use App\Models\ChatParticipant;
 use App\Models\Message;
-use App\Models\User;
 use App\Services\OutboxService;
+use App\Support\ResolvesAuthenticatedUser;
 use Carbon\Carbon;
-use Illuminate\Auth\AuthenticationException;
+use GraphQL\Error\UserError;
 use Illuminate\Support\Str;
-use RuntimeException;
 
 class SendChatMessage
 {
+    use ResolvesAuthenticatedUser;
+
     /**
      * @param  array<string, mixed>  $args
      * @return array<string, mixed>
      */
     public function __invoke(null $_, array $args): array
     {
-        $user = auth()->user();
-
-        if (! $user && app()->environment(['local', 'testing'])) {
-            $devUserId = request()->header('X-Dev-User-Id');
-            if ($devUserId) {
-                $user = User::query()->find($devUserId);
-            }
-        }
-
-        if (! $user) {
-            throw new AuthenticationException('Authentication required.');
-        }
+        $user = $this->resolveAuthenticatedUser();
 
         $input = $args['input'];
+        $content = trim((string) $input['content']);
+        if ($content === '') {
+            throw new UserError('Message content cannot be empty.');
+        }
 
         /** @var Chat|null $chat */
         $chat = Chat::query()->whereKey($input['chat_id'])->first();
 
         if (! $chat) {
-            throw new RuntimeException('Chat not found.');
+            throw new UserError('Chat not found.');
         }
 
         /** @var ChatParticipant|null $participant */
@@ -49,7 +43,7 @@ class SendChatMessage
             ->first();
 
         if (! $participant) {
-            throw new RuntimeException('User is not a participant in this chat.');
+            throw new UserError('User is not a participant in this chat.');
         }
 
         $timestamp = Carbon::now();
@@ -57,7 +51,7 @@ class SendChatMessage
         $message = Message::query()->create([
             'chat_id' => $chat->id,
             'sender_participant_id' => $participant->id,
-            'content' => trim($input['content']),
+            'content' => $content,
             'timestamp' => $timestamp,
         ]);
 

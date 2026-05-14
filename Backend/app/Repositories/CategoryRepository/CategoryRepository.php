@@ -27,7 +27,7 @@ class CategoryRepository implements CategoryRepositoryInterface
     {
         $category = Category::find($id);
         if ($category) {
-            $category->update($data->toArray());
+            $category->update(array_filter($data->toArray(), static fn ($value) => $value !== null));
             return $category;
         }
         return null;

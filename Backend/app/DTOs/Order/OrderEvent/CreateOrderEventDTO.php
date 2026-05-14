@@ -13,13 +13,4 @@ class CreateOrderEventDTO extends Data
         public readonly ?array $payload = null,
     ) {
     }
-
-    public function toArray(): array
-    {
-        return [
-            'event_type' => $this->event_type->value,
-            'timestamp' => $this->timestamp,
-            'payload' => $this->payload,
-        ];
-    }
 }

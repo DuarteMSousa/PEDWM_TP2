@@ -8,6 +8,21 @@ type User {
     updated_at: String
 }
 
+type UserAddress {
+    id: ID!
+    user_id: ID!
+    street: String!
+    city: String!
+    postal_code: String!
+    country: String!
+    latitude: Float!
+    longitude: Float!
+    is_default: Boolean!
+    label: String
+    created_at: String
+    updated_at: String
+}
+
 input CreateUserInput {
     name: String!
     email: String!
@@ -19,8 +34,32 @@ input UpdateUserInput {
     email: String
 }
 
+input CreateUserAddressInput {
+    street: String!
+    city: String!
+    postal_code: String!
+    country: String!
+    latitude: Float!
+    longitude: Float!
+    is_default: Boolean = false
+    label: String
+}
+
+input UpdateUserAddressInput {
+    street: String
+    city: String
+    postal_code: String
+    country: String
+    latitude: Float
+    longitude: Float
+    is_default: Boolean
+    label: String
+}
+
 extend type Query {
     user(id: ID! @eq): User @field(resolver: "App\\GraphQL\\Queries\\UserQueries@getById")
+    me: User! @field(resolver: "App\\GraphQL\\Queries\\UserQueries@me")
+    myAddresses: [UserAddress!]! @field(resolver: "App\\GraphQL\\Queries\\UserQueries@myAddresses")
 }
 
 extend type Mutation {
@@ -30,6 +69,21 @@ extend type Mutation {
     updateUser(id: ID!, input: UpdateUserInput!): User! 
         @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@update")
 
+    updateMyProfile(input: UpdateUserInput!): User!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@updateMyProfile")
+
     deleteUser(id: ID!): Boolean! 
         @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@delete")
+
+    createMyAddress(input: CreateUserAddressInput!): UserAddress!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@createMyAddress")
+
+    updateMyAddress(address_id: ID!, input: UpdateUserAddressInput!): UserAddress!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@updateMyAddress")
+
+    deleteMyAddress(address_id: ID!): Boolean!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@deleteMyAddress")
+
+    setDefaultMyAddress(address_id: ID!): UserAddress!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@setDefaultMyAddress")
 }

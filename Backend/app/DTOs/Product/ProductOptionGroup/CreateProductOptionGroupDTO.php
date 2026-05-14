@@ -17,13 +17,4 @@ class CreateProductOptionGroupDTO extends Data
         #[DataCollectionOf(CreateProductOptionDTO::class)]
         public readonly DataCollection $options,
     ) {}
-
-    public function toArray(): array
-    {
-        return [
-            'name' => $this->name,
-            'min_options' => $this->min_options,
-            'max_options' => $this->max_options,
-        ];
-    }
 }

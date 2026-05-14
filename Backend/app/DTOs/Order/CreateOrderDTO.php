@@ -28,15 +28,4 @@ class CreateOrderDTO extends Data
         public readonly ?DataCollection $discounts = null,
     ) {
     }
-
-    public function toArray(): array
-    {
-        return [
-            'user_id' => $this->user_id,
-            'restaurant_id' => $this->restaurant_id,
-            'status' => $this->status->value,
-            'total' => $this->total,
-            'restaurant_name_snapshot' => $this->restaurant_name_snapshot,
-        ];
-    }
 }

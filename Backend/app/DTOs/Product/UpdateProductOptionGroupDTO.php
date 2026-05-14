@@ -17,13 +17,4 @@ class UpdateProductOptionGroupDTO extends Data
         public readonly ?string $id = null,
     ) {
     }
-
-    public function toArray(): array
-    {
-        return [
-            'name' => $this->name,
-            'min_options' => $this->min_options,
-            'max_options' => $this->max_options,
-        ];
-    }
 }

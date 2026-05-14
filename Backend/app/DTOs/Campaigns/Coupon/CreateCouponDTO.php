@@ -15,6 +15,7 @@ class CreateCouponDTO extends Data
         public readonly DiscountType $type,
         public readonly DiscountTarget $target,
         public readonly string $expiry_date,
+        public readonly float $discount = 0,
     ) {}
 
 }

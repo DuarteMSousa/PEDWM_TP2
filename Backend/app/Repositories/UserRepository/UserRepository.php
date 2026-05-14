@@ -20,7 +20,7 @@ class UserRepository implements UserRepositoryInterface
     public function updateUser(string $id, UpdateUserDTO $data){
         $user = User::find($id);
         if ($user) {
-            $user->update($data->toArray());
+            $user->update(array_filter($data->toArray(), static fn ($value) => $value !== null));
             return $user;
         }
         return null;
