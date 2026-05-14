@@ -21,8 +21,8 @@ class ReviewRepository implements ReviewRepositoryInterface
 
     public function findByTargetEntity(string $targetEntityId, string $targetEntityType, int $pageNumber, int $pageSize)
     {
-        return Review::where("target_entity_id", $targetEntityId)
-            ->where("target_entity_type", $targetEntityType)
+        return Review::where('target_id', $targetEntityId)
+            ->where('target_type', $targetEntityType)
             ->paginate($pageSize, ['*'], 'page', $pageNumber);
     }
 

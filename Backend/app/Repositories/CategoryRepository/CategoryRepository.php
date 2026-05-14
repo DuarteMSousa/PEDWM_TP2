@@ -5,7 +5,6 @@ namespace App\Repositories\CategoryRepository;
 use App\DTOs\Category\CreateCategoryDTO;
 use App\DTOs\Category\UpdateCategoryDTO;
 use App\Models\Category;
-use App\Models\RestaurantChain;
 
 class CategoryRepository implements CategoryRepositoryInterface
 {
@@ -16,7 +15,7 @@ class CategoryRepository implements CategoryRepositoryInterface
 
     public function findByRestaurantChainId(string $restaurantChainId)
     {
-        return Category::where('restaurant_chain_id', $restaurantChainId)->get();
+        return Category::where('chain_id', $restaurantChainId)->get();
     }
 
     public function createCategory(CreateCategoryDTO $data)

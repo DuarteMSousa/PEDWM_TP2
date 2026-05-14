@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Repositories\CartRepository\CartRepository;
 use App\Repositories\CartRepository\CartRepositoryInterface;
+use App\Repositories\CategoryRepository\CategoryRepository;
+use App\Repositories\CategoryRepository\CategoryRepositoryInterface;
 use App\Repositories\ChainManagerRepository\ChainManagerRepository;
 use App\Repositories\ChainManagerRepository\ChainManagerRepositoryInterface;
 use App\Repositories\CouponRepository\CouponRepository;
@@ -22,6 +24,10 @@ use App\Repositories\PromotionRepository\PromotionRepository;
 use App\Repositories\PromotionRepository\PromotionRepositoryInterface;
 use App\Repositories\RestaurantProductRepository\RestaurantProductRepository;
 use App\Repositories\RestaurantProductRepository\RestaurantProductRepositoryInterface;
+use App\Repositories\RestaurantRepository\RestaurantRepository;
+use App\Repositories\RestaurantRepository\RestaurantRepositoryInterface;
+use App\Repositories\RestaurantChainRepository\RestaurantChainRepository;
+use App\Repositories\RestaurantChainRepository\RestaurantChainRepositoryInterface;
 use App\Repositories\UserRepository\UserRepository;
 use App\Repositories\UserRepository\UserRepositoryInterface;
 use App\Repositories\ReviewRepository\ReviewRepository;
@@ -36,6 +42,7 @@ class AppRepositoryProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(CartRepositoryInterface::class, CartRepository::class);
+        $this->app->bind(CategoryRepositoryInterface::class, CategoryRepository::class);
         $this->app->bind(ChainManagerRepositoryInterface::class, ChainManagerRepository::class);
         $this->app->bind(CouponRepositoryInterface::class, CouponRepository::class);
         $this->app->bind(CourierRepositoryInterface::class, CourierRepository::class);
@@ -44,6 +51,8 @@ class AppRepositoryProvider extends ServiceProvider
         $this->app->bind(ProductRepositoryInterface::class, ProductRepository::class);
         $this->app->bind(PromotionItemRepositoryInterface::class, PromotionItemRepository::class);
         $this->app->bind(PromotionRepositoryInterface::class, PromotionRepository::class);
+        $this->app->bind(RestaurantChainRepositoryInterface::class, RestaurantChainRepository::class);
+        $this->app->bind(RestaurantRepositoryInterface::class, RestaurantRepository::class);
         $this->app->bind(RestaurantProductRepositoryInterface::class, RestaurantProductRepository::class);
         $this->app->bind(UserRepositoryInterface::class, UserRepository::class);
         $this->app->bind(ReviewRepositoryInterface::class, ReviewRepository::class);
