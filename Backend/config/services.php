@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'osrm' => [
+        'enabled' => env('OSRM_ENABLED', true),
+        'base_url' => env('OSRM_BASE_URL', 'https://router.project-osrm.org'),
+        'profile' => env('OSRM_PROFILE', 'driving'),
+        'timeout_seconds' => env('OSRM_TIMEOUT_SECONDS', 3),
+        'cache_seconds' => env('OSRM_CACHE_SECONDS', 20),
+    ],
+
 ];

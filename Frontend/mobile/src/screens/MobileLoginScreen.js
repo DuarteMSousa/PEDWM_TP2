@@ -1,14 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'react-native'
+
+const DEFAULT_CUSTOMER_ID = process.env.EXPO_PUBLIC_DEV_CUSTOMER_USER_ID ?? ''
+const DEFAULT_COURIER_ID = process.env.EXPO_PUBLIC_DEV_COURIER_USER_ID ?? ''
+const DEFAULT_TOKEN = process.env.EXPO_PUBLIC_AUTH_BEARER_TOKEN ?? ''
 
 export function MobileLoginScreen({ onLogin }) {
   const [email, setEmail] = useState('cliente@fastbite.pt')
   const [password, setPassword] = useState('********')
   const [role, setRole] = useState('customer')
+  const [devUserId, setDevUserId] = useState(DEFAULT_CUSTOMER_ID)
+  const [token, setToken] = useState(DEFAULT_TOKEN)
+
+  useEffect(() => {
+    setDevUserId(role === 'customer' ? DEFAULT_CUSTOMER_ID : DEFAULT_COURIER_ID)
+  }, [role])
 
   function handleLogin() {
     const name = email.split('@')[0] || (role === 'customer' ? 'cliente' : 'estafeta')
-    onLogin({ name, role })
+    onLogin({
+      name,
+      role,
+      devUserId: devUserId.trim(),
+      token: token.trim(),
+    })
   }
 
   return (
@@ -41,6 +56,26 @@ export function MobileLoginScreen({ onLogin }) {
             value={password}
             onChangeText={setPassword}
             placeholder="********"
+            placeholderTextColor="#95a5c0"
+          />
+
+          <Text style={styles.label}>Dev User ID (opcional)</Text>
+          <TextInput
+            style={styles.input}
+            autoCapitalize="none"
+            value={devUserId}
+            onChangeText={setDevUserId}
+            placeholder="uuid do utilizador"
+            placeholderTextColor="#95a5c0"
+          />
+
+          <Text style={styles.label}>Bearer token (opcional)</Text>
+          <TextInput
+            style={styles.input}
+            autoCapitalize="none"
+            value={token}
+            onChangeText={setToken}
+            placeholder="jwt"
             placeholderTextColor="#95a5c0"
           />
 

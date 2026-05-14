@@ -1061,3 +1061,148 @@ body {
     white-space: nowrap;
   }
 }
+
+.rb-map-panel {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+}
+
+.rb-map-header h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.rb-map-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
+.rb-map-canvas {
+  margin-top: 12px;
+  position: relative;
+  height: 320px;
+  border-radius: 12px;
+  border: 1px solid #cdd9ec;
+  background: #edf5ff;
+  overflow: hidden;
+}
+
+.rb-map-leaflet-wrap {
+  padding: 0;
+}
+
+.rb-map-leaflet {
+  width: 100%;
+  height: 100%;
+}
+
+.rb-map-grid-h,
+.rb-map-grid-v {
+  position: absolute;
+  background: #cfdbed;
+}
+
+.rb-map-grid-h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.rb-map-grid-h-1 {
+  top: 33%;
+}
+
+.rb-map-grid-h-2 {
+  top: 66%;
+}
+
+.rb-map-grid-v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.rb-map-grid-v-1 {
+  left: 33%;
+}
+
+.rb-map-grid-v-2 {
+  left: 66%;
+}
+
+.rb-map-pin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 999px;
+  padding: 6px 10px;
+  border: 1px solid;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rb-map-pin.pickup {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
+.rb-map-pin.dropoff {
+  background: #eef2ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.rb-map-pin.courier {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.rb-map-legend {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rb-tracking-shell {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.rb-tracking-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.rb-tracking-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rb-tracking-grid p {
+  margin: 0;
+  font-size: 14px;
+  color: #334155;
+}
+
+@media (max-width: 960px) {
+  .rb-map-canvas {
+    height: 240px;
+  }
+
+  .rb-tracking-grid {
+    grid-template-columns: 1fr;
+  }
+}

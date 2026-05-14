@@ -11,9 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn('user_type');
-        });
+        if (! Schema::hasColumn('users', 'user_type')) {
+            Schema::table('users', function (Blueprint $table): void {
+                $table->enum('user_type', ['customer', 'courier', 'chain_manager', 'local_manager'])
+                    ->default('customer');
+            });
+        }
     }
 
     /**
@@ -21,8 +24,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table) {
-            $table->enum('user_type', ['customer', 'courier', 'chain_manager', 'local_manager']);
-        });
+        // no-op: this migration now acts as a guard to keep role data available
+        // for authorization, channels and enum casting.
     }
 };

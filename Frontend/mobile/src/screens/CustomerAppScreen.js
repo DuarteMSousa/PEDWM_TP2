@@ -1,64 +1,19 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { RealtimeTopicsCard } from '../components/realtime/RealtimeTopicsCard'
-
-const RESTAURANTS = [
-  {
-    id: 'pizzaria-centro',
-    name: 'Pizzaria do Centro',
-    cuisine: 'Italiana',
-    eta: '25-35 min',
-    fee: 2.5,
-    rating: 4.8,
-    emoji: '\u{1F355}',
-  },
-  {
-    id: 'sushi-palace',
-    name: 'Sushi Palace',
-    cuisine: 'Japonesa',
-    eta: '30-40 min',
-    fee: 3,
-    rating: 4.9,
-    emoji: '\u{1F363}',
-  },
-]
-
-const MENU = {
-  'pizzaria-centro': [
-    {
-      id: 'margherita',
-      name: 'Pizza Margherita',
-      description: 'Molho de tomate, mozzarella, manjericao fresco',
-      price: 12.5,
-      rating: 4.8,
-      emoji: '\u{1F355}',
-    },
-    {
-      id: 'pepperoni',
-      name: 'Pizza Pepperoni',
-      description: 'Molho de tomate, mozzarella, pepperoni',
-      price: 14,
-      rating: 4.9,
-      emoji: '\u{1F355}',
-    },
-    {
-      id: 'lasanha',
-      name: 'Lasanha Bolonhesa',
-      description: 'Massa fresca, molho bolonhesa, bechamel',
-      price: 11,
-      rating: 4.7,
-      emoji: '\u{1F355}',
-    },
-    {
-      id: 'carbonara',
-      name: 'Spaghetti Carbonara',
-      description: 'Spaghetti, bacon, ovos, queijo pecorino',
-      price: 10.5,
-      rating: 4.8,
-      emoji: '\u{1F355}',
-    },
-  ],
-}
+import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
+import {
+  addCartItem,
+  checkoutCart,
+  fetchMyCart,
+  fetchMyOrders,
+  fetchOrderTracking,
+  fetchRestaurantMenu,
+  fetchRestaurants,
+  removeCartItem,
+  updateCartItem,
+} from '../services/commerceService'
+import { subscribeToOrderTracking } from '../services/realtime/trackingRealtime'
 
 const ICON = {
   user: '\u{1F464}',
@@ -73,96 +28,306 @@ const ICON = {
   close: '\u00D7',
   check: '\u2714',
   prep: '\u{1F551}',
-  pin: '\u{1F4CD}',
 }
 
-export function CustomerAppScreen({ onLogout }) {
+function formatCurrency(value) {
+  return `EUR ${Number(value ?? 0).toFixed(2)}`
+}
+
+function statusLabel(status) {
+  if (status === 'PENDING') return 'Pendente'
+  if (status === 'CONFIRMED') return 'Confirmado'
+  if (status === 'PREPARING') return 'A preparar'
+  if (status === 'READY') return 'Pronto'
+  if (status === 'OUT_FOR_DELIVERY') return 'Em entrega'
+  if (status === 'DELIVERED') return 'Entregue'
+  if (status === 'CANCELLED') return 'Cancelado'
+  return status ?? '-'
+}
+
+export function CustomerAppScreen({ session, onLogout }) {
   const [route, setRoute] = useState('home')
-  const [restaurantId, setRestaurantId] = useState('pizzaria-centro')
-  const [cart, setCart] = useState({})
-  const [showAddedAlert, setShowAddedAlert] = useState(false)
-  const [showSuccessAlert, setShowSuccessAlert] = useState(false)
+  const [restaurants, setRestaurants] = useState([])
+  const [restaurantId, setRestaurantId] = useState('')
+  const [menuItems, setMenuItems] = useState([])
+  const [cart, setCart] = useState(null)
+  const [tracking, setTracking] = useState(null)
+  const [activeOrderId, setActiveOrderId] = useState('')
+  const [lastCheckout, setLastCheckout] = useState(null)
+  const [realtimeState, setRealtimeState] = useState('offline')
+  const [loading, setLoading] = useState(false)
+  const [errorText, setErrorText] = useState('')
+  const [successText, setSuccessText] = useState('')
 
   const restaurant = useMemo(
-    () => RESTAURANTS.find((item) => item.id === restaurantId) ?? RESTAURANTS[0],
-    [restaurantId],
+    () => restaurants.find((item) => item.id === restaurantId) ?? restaurants[0],
+    [restaurantId, restaurants],
   )
 
-  const menu = MENU[restaurantId] ?? []
-
-  const cartItems = useMemo(
-    () =>
-      menu
-        .filter((item) => (cart[item.id] ?? 0) > 0)
-        .map((item) => ({ ...item, quantity: cart[item.id] })),
-    [cart, menu],
-  )
-
-  const itemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0)
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const deliveryFee = subtotal > 0 ? 2.5 : 0
+  const cartItems = cart?.items ?? []
+  const itemCount = cartItems.reduce((sum, item) => sum + Number(item.quantity ?? 0), 0)
+  const subtotal = cartItems.reduce((sum, item) => sum + Number(item.line_total ?? 0), 0)
+  const deliveryFee = 0
   const total = subtotal + deliveryFee
 
-  function openRestaurant(id) {
-    setRestaurantId(id)
-    setRoute('menu')
+  useEffect(() => {
+    bootstrap()
+  }, [])
+
+  useEffect(() => {
+    if (route !== 'tracking' || !activeOrderId) {
+      return undefined
+    }
+
+    const timer = setInterval(() => {
+      loadTracking(activeOrderId)
+    }, 15000)
+
+    return () => clearInterval(timer)
+  }, [route, activeOrderId])
+
+  useEffect(() => {
+    if (route !== 'tracking' || !activeOrderId) {
+      setRealtimeState('offline')
+      return undefined
+    }
+
+    let unsubscribe = null
+
+    try {
+      setRealtimeState('connecting')
+      unsubscribe = subscribeToOrderTracking({
+        orderId: activeOrderId,
+        authToken: session?.token,
+        devUserId: session?.devUserId,
+        onPositionUpdated: (payload) => {
+          setRealtimeState('live')
+          setTracking((current) => {
+            const latest = {
+              lat: Number(payload?.lat),
+              lng: Number(payload?.lng),
+              recorded_at: payload?.recordedAt ?? new Date().toISOString(),
+            }
+
+            const previous = current?.positions ?? []
+            const nextPositions = [latest, ...previous].slice(0, 20)
+
+            return {
+              ...(current ?? {}),
+              order_id: payload?.orderId ?? current?.order_id ?? activeOrderId,
+              delivery_id: payload?.deliveryId ?? current?.delivery_id ?? null,
+              courier_id: payload?.courierId ?? current?.courier_id ?? null,
+              latest_position: latest,
+              positions: nextPositions,
+            }
+          })
+        },
+        onError: () => {
+          setRealtimeState('error')
+        },
+      })
+    } catch {
+      setRealtimeState('error')
+    }
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe()
+      }
+    }
+  }, [route, activeOrderId, session?.token, session?.devUserId])
+
+  async function bootstrap() {
+    try {
+      setLoading(true)
+      const [nextRestaurants, nextCart, activeOrders] = await Promise.all([
+        fetchRestaurants(session),
+        fetchMyCart(session),
+        fetchMyOrders(session, { activeOnly: true, limit: 1 }),
+      ])
+
+      setRestaurants(nextRestaurants)
+      if (nextRestaurants.length > 0) {
+        setRestaurantId(nextRestaurants[0].id)
+      }
+
+      setCart(nextCart)
+
+      if (activeOrders.length > 0) {
+        setActiveOrderId(activeOrders[0].id)
+      }
+
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function openRestaurant(id) {
+    try {
+      setLoading(true)
+      setRestaurantId(id)
+      const nextMenu = await fetchRestaurantMenu({ session, restaurantId: id })
+      setMenuItems(nextMenu)
+      setRoute('menu')
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function refreshCart() {
+    const nextCart = await fetchMyCart(session)
+    setCart(nextCart)
+  }
+
+  async function addToCart(restaurantProductId) {
+    try {
+      setLoading(true)
+      const nextCart = await addCartItem({
+        session,
+        restaurantProductId,
+        quantity: 1,
+      })
+      setCart(nextCart)
+      setSuccessText('Item adicionado ao carrinho.')
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function decrease(cartItemId, quantity) {
+    try {
+      setLoading(true)
+      if (quantity <= 1) {
+        const nextCart = await removeCartItem({ session, cartItemId })
+        setCart(nextCart)
+      } else {
+        const nextCart = await updateCartItem({
+          session,
+          cartItemId,
+          quantity: quantity - 1,
+        })
+        setCart(nextCart)
+      }
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function increase(cartItemId, quantity) {
+    try {
+      setLoading(true)
+      const nextCart = await updateCartItem({
+        session,
+        cartItemId,
+        quantity: quantity + 1,
+      })
+      setCart(nextCart)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function remove(cartItemId) {
+    try {
+      setLoading(true)
+      const nextCart = await removeCartItem({ session, cartItemId })
+      setCart(nextCart)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function placeOrder() {
+    try {
+      setLoading(true)
+      const result = await checkoutCart(session)
+      setLastCheckout(result)
+      setActiveOrderId(result.order_id)
+      setRoute('tracking')
+      setSuccessText('Pedido criado com sucesso.')
+      setErrorText('')
+      await refreshCart()
+      await loadTracking(result.order_id)
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loadTracking(orderId) {
+    try {
+      const nextTracking = await fetchOrderTracking({
+        session,
+        orderId,
+      })
+      setTracking(nextTracking)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    }
   }
 
   function back() {
+    setSuccessText('')
+
     if (route === 'menu') {
       setRoute('home')
       return
     }
+
     if (route === 'cart') {
       setRoute('menu')
       return
     }
+
     if (route === 'tracking') {
-      setRoute('menu')
-      setShowSuccessAlert(false)
+      setRoute('home')
     }
-  }
-
-  function addToCart(itemId) {
-    setCart((current) => ({ ...current, [itemId]: (current[itemId] ?? 0) + 1 }))
-    setShowAddedAlert(true)
-  }
-
-  function decrease(itemId) {
-    setCart((current) => {
-      const nextQty = (current[itemId] ?? 0) - 1
-      if (nextQty <= 0) {
-        const { [itemId]: removed, ...rest } = current
-        return rest
-      }
-      return { ...current, [itemId]: nextQty }
-    })
-  }
-
-  function remove(itemId) {
-    setCart((current) => {
-      const { [itemId]: removed, ...rest } = current
-      return rest
-    })
-  }
-
-  function placeOrder() {
-    setRoute('tracking')
-    setShowAddedAlert(false)
-    setShowSuccessAlert(true)
   }
 
   return (
     <SafeAreaView style={styles.safe}>
       {route === 'home' && (
-        <HomeScreen restaurants={RESTAURANTS} onOpenRestaurant={openRestaurant} onLogout={onLogout} />
+        <HomeScreen
+          restaurants={restaurants}
+          loading={loading}
+          onOpenRestaurant={openRestaurant}
+          onOpenTracking={() => {
+            if (activeOrderId) {
+              setRoute('tracking')
+              loadTracking(activeOrderId)
+            }
+          }}
+          hasActiveOrder={Boolean(activeOrderId)}
+          onLogout={onLogout}
+        />
       )}
       {route === 'menu' && (
         <MenuScreen
           restaurant={restaurant}
-          items={menu}
+          items={menuItems}
           itemCount={itemCount}
           total={total}
+          loading={loading}
           onBack={back}
           onAdd={addToCart}
           onOpenCart={() => setRoute('cart')}
@@ -174,28 +339,30 @@ export function CustomerAppScreen({ onLogout }) {
           subtotal={subtotal}
           deliveryFee={deliveryFee}
           total={total}
-          showAddedAlert={showAddedAlert}
-          onDismissAlert={() => setShowAddedAlert(false)}
+          loading={loading}
           onDecrease={decrease}
-          onIncrease={addToCart}
+          onIncrease={increase}
           onRemove={remove}
           onPlaceOrder={placeOrder}
         />
       )}
       {route === 'tracking' && (
         <TrackingScreen
-          subtotal={subtotal}
-          deliveryFee={deliveryFee}
-          total={total}
-          showSuccessAlert={showSuccessAlert}
+          tracking={tracking}
+          checkout={lastCheckout}
+          realtimeState={realtimeState}
           onBack={back}
+          onRefresh={() => activeOrderId && loadTracking(activeOrderId)}
         />
       )}
+
+      {successText ? <Text style={styles.successText}>{ICON.check} {successText}</Text> : null}
+      {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
     </SafeAreaView>
   )
 }
 
-function HomeScreen({ restaurants, onOpenRestaurant, onLogout }) {
+function HomeScreen({ restaurants, loading, onOpenRestaurant, onOpenTracking, hasActiveOrder, onLogout }) {
   return (
     <View style={styles.screen}>
       <View style={styles.homeHeader}>
@@ -211,35 +378,39 @@ function HomeScreen({ restaurants, onOpenRestaurant, onLogout }) {
 
         <View style={styles.searchField}>
           <Text style={styles.searchIcon}>{ICON.search}</Text>
-          <Text style={styles.searchText}>Procurar restaurantes...</Text>
+          <Text style={styles.searchText}>Restaurantes integrados via backend</Text>
         </View>
+
+        {hasActiveOrder ? (
+          <Pressable style={styles.activeOrderBtn} onPress={onOpenTracking}>
+            <Text style={styles.activeOrderBtnText}>Ver pedido ativo</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sectionTitle}>Restaurantes proximos</Text>
-        {restaurants.map((restaurant) => (
+        <Text style={styles.sectionTitle}>Restaurantes</Text>
+        {loading && restaurants.length === 0 ? <Text style={styles.mutedText}>A carregar...</Text> : null}
+        {restaurants.map((item) => (
           <Pressable
-            key={restaurant.id}
+            key={item.id}
             style={styles.restaurantCard}
-            onPress={() => onOpenRestaurant(restaurant.id)}
+            onPress={() => onOpenRestaurant(item.id)}
           >
             <View style={styles.restaurantCover}>
-              <Text style={styles.coverEmoji}>{restaurant.emoji}</Text>
+              <Text style={styles.coverEmoji}>{"\\uD83C\\uDF55"}</Text>
             </View>
             <View style={styles.restaurantBody}>
               <View style={styles.rowBetween}>
-                <Text style={styles.restaurantName}>{restaurant.name}</Text>
+                <Text style={styles.restaurantName}>{item.name}</Text>
                 <View style={styles.ratingPill}>
                   <Text style={styles.ratingText}>
-                    {ICON.star} {restaurant.rating.toFixed(1)}
+                    {ICON.star} {Number(item.rating ?? 0).toFixed(1)}
                   </Text>
                 </View>
               </View>
 
-              <Text style={styles.cuisine}>{restaurant.cuisine}</Text>
-              <Text style={styles.metaLine}>
-                {ICON.time} {restaurant.eta}    {ICON.bike} EUR {restaurant.fee.toFixed(2)}
-              </Text>
+              <Text style={styles.cuisine}>{item.city || 'Cidade nao definida'}</Text>
             </View>
           </Pressable>
         ))}
@@ -248,17 +419,14 @@ function HomeScreen({ restaurants, onOpenRestaurant, onLogout }) {
   )
 }
 
-function MenuScreen({ restaurant, items, itemCount, total, onBack, onAdd, onOpenCart }) {
+function MenuScreen({ restaurant, items, itemCount, total, loading, onBack, onAdd, onOpenCart }) {
   return (
     <View style={styles.screen}>
       <View style={styles.menuHeader}>
         <Pressable onPress={onBack} style={styles.backButton}>
           <Text style={styles.backArrow}>{ICON.back}</Text>
         </Pressable>
-        <Text style={styles.menuHeaderTitle}>{restaurant.name}</Text>
-        <Text style={styles.menuHeaderMeta}>
-          {ICON.star} {restaurant.rating.toFixed(1)}    {ICON.time} {restaurant.eta}    {ICON.bike} EUR {restaurant.fee.toFixed(2)}
-        </Text>
+        <Text style={styles.menuHeaderTitle}>{restaurant?.name ?? 'Restaurante'}</Text>
       </View>
 
       <ScrollView
@@ -266,36 +434,37 @@ function MenuScreen({ restaurant, items, itemCount, total, onBack, onAdd, onOpen
         showsVerticalScrollIndicator={false}
       >
         <Text style={styles.sectionTitle}>Menu</Text>
+        {loading && items.length === 0 ? <Text style={styles.mutedText}>A carregar...</Text> : null}
         {items.map((item) => (
-          <View key={item.id} style={styles.menuCard}>
+          <View key={item.restaurant_product_id} style={styles.menuCard}>
             <View style={styles.menuThumb}>
-              <Text style={styles.menuThumbEmoji}>{item.emoji}</Text>
+              <Text style={styles.menuThumbEmoji}>{"\\uD83C\\uDF55"}</Text>
             </View>
             <View style={styles.menuInfo}>
-              <Text style={styles.menuName}>{item.name}</Text>
-              <Text style={styles.menuDescription}>{item.description}</Text>
-              <Text style={styles.menuPrice}>EUR {item.price.toFixed(2)}</Text>
-              <Text style={styles.menuRate}>
-                {ICON.star} {item.rating.toFixed(1)}
-              </Text>
+              <Text style={styles.menuName}>{item.name ?? 'Produto'}</Text>
+              <Text style={styles.menuDescription}>{item.description ?? 'Sem descricao'}</Text>
+              <Text style={styles.menuPrice}>{formatCurrency(item.price)}</Text>
+              <Text style={styles.menuRate}>{item.is_available ? 'Disponivel' : 'Indisponivel'}</Text>
             </View>
 
-            <Pressable style={styles.addButton} onPress={() => onAdd(item.id)}>
+            <Pressable
+              style={styles.addButton}
+              onPress={() => onAdd(item.restaurant_product_id)}
+              disabled={!item.is_available}
+            >
               <Text style={styles.addButtonText}>{ICON.plus}</Text>
             </Pressable>
           </View>
         ))}
       </ScrollView>
 
-      {itemCount > 0 && (
+      {itemCount > 0 ? (
         <Pressable style={styles.cartBar} onPress={onOpenCart}>
-          <Text style={styles.cartBarText}>
-            {ICON.cart} {itemCount} item
-          </Text>
+          <Text style={styles.cartBarText}>{ICON.cart} {itemCount} item</Text>
           <Text style={styles.cartBarText}>Ver Carrinho</Text>
-          <Text style={styles.cartBarText}>EUR {total.toFixed(2)}</Text>
+          <Text style={styles.cartBarText}>{formatCurrency(total)}</Text>
         </Pressable>
-      )}
+      ) : null}
     </View>
   )
 }
@@ -305,8 +474,7 @@ function CartScreen({
   subtotal,
   deliveryFee,
   total,
-  showAddedAlert,
-  onDismissAlert,
+  loading,
   onDecrease,
   onIncrease,
   onRemove,
@@ -315,29 +483,23 @@ function CartScreen({
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={[styles.scrollContent, styles.cartScroll]} showsVerticalScrollIndicator={false}>
-        {showAddedAlert && (
-          <Pressable style={styles.successBanner} onPress={onDismissAlert}>
-            <Text style={styles.successBannerText}>
-              {ICON.check} Adicionado ao carrinho
-            </Text>
-          </Pressable>
-        )}
+        {items.length === 0 ? <Text style={styles.mutedText}>Carrinho vazio.</Text> : null}
 
         {items.map((item) => (
           <View style={styles.cartCard} key={item.id}>
             <View style={styles.menuThumb}>
-              <Text style={styles.menuThumbEmoji}>{item.emoji}</Text>
+              <Text style={styles.menuThumbEmoji}>{"\\uD83C\\uDF55"}</Text>
             </View>
 
             <View style={styles.cartInfo}>
-              <Text style={styles.menuName}>{item.name}</Text>
-              <Text style={styles.cartPrice}>EUR {item.price.toFixed(2)}</Text>
+              <Text style={styles.menuName}>{item.product_name}</Text>
+              <Text style={styles.cartPrice}>{formatCurrency(item.unit_price)}</Text>
               <View style={styles.qtyControl}>
-                <Pressable style={styles.qtyButton} onPress={() => onDecrease(item.id)}>
+                <Pressable style={styles.qtyButton} onPress={() => onDecrease(item.id, item.quantity)}>
                   <Text style={styles.qtyText}>{ICON.minus}</Text>
                 </Pressable>
                 <Text style={styles.qtyValue}>{item.quantity}</Text>
-                <Pressable style={styles.qtyButton} onPress={() => onIncrease(item.id)}>
+                <Pressable style={styles.qtyButton} onPress={() => onIncrease(item.id, item.quantity)}>
                   <Text style={styles.qtyText}>{ICON.plus}</Text>
                 </Pressable>
               </View>
@@ -351,23 +513,33 @@ function CartScreen({
       </ScrollView>
 
       <View style={styles.checkoutBar}>
-        <SummaryLine label="Subtotal" value={`EUR ${subtotal.toFixed(2)}`} />
-        <SummaryLine label="Taxa de entrega" value={`EUR ${deliveryFee.toFixed(2)}`} />
+        <SummaryLine label="Subtotal" value={formatCurrency(subtotal)} />
+        <SummaryLine label="Taxa de entrega" value={formatCurrency(deliveryFee)} />
 
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>Total</Text>
-          <Text style={styles.totalValue}>EUR {total.toFixed(2)}</Text>
+          <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
         </View>
 
-        <Pressable style={styles.orderButton} onPress={onPlaceOrder}>
-          <Text style={styles.orderButtonText}>Fazer Pedido</Text>
+        <Pressable style={styles.orderButton} onPress={onPlaceOrder} disabled={loading || items.length === 0}>
+          <Text style={styles.orderButtonText}>{loading ? 'A processar...' : 'Fazer Pedido'}</Text>
         </Pressable>
       </View>
     </View>
   )
 }
 
-function TrackingScreen({ subtotal, deliveryFee, total, showSuccessAlert, onBack }) {
+function TrackingScreen({ tracking, checkout, realtimeState, onBack, onRefresh }) {
+  const events = tracking?.events ?? []
+  const realtimeLabel =
+    realtimeState === 'live'
+      ? 'AO VIVO'
+      : realtimeState === 'connecting'
+        ? 'A ligar'
+        : realtimeState === 'error'
+          ? 'Erro'
+          : 'Offline'
+
   return (
     <View style={styles.screen}>
       <View style={styles.trackHeader}>
@@ -376,61 +548,73 @@ function TrackingScreen({ subtotal, deliveryFee, total, showSuccessAlert, onBack
         </Pressable>
 
         <Text style={styles.trackTitle}>Acompanhar Pedido</Text>
-        <Text style={styles.trackSub}>Pedido #4614</Text>
+        <Text style={styles.trackSub}>#{tracking?.order_id ? String(tracking.order_id).slice(0, 8) : '-'}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {showSuccessAlert && (
-          <View style={styles.successBanner}>
-            <Text style={styles.successBannerText}>
-              {ICON.check} Pedido realizado com sucesso!
-            </Text>
-          </View>
-        )}
+        <Pressable style={styles.successBanner} onPress={onRefresh}>
+          <Text style={styles.successBannerText}>{ICON.check} Atualizar tracking</Text>
+        </Pressable>
 
         <View style={styles.trackCard}>
-          <View style={styles.trackSummaryRow}>
-            <View style={styles.prepDot}>
-              <Text style={styles.prepIcon}>{ICON.prep}</Text>
-            </View>
-            <View style={styles.trackSummaryTextWrap}>
-              <Text style={styles.trackSummaryTitle}>A preparar</Text>
-              <Text style={styles.trackSummarySub}>Restaurante a preparar o pedido</Text>
-            </View>
-          </View>
-
-          <View style={styles.progressLine}>
-            <View style={styles.progressFill} />
-          </View>
-
-          <TrackRow dot="done" title="Pedido confirmado" sub="14:52" />
-          <TrackRow dot="prep" title="A preparar" sub="Tempo estimado: 25 min" />
-          <TrackRow dot="idle" title="A caminho" sub="Aguardando estafeta" muted />
-          <TrackRow dot="idle" title="Entregue" muted />
+          <Text style={styles.trackSummaryTitle}>Estado atual</Text>
+          <Text style={styles.trackSummarySub}>{statusLabel(tracking?.order_status)}</Text>
+          <Text style={styles.trackSummarySub}>Entrega: {tracking?.delivery_status ?? '-'}</Text>
+          <Text style={styles.trackSummarySub}>Realtime: {realtimeLabel}</Text>
+          <Text style={styles.trackSummarySub}>
+            Distancia restante: {tracking?.distance_km_remaining ?? '-'} km
+          </Text>
+          <Text style={styles.trackSummarySub}>
+            ETA: {tracking?.eta_seconds ? `${Math.ceil(tracking.eta_seconds / 60)} min` : '-'}
+          </Text>
+          <Text style={styles.trackSummarySub}>Total: {formatCurrency(checkout?.total ?? 0)}</Text>
         </View>
 
-        <View style={styles.trackDetailsCard}>
-          <Text style={styles.sectionTitle}>Detalhes do pedido</Text>
-          <SummaryLine label="1x Pizza Margherita" value={`EUR ${subtotal.toFixed(2)}`} />
-          <SummaryLine label="Subtotal" value={`EUR ${subtotal.toFixed(2)}`} />
-          <SummaryLine label="Taxa de entrega" value={`EUR ${deliveryFee.toFixed(2)}`} />
+        <NativeDeliveryMapCard
+          title="Mapa da entrega"
+          subtitle="Posicao em tempo real do estafeta entre pickup e dropoff"
+          pickup={
+            tracking?.pickup_latitude !== null && tracking?.pickup_latitude !== undefined
+              ? {
+                  lat: tracking.pickup_latitude,
+                  lng: tracking.pickup_longitude,
+                  label: 'Pickup',
+                }
+              : null
+          }
+          dropoff={
+            tracking?.dropoff_latitude !== null && tracking?.dropoff_latitude !== undefined
+              ? {
+                  lat: tracking.dropoff_latitude,
+                  lng: tracking.dropoff_longitude,
+                  label: 'Dropoff',
+                }
+              : null
+          }
+          courier={
+            tracking?.latest_position
+              ? {
+                  lat: tracking.latest_position.lat,
+                  lng: tracking.latest_position.lng,
+                  label: 'Estafeta',
+                }
+              : null
+          }
+          routePoints={tracking?.route_points ?? []}
+          positions={tracking?.positions ?? []}
+        />
 
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>EUR {total.toFixed(2)}</Text>
-          </View>
-        </View>
-
         <View style={styles.trackDetailsCard}>
-          <Text style={styles.sectionTitle}>Entregar em</Text>
-          <View style={styles.addressRow}>
-            <Text style={styles.addressPin}>{ICON.pin}</Text>
-            <View>
-              <Text style={styles.addressName}>Casa</Text>
-              <Text style={styles.addressLine}>Rua das Flores, 123</Text>
-              <Text style={styles.addressLine}>4000-205 Porto</Text>
+          <Text style={styles.sectionTitle}>Eventos</Text>
+          {events.length === 0 ? <Text style={styles.mutedText}>Sem eventos ainda.</Text> : null}
+          {events.map((event) => (
+            <View key={`${event.event_type}-${event.timestamp}`} style={styles.summaryLine}>
+              <Text style={styles.summaryLabel}>{event.event_type}</Text>
+              <Text style={styles.summaryValue}>
+                {event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '-'}
+              </Text>
             </View>
-          </View>
+          ))}
         </View>
 
         <RealtimeTopicsCard />
@@ -448,22 +632,9 @@ function SummaryLine({ label, value }) {
   )
 }
 
-function TrackRow({ dot, title, sub, muted }) {
-  return (
-    <View style={styles.trackRow}>
-      <View style={[styles.trackDotCircle, dot === 'done' ? styles.dotDone : null, dot === 'prep' ? styles.dotPrep : null]} />
-      <View>
-        <Text style={[styles.trackRowTitle, muted ? styles.trackRowTitleMuted : null]}>{title}</Text>
-        {sub ? <Text style={[styles.trackRowSub, muted ? styles.trackRowSubMuted : null]}>{sub}</Text> : null}
-      </View>
-    </View>
-  )
-}
-
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f2f4f7' },
   screen: { flex: 1, backgroundColor: '#f2f4f7' },
-
   homeHeader: {
     backgroundColor: '#2f6fe9',
     borderBottomLeftRadius: 26,
@@ -497,11 +668,21 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchIcon: { color: '#9db8f8', fontSize: 14 },
-  searchText: { color: '#9db8f8', fontSize: 15, fontWeight: '500' },
-
+  searchText: { color: '#dbe7ff', fontSize: 15, fontWeight: '500' },
+  activeOrderBtn: {
+    marginTop: 10,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  activeOrderBtnText: {
+    color: '#1d4ed8',
+    fontWeight: '800',
+  },
   scrollContent: { paddingHorizontal: 14, paddingTop: 14, paddingBottom: 18 },
   sectionTitle: { color: '#0f172a', fontSize: 16, fontWeight: '800', marginBottom: 12 },
-
+  mutedText: { color: '#64748b', fontSize: 14, marginBottom: 8 },
   restaurantCard: {
     borderWidth: 1,
     borderColor: '#dfe4ec',
@@ -509,19 +690,14 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#ffffff',
     marginBottom: 14,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 5 },
-    shadowRadius: 10,
-    elevation: 2,
   },
   restaurantCover: {
-    height: 122,
+    height: 100,
     backgroundColor: '#ff7900',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  coverEmoji: { fontSize: 44 },
+  coverEmoji: { fontSize: 40 },
   restaurantBody: { paddingHorizontal: 14, paddingVertical: 12 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   restaurantName: { color: '#0f172a', fontSize: 17, fontWeight: '800', flex: 1, paddingRight: 8 },
@@ -533,8 +709,6 @@ const styles = StyleSheet.create({
   },
   ratingText: { color: '#14803c', fontSize: 13, fontWeight: '700' },
   cuisine: { color: '#64748b', fontSize: 13, marginTop: 4 },
-  metaLine: { color: '#334155', fontSize: 13, marginTop: 7 },
-
   menuHeader: {
     backgroundColor: '#ff6900',
     borderBottomLeftRadius: 26,
@@ -545,9 +719,7 @@ const styles = StyleSheet.create({
   },
   backButton: { alignSelf: 'flex-start', paddingVertical: 2 },
   backArrow: { color: '#ffffff', fontSize: 23, fontWeight: '700' },
-  menuHeaderTitle: { color: '#ffffff', fontSize: 39, fontWeight: '900', marginTop: 4 },
-  menuHeaderMeta: { color: '#ffefdf', fontSize: 14, marginTop: 6 },
-
+  menuHeaderTitle: { color: '#ffffff', fontSize: 32, fontWeight: '900', marginTop: 4 },
   menuCard: {
     borderWidth: 1,
     borderColor: '#dfe4ec',
@@ -557,27 +729,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 11,
-    shadowColor: '#0f172a',
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 1,
   },
   menuThumb: {
-    width: 78,
-    height: 78,
+    width: 64,
+    height: 64,
     borderRadius: 12,
     backgroundColor: '#ff7900',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  menuThumbEmoji: { fontSize: 38 },
+  menuThumbEmoji: { fontSize: 30 },
   menuInfo: { flex: 1 },
-  menuName: { color: '#0f172a', fontSize: 17, fontWeight: '800' },
-  menuDescription: { color: '#64748b', fontSize: 14, marginTop: 2, lineHeight: 20 },
-  menuPrice: { color: '#ff5f00', fontSize: 16, fontWeight: '900', marginTop: 5 },
-  menuRate: { color: '#d4a200', fontSize: 12, marginTop: 2, fontWeight: '600' },
+  menuName: { color: '#0f172a', fontSize: 16, fontWeight: '800' },
+  menuDescription: { color: '#64748b', fontSize: 13, marginTop: 2 },
+  menuPrice: { color: '#ff5f00', fontSize: 15, fontWeight: '900', marginTop: 5 },
+  menuRate: { color: '#334155', fontSize: 12, marginTop: 2, fontWeight: '600' },
   addButton: {
     width: 44,
     height: 34,
@@ -588,7 +755,6 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   addButtonText: { color: '#ffffff', fontSize: 24, lineHeight: 24, marginTop: -3 },
-
   withCartBar: { paddingBottom: 96 },
   cartBar: {
     position: 'absolute',
@@ -604,19 +770,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cartBarText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
-
   cartScroll: { flexGrow: 1 },
-  successBanner: {
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 8,
-    backgroundColor: '#e7f7ef',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 10,
-  },
-  successBannerText: { color: '#0f8f46', fontSize: 14, fontWeight: '700' },
-
   cartCard: {
     borderWidth: 1,
     borderColor: '#dfe4ec',
@@ -648,7 +802,6 @@ const styles = StyleSheet.create({
   qtyValue: { color: '#111827', fontSize: 16, fontWeight: '700', minWidth: 20, textAlign: 'center' },
   removeButton: { paddingHorizontal: 4, alignSelf: 'flex-start', marginTop: 2 },
   removeText: { color: '#ef4444', fontSize: 26 },
-
   checkoutBar: {
     borderTopWidth: 1,
     borderTopColor: '#d7dee8',
@@ -668,8 +821,8 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     marginTop: 4,
   },
-  totalLabel: { color: '#0f172a', fontSize: 32, fontWeight: '800' },
-  totalValue: { color: '#0f172a', fontSize: 32, fontWeight: '800' },
+  totalLabel: { color: '#0f172a', fontSize: 20, fontWeight: '800' },
+  totalValue: { color: '#0f172a', fontSize: 20, fontWeight: '800' },
   orderButton: {
     marginTop: 12,
     height: 48,
@@ -679,7 +832,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   orderButtonText: { color: '#ffffff', fontSize: 17, fontWeight: '800' },
-
   trackHeader: {
     backgroundColor: '#2f6fe9',
     borderBottomLeftRadius: 26,
@@ -688,9 +840,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 14,
   },
-  trackTitle: { color: '#ffffff', fontSize: 34, fontWeight: '900', marginTop: 4 },
+  trackTitle: { color: '#ffffff', fontSize: 32, fontWeight: '900', marginTop: 4 },
   trackSub: { color: '#dbe7ff', fontSize: 15, marginTop: 4 },
-
   trackCard: {
     borderWidth: 1,
     borderColor: '#dfe4ec',
@@ -698,47 +849,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 14,
   },
-  trackSummaryRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  prepDot: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#ffedd5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  prepIcon: { fontSize: 16, color: '#f97316' },
-  trackSummaryTextWrap: { flex: 1 },
   trackSummaryTitle: { color: '#0f172a', fontSize: 18, fontWeight: '800' },
-  trackSummarySub: { color: '#64748b', fontSize: 14, marginTop: 2 },
-  progressLine: {
-    height: 5,
-    borderRadius: 999,
-    backgroundColor: '#d6dce6',
-    overflow: 'hidden',
-    marginBottom: 16,
-  },
-  progressFill: { width: '34%', height: '100%', backgroundColor: '#ff6900' },
-
-  trackRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 14 },
-  trackDotCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#d1d5db',
-    backgroundColor: '#ffffff',
-    marginRight: 12,
-    marginTop: 1,
-  },
-  dotDone: { borderColor: '#16a34a', backgroundColor: '#16a34a' },
-  dotPrep: { borderColor: '#fb923c', backgroundColor: '#fb923c' },
-  trackRowTitle: { color: '#0f172a', fontSize: 16, fontWeight: '700' },
-  trackRowTitleMuted: { color: '#a3a9b4' },
-  trackRowSub: { color: '#64748b', fontSize: 13, marginTop: 2 },
-  trackRowSubMuted: { color: '#c0c6d2' },
-
+  trackSummarySub: { color: '#64748b', fontSize: 14, marginTop: 4 },
   trackDetailsCard: {
     marginTop: 12,
     borderWidth: 1,
@@ -747,8 +859,42 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     padding: 14,
   },
-  addressRow: { flexDirection: 'row', marginTop: 4 },
-  addressPin: { color: '#94a3b8', fontSize: 16, marginRight: 8, marginTop: 2 },
-  addressName: { color: '#0f172a', fontSize: 15, fontWeight: '700' },
-  addressLine: { color: '#64748b', fontSize: 14, marginTop: 1 },
+  successBanner: {
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    borderRadius: 8,
+    backgroundColor: '#e7f7ef',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 10,
+  },
+  successBannerText: { color: '#0f8f46', fontSize: 14, fontWeight: '700' },
+  successText: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 14,
+    backgroundColor: '#ecfdf5',
+    borderColor: '#16a34a',
+    borderWidth: 1,
+    borderRadius: 10,
+    color: '#166534',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontWeight: '700',
+  },
+  errorText: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 14,
+    backgroundColor: '#fef2f2',
+    borderColor: '#dc2626',
+    borderWidth: 1,
+    borderRadius: 10,
+    color: '#991b1b',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontWeight: '700',
+  },
 })

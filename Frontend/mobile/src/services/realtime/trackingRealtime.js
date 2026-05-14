@@ -1,7 +1,7 @@
 import { getEchoClient } from './echoClient'
 
-export function subscribeToOrderTracking({ orderId, authToken, onPositionUpdated, onError }) {
-  const echo = getEchoClient({ authToken })
+export function subscribeToOrderTracking({ orderId, authToken, devUserId, onPositionUpdated, onError }) {
+  const echo = getEchoClient({ authToken, devUserId })
   const channelName = `order.${orderId}.tracking`
   const channel = echo.private(channelName)
 

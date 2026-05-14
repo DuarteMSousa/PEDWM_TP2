@@ -15,12 +15,16 @@ class CartItem extends Model
         'cart_id',
         'restaurant_product_id',
         'quantity',
+        'unit_price',
+        'total_price',
     ];
 
     protected function casts(): array
     {
         return [
             'quantity' => 'integer',
+            'unit_price' => 'float',
+            'total_price' => 'float',
         ];
     }
 

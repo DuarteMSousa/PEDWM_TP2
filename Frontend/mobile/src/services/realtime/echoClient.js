@@ -10,8 +10,9 @@ const DEV_BROADCAST_USER_ID = process.env.EXPO_PUBLIC_DEV_BROADCAST_USER_ID ?? '
 
 let echoInstance = null
 let currentToken = null
+let currentDevUserId = null
 
-function buildAuthHeaders(authToken) {
+function buildAuthHeaders(authToken, devUserId) {
   const headers = {}
 
   if (authToken) {
@@ -19,19 +20,19 @@ function buildAuthHeaders(authToken) {
     headers.Accept = 'application/json'
   }
 
-  if (DEV_BROADCAST_USER_ID) {
-    headers['X-Dev-User-Id'] = DEV_BROADCAST_USER_ID
+  if (devUserId || DEV_BROADCAST_USER_ID) {
+    headers['X-Dev-User-Id'] = devUserId || DEV_BROADCAST_USER_ID
   }
 
   return headers
 }
 
-export function getEchoClient({ authToken } = {}) {
+export function getEchoClient({ authToken, devUserId } = {}) {
   if (!REVERB_APP_KEY) {
     throw new Error('Missing EXPO_PUBLIC_REVERB_APP_KEY.')
   }
 
-  if (echoInstance && currentToken === authToken) {
+  if (echoInstance && currentToken === authToken && currentDevUserId === (devUserId ?? null)) {
     return echoInstance
   }
 
@@ -51,11 +52,12 @@ export function getEchoClient({ authToken } = {}) {
     enabledTransports: ['ws', 'wss'],
     authEndpoint: `${API_BASE_URL}/broadcasting/auth`,
     auth: {
-      headers: buildAuthHeaders(authToken),
+      headers: buildAuthHeaders(authToken, devUserId),
     },
   })
 
   currentToken = authToken ?? null
+  currentDevUserId = devUserId ?? null
 
   return echoInstance
 }
@@ -68,4 +70,5 @@ export function disconnectEchoClient() {
   echoInstance.disconnect()
   echoInstance = null
   currentToken = null
+  currentDevUserId = null
 }

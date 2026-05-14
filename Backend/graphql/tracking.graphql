@@ -1,0 +1,74 @@
+type TrackingPosition {
+  lat: Float!
+  lng: Float!
+  recorded_at: String
+}
+
+type TrackingEvent {
+  event_type: String!
+  timestamp: String
+}
+
+type RoutePoint {
+  lat: Float!
+  lng: Float!
+}
+
+type OrderTracking {
+  order_id: ID!
+  order_status: String!
+  delivery_id: ID
+  delivery_status: String
+  courier_id: ID
+  restaurant_name: String
+  customer_name: String
+  courier_latitude: Float
+  courier_longitude: Float
+  last_location_update: String
+  pickup_latitude: Float
+  pickup_longitude: Float
+  dropoff_latitude: Float
+  dropoff_longitude: Float
+  route_provider: String
+  route_distance_km: Float
+  route_duration_seconds: Int
+  route_points: [RoutePoint!]!
+  distance_km_remaining: Float
+  eta_seconds: Int
+  latest_position: TrackingPosition
+  positions: [TrackingPosition!]!
+  events: [TrackingEvent!]!
+}
+
+enum DeliveryStatusInput {
+  PENDING
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+}
+
+input UpdateDeliveryStatusInput {
+  delivery_id: ID!
+  status: DeliveryStatusInput!
+  recorded_at: String
+}
+
+type UpdateDeliveryStatusPayload {
+  ok: Boolean!
+  delivery_id: ID!
+  order_id: ID!
+  delivery_status: String!
+  order_status: String!
+  recorded_at: String!
+}
+
+extend type Query {
+  orderTracking(order_id: ID!): OrderTracking!
+    @field(resolver: "App\\GraphQL\\Queries\\TrackingQueries@orderTracking")
+}
+
+extend type Mutation {
+  updateDeliveryStatus(input: UpdateDeliveryStatusInput!): UpdateDeliveryStatusPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\UpdateDeliveryStatus")
+}

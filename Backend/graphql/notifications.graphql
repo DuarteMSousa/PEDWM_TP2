@@ -1,0 +1,36 @@
+type UserNotification {
+  id: ID!
+  type: String!
+  title: String!
+  message: String!
+  sent_at: String
+  read_at: String
+}
+
+input MarkNotificationReadInput {
+  notification_id: ID!
+}
+
+type MarkNotificationReadPayload {
+  ok: Boolean!
+  notification_id: ID!
+  read_at: String
+}
+
+type MarkAllNotificationsReadPayload {
+  ok: Boolean!
+  affected_count: Int!
+}
+
+extend type Query {
+  userNotifications(unread_only: Boolean = false, limit: Int = 50): [UserNotification!]!
+    @field(resolver: "App\\GraphQL\\Queries\\NotificationQueries@userNotifications")
+}
+
+extend type Mutation {
+  markNotificationRead(input: MarkNotificationReadInput!): MarkNotificationReadPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\MarkNotificationRead")
+
+  markAllNotificationsRead: MarkAllNotificationsReadPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\MarkAllNotificationsRead")
+}

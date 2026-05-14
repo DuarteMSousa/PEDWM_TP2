@@ -1,28 +1,31 @@
 <?php
 
+use App\Enums\UserType;
 use App\Models\Delivery;
 use App\Models\ChatParticipant;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
 
-function resolveBroadcastUser(?User $user): ?User
-{
-    if ($user) {
-        return $user;
+if (! function_exists('resolveBroadcastUser')) {
+    function resolveBroadcastUser(?User $user): ?User
+    {
+        if ($user) {
+            return $user;
+        }
+
+        if (! app()->environment(['local', 'testing'])) {
+            return null;
+        }
+
+        $devUserId = request()->header('X-Dev-User-Id');
+
+        if (! $devUserId) {
+            return null;
+        }
+
+        return User::query()->find($devUserId);
     }
-
-    if (! app()->environment(['local', 'testing'])) {
-        return null;
-    }
-
-    $devUserId = request()->header('X-Dev-User-Id');
-
-    if (! $devUserId) {
-        return null;
-    }
-
-    return User::query()->find($devUserId);
 }
 
 Broadcast::channel('customer.{customerId}.orders', function (?User $user, string $customerId): bool {
@@ -32,7 +35,7 @@ Broadcast::channel('customer.{customerId}.orders', function (?User $user, string
         return false;
     }
 
-    return $user->user_type === 'customer' && $user->id === $customerId;
+    return $user->user_type === UserType::CUSTOMER && $user->id === $customerId;
 });
 
 Broadcast::channel('courier.{courierId}.jobs', function (?User $user, string $courierId): bool {
@@ -42,7 +45,7 @@ Broadcast::channel('courier.{courierId}.jobs', function (?User $user, string $co
         return false;
     }
 
-    return $user->user_type === 'courier' && $user->id === $courierId;
+    return $user->user_type === UserType::COURIER && $user->id === $courierId;
 });
 
 Broadcast::channel('order.{orderId}.tracking', function (?User $user, string $orderId): bool {
@@ -52,21 +55,21 @@ Broadcast::channel('order.{orderId}.tracking', function (?User $user, string $or
         return false;
     }
 
-    if ($user->user_type === 'customer') {
+    if ($user->user_type === UserType::CUSTOMER) {
         return Order::query()
             ->whereKey($orderId)
             ->where('user_id', $user->id)
             ->exists();
     }
 
-    if ($user->user_type === 'courier') {
+    if ($user->user_type === UserType::COURIER) {
         return Delivery::query()
             ->where('order_id', $orderId)
             ->where('courier_id', $user->id)
             ->exists();
     }
 
-    if ($user->user_type === 'local_manager') {
+    if ($user->user_type === UserType::LOCAL_MANAGER) {
         return Order::query()
             ->whereKey($orderId)
             ->whereHas('restaurant.localManager', function ($query) use ($user): void {
@@ -75,7 +78,7 @@ Broadcast::channel('order.{orderId}.tracking', function (?User $user, string $or
             ->exists();
     }
 
-    if ($user->user_type === 'chain_manager') {
+    if ($user->user_type === UserType::CHAIN_MANAGER) {
         return Order::query()
             ->whereKey($orderId)
             ->whereHas('restaurant.chain', function ($query) use ($user): void {

@@ -13,7 +13,15 @@ class Cart extends Model
 
     protected $fillable = [
         'user_id',
+        'total',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'total' => 'float',
+        ];
+    }
 
     public function user(): BelongsTo
     {

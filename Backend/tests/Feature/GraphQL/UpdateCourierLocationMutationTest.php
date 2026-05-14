@@ -37,7 +37,7 @@ class UpdateCourierLocationMutationTest extends TestCase
 
         Courier::query()->create([
             'user_id' => $courierUser->id,
-            'status' => 'available',
+            'status' => 'AVAILABLE',
         ]);
 
         $chain = RestaurantChain::query()->create([
@@ -55,7 +55,7 @@ class UpdateCourierLocationMutationTest extends TestCase
         $order = Order::query()->create([
             'user_id' => $customer->id,
             'restaurant_id' => $restaurant->id,
-            'status' => 'out_for_delivery',
+            'status' => 'OUT_FOR_DELIVERY',
             'total' => 18.5,
             'restaurant_name_snapshot' => 'Urban Grill',
         ]);
@@ -63,7 +63,7 @@ class UpdateCourierLocationMutationTest extends TestCase
         $delivery = Delivery::query()->create([
             'order_id' => $order->id,
             'courier_id' => $courierUser->id,
-            'status' => 'in_transit',
+            'status' => 'IN_TRANSIT',
             'delivery_fee' => 2.5,
         ]);
 

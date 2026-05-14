@@ -2,11 +2,11 @@
 
 namespace App\GraphQL\Mutations;
 
-use App\Events\ChatMessageSent;
 use App\Models\Chat;
 use App\Models\ChatParticipant;
 use App\Models\Message;
 use App\Models\User;
+use App\Services\OutboxService;
 use Carbon\Carbon;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Str;
@@ -67,12 +67,17 @@ class SendChatMessage
             'chatId' => $chat->id,
             'messageId' => $message->id,
             'senderUserId' => $user->id,
-            'senderType' => $participant->user_type,
+            'senderType' => $participant->user_type->value,
             'content' => $message->content,
             'timestamp' => $timestamp->toIso8601String(),
         ];
 
-        event(new ChatMessageSent($payload));
+        app(OutboxService::class)->enqueue(
+            aggregateType: 'chat',
+            aggregateId: $chat->id,
+            eventName: 'CHAT_MESSAGE_SENT',
+            payload: $payload
+        );
 
         return [
             'ok' => true,

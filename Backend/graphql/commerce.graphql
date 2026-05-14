@@ -1,0 +1,164 @@
+type RestaurantSummary {
+  id: ID!
+  name: String!
+  chain_name: String
+  city: String
+  country: String
+  delivery_radius: Float!
+  rating: Float
+}
+
+type MenuProduct {
+  restaurant_product_id: ID!
+  product_id: ID!
+  category: String
+  name: String
+  description: String
+  price: Float!
+  is_available: Boolean!
+  estimated_preparation_time_min: Int
+}
+
+type CartItemView {
+  id: ID!
+  restaurant_product_id: ID!
+  product_name: String!
+  quantity: Int!
+  unit_price: Float!
+  line_total: Float!
+}
+
+type CartView {
+  id: ID!
+  user_id: ID!
+  restaurant_id: ID
+  total: Float!
+  items: [CartItemView!]!
+}
+
+type OrderSummaryView {
+  id: ID!
+  status: String!
+  total: Float!
+  restaurant_id: ID!
+  restaurant_name: String!
+  delivery_status: String
+  payment_status: String
+  created_at: String
+}
+
+input AddCartItemInput {
+  restaurant_product_id: ID!
+  quantity: Int!
+}
+
+input UpdateCartItemInput {
+  cart_item_id: ID!
+  quantity: Int!
+}
+
+input RemoveCartItemInput {
+  cart_item_id: ID!
+}
+
+enum PaymentMethodInput {
+  CASH
+  CARD
+  MBWAY
+  PAYPAL
+}
+
+input CheckoutInput {
+  payment_method: PaymentMethodInput!
+  address_id: ID
+}
+
+type CheckoutPayload {
+  ok: Boolean!
+  order_id: ID!
+  payment_id: ID!
+  order_status: String!
+  payment_status: String!
+  total: Float!
+}
+
+enum PaymentConfirmationStatusInput {
+  COMPLETED
+  FAILED
+}
+
+input ConfirmPaymentInput {
+  payment_id: ID!
+  status: PaymentConfirmationStatusInput!
+  transaction_id: String
+}
+
+type ConfirmPaymentPayload {
+  ok: Boolean!
+  payment_id: ID!
+  order_id: ID!
+  payment_status: String!
+  order_status: String!
+  transaction_id: String
+}
+
+enum OrderItemStatusInput {
+  PENDING
+  PREPARING
+  READY
+  CANCELLED
+}
+
+input UpdateOrderItemStatusInput {
+  order_item_id: ID!
+  status: OrderItemStatusInput!
+}
+
+type UpdateOrderItemStatusPayload {
+  ok: Boolean!
+  order_item_id: ID!
+  order_id: ID!
+  order_item_status: String!
+  order_status: String!
+}
+
+type ClearCartPayload {
+  ok: Boolean!
+}
+
+extend type Query {
+  restaurants(page: Int = 1, per_page: Int = 20, q: String = "", city: String = ""): [RestaurantSummary!]!
+    @field(resolver: "App\\GraphQL\\Queries\\CommerceQueries@restaurants")
+
+  restaurantMenu(restaurant_id: ID!): [MenuProduct!]!
+    @field(resolver: "App\\GraphQL\\Queries\\CommerceQueries@restaurantMenu")
+
+  myCart: CartView
+    @field(resolver: "App\\GraphQL\\Queries\\CommerceQueries@myCart")
+
+  myOrders(active_only: Boolean = false, limit: Int = 20): [OrderSummaryView!]!
+    @field(resolver: "App\\GraphQL\\Queries\\CommerceQueries@myOrders")
+}
+
+extend type Mutation {
+  addCartItem(input: AddCartItemInput!): CartView!
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@addCartItem")
+
+  updateCartItem(input: UpdateCartItemInput!): CartView!
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@updateCartItem")
+
+  removeCartItem(input: RemoveCartItemInput!): CartView
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@removeCartItem")
+
+  clearMyCart: ClearCartPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@clearMyCart")
+
+  checkout(input: CheckoutInput!): CheckoutPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@checkout")
+
+  confirmPayment(input: ConfirmPaymentInput!): ConfirmPaymentPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@confirmPayment")
+
+  updateOrderItemStatus(input: UpdateOrderItemStatusInput!): UpdateOrderItemStatusPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\CommerceMutations@updateOrderItemStatus")
+}

@@ -1,0 +1,58 @@
+input UpdateCourierLocationInput {
+  delivery_id: ID!
+  lat: Float!
+  lng: Float!
+  heading: Float
+  speed: Float
+  accuracy: Float
+  recorded_at: String
+}
+
+type UpdateCourierLocationPayload {
+  ok: Boolean!
+  delivery_id: ID!
+  order_id: ID!
+  recorded_at: String!
+}
+
+input SendChatMessageInput {
+  chat_id: ID!
+  content: String!
+}
+
+type SendChatMessagePayload {
+  ok: Boolean!
+  chat_id: ID!
+  message_id: ID!
+  sent_at: String!
+}
+
+enum NotificationTypeInput {
+  ORDER_UPDATE
+  PROMOTION
+  SYSTEM
+}
+
+input PublishUserNotificationInput {
+  user_id: ID!
+  type: NotificationTypeInput!
+  title: String!
+  message: String!
+}
+
+type PublishUserNotificationPayload {
+  ok: Boolean!
+  notification_id: ID!
+  sent_at: String!
+}
+
+extend type Mutation {
+  updateCourierLocation(input: UpdateCourierLocationInput!): UpdateCourierLocationPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\UpdateCourierLocation")
+
+  sendChatMessage(input: SendChatMessageInput!): SendChatMessagePayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\SendChatMessage")
+
+  publishUserNotification(input: PublishUserNotificationInput!): PublishUserNotificationPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\PublishUserNotification")
+}

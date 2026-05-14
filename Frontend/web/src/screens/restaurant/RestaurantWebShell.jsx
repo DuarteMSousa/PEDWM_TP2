@@ -42,7 +42,7 @@ export function RestaurantWebShell() {
           onLogout={handleLogout}
         />
         <section className="rb-main">
-          <ActiveScreen />
+          <ActiveScreen session={session} />
         </section>
       </div>
     </PageContainer>

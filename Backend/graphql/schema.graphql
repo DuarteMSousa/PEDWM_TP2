@@ -4,3 +4,8 @@ type Query
 type Mutation
 
 #import user.graphql
+#import realtime.graphql
+#import tracking.graphql
+#import operations.graphql
+#import notifications.graphql
+#import commerce.graphql

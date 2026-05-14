@@ -2,9 +2,9 @@
 
 namespace App\GraphQL\Mutations;
 
-use App\Events\UserNotificationCreated;
 use App\Models\Notification;
 use App\Models\User;
+use App\Services\OutboxService;
 use Carbon\Carbon;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Str;
@@ -46,14 +46,19 @@ class PublishUserNotification
             'eventName' => 'USER_NOTIFICATION_CREATED',
             'notificationId' => $notification->id,
             'userId' => $notification->user_id,
-            'type' => $notification->type,
+            'type' => $notification->type->value,
             'title' => $notification->title,
             'message' => $notification->message,
             'sentAt' => $sentAt->toIso8601String(),
             'actorId' => $actor->id,
         ];
 
-        event(new UserNotificationCreated($payload));
+        app(OutboxService::class)->enqueue(
+            aggregateType: 'notification',
+            aggregateId: $notification->id,
+            eventName: 'USER_NOTIFICATION_CREATED',
+            payload: $payload
+        );
 
         return [
             'ok' => true,

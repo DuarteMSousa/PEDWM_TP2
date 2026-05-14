@@ -4,8 +4,8 @@ namespace App\Enums;
 
 enum UserType: string
 {
-    case CUSTOMER = 'CUSTOMER';
-    case COURIER = 'COURIER';
-    case CHAIN_MANAGER = 'CHAIN_MANAGER';
-    case LOCAL_MANAGER = 'LOCAL_MANAGER';
+    case CUSTOMER = 'customer';
+    case COURIER = 'courier';
+    case CHAIN_MANAGER = 'chain_manager';
+    case LOCAL_MANAGER = 'local_manager';
 }

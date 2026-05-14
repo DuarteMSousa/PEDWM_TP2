@@ -21,9 +21,9 @@ export default function App() {
     <>
       <StatusBar style="dark" />
       {session.role === 'customer' ? (
-        <CustomerAppScreen onLogout={() => setSession(null)} />
+        <CustomerAppScreen session={session} onLogout={() => setSession(null)} />
       ) : session.role === 'courier' ? (
-        <CourierAppScreen onLogout={() => setSession(null)} />
+        <CourierAppScreen session={session} onLogout={() => setSession(null)} />
       ) : (
         <MobileHubScreen
           initialRole={session.role}

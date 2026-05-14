@@ -2,11 +2,13 @@
 
 namespace App\GraphQL\Mutations;
 
-use App\Events\CourierPositionUpdated;
+use App\Enums\DeliveryStatus;
+use App\Enums\UserType;
 use App\Models\Courier;
 use App\Models\CourierPositionHistory;
 use App\Models\Delivery;
 use App\Models\User;
+use App\Services\OutboxService;
 use Carbon\Carbon;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +37,7 @@ class UpdateCourierLocation
             throw new AuthenticationException('Authentication required.');
         }
 
-        if ($user->user_type !== 'courier') {
+        if ($user->user_type !== UserType::COURIER) {
             throw new RuntimeException('Only courier users can update location.');
         }
 
@@ -52,7 +54,7 @@ class UpdateCourierLocation
             throw new RuntimeException('Delivery not found for this courier.');
         }
 
-        if (! in_array($delivery->status, ['pending', 'picked_up', 'in_transit'], true)) {
+        if (! in_array($delivery->status, [DeliveryStatus::PENDING, DeliveryStatus::PICKED_UP, DeliveryStatus::IN_TRANSIT], true)) {
             throw new RuntimeException('Delivery is not active.');
         }
 
@@ -95,7 +97,12 @@ class UpdateCourierLocation
             'recordedAt' => $recordedAt->toIso8601String(),
         ];
 
-        event(new CourierPositionUpdated($payload));
+        app(OutboxService::class)->enqueue(
+            aggregateType: 'delivery',
+            aggregateId: $delivery->id,
+            eventName: 'COURIER_POSITION_UPDATED',
+            payload: $payload
+        );
 
         return [
             'ok' => true,

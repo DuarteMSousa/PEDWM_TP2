@@ -143,7 +143,7 @@ return new class extends Migration {
             $table->uuid('id')->primary();
             $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
             $table->foreignUuid('restaurant_id')->constrained('restaurants')->cascadeOnDelete();
-            $table->enum('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELED']);
+            $table->enum('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED']);
             $table->float('total');
             $table->string('restaurant_name_snapshot');
             $table->timestamps();
@@ -153,7 +153,7 @@ return new class extends Migration {
             $table->uuid('id')->primary();
             $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
             $table->foreignUuid('restaurant_product_id')->constrained('restaurant_products')->cascadeOnDelete();
-            $table->enum('status', ['PENDING', 'PREPARING', 'READY', 'CANCELED']);
+            $table->enum('status', ['PENDING', 'PREPARING', 'READY', 'CANCELLED']);
             $table->integer('quantity');
             $table->float('unit_price');
             $table->string('product_name_snapshot');
@@ -176,7 +176,7 @@ return new class extends Migration {
             $table->uuid('id')->primary();
             $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
             $table->enum('method', ['CASH', 'CARD', 'MBWAY', 'PAYPAL']);
-            $table->enum('status', ['PENDING', 'PAID', 'FAILED', 'REFUNDED']);
+            $table->enum('status', ['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']);
             $table->string('transaction_id')->nullable();
             $table->timestamp('paid_at')->nullable();
             $table->timestamp('expired_at')->nullable();
@@ -189,8 +189,8 @@ return new class extends Migration {
         Schema::create('deliveries', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
-            $table->foreignUuid('courier_id')->constrained('couriers', 'user_id')->cascadeOnDelete();
-            $table->enum('status', ['PENDING', 'ASSIGNED', 'PICKED_UP', 'COMPLETED', 'CANCELED']);
+            $table->foreignUuid('courier_id')->nullable()->constrained('couriers', 'user_id')->nullOnDelete();
+            $table->enum('status', ['PENDING', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'FAILED']);
             $table->timestamp('pickup_time')->nullable();
             $table->timestamp('delivery_time')->nullable();
             $table->float('delivery_fee');
@@ -265,7 +265,7 @@ return new class extends Migration {
             $table->uuid('id')->primary();
             $table->foreignUuid('chat_id')->constrained('chats')->cascadeOnDelete();
             $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
-            $table->enum('user_type', ['CUSTOMER', 'COURIER', 'CHAIN_MANAGER', 'LOCAL_MANAGER']);
+            $table->enum('user_type', ['customer', 'courier', 'chain_manager', 'local_manager']);
             $table->timestamp('joined_at')->nullable();
             $table->timestamp('last_read_at')->nullable();
             $table->timestamps();
@@ -325,7 +325,7 @@ return new class extends Migration {
         Schema::create('order_events', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
-            $table->enum('event_type', ['ORDER_CREATED', 'ORDER_CONFIRMED', 'ORDER_PREPARING', 'ORDER_READY', 'ORDER_OUT_FOR_DELIVERY', 'ORDER_COMPLETED', 'ORDER_CANCELLED']);
+            $table->enum('event_type', ['ORDER_CREATED', 'ORDER_CONFIRMED', 'ORDER_PREPARING', 'ORDER_READY', 'ORDER_COURIER_ASSIGNED', 'ORDER_OUT_FOR_DELIVERY', 'ORDER_COMPLETED', 'ORDER_CANCELLED']);
             $table->timestamp('timestamp');
             $table->jsonb('payload')->nullable();
         });
@@ -360,6 +360,7 @@ return new class extends Migration {
             $table->uuid('id')->primary();
             $table->foreignUuid('user_id')->constrained('users')->cascadeOnDelete();
             $table->enum('type', ['ORDER_UPDATE', 'PROMOTION', 'SYSTEM']);
+            $table->string('title');
             $table->text('message');
             $table->timestamp('sent_at');
             $table->timestamp('read_at')->nullable();

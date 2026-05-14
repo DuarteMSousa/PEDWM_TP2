@@ -10,27 +10,28 @@ const DEV_BROADCAST_USER_ID = import.meta.env.VITE_DEV_BROADCAST_USER_ID ?? ''
 
 let echoInstance = null
 let currentToken = null
+let currentDevUserId = null
 
-function buildAuthHeaders(authToken) {
+function buildAuthHeaders(authToken, devUserId) {
   const headers = { Accept: 'application/json' }
 
   if (authToken) {
     headers.Authorization = `Bearer ${authToken}`
   }
 
-  if (DEV_BROADCAST_USER_ID) {
-    headers['X-Dev-User-Id'] = DEV_BROADCAST_USER_ID
+  if (devUserId || DEV_BROADCAST_USER_ID) {
+    headers['X-Dev-User-Id'] = devUserId || DEV_BROADCAST_USER_ID
   }
 
   return headers
 }
 
-export function getEchoClient({ authToken } = {}) {
+export function getEchoClient({ authToken, devUserId } = {}) {
   if (!REVERB_APP_KEY) {
     throw new Error('Missing VITE_REVERB_APP_KEY.')
   }
 
-  if (echoInstance && currentToken === authToken) {
+  if (echoInstance && currentToken === authToken && currentDevUserId === (devUserId ?? null)) {
     return echoInstance
   }
 
@@ -50,11 +51,12 @@ export function getEchoClient({ authToken } = {}) {
     enabledTransports: ['ws', 'wss'],
     authEndpoint: `${API_BASE_URL}/broadcasting/auth`,
     auth: {
-      headers: buildAuthHeaders(authToken),
+      headers: buildAuthHeaders(authToken, devUserId),
     },
   })
 
   currentToken = authToken ?? null
+  currentDevUserId = devUserId ?? null
   return echoInstance
 }
 
@@ -63,4 +65,5 @@ export function disconnectEchoClient() {
   echoInstance.disconnect()
   echoInstance = null
   currentToken = null
+  currentDevUserId = null
 }
