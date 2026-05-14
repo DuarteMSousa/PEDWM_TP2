@@ -9,14 +9,18 @@ use App\Enums\UserType;
 use App\Models\Courier;
 use App\Models\Delivery;
 use App\Models\User;
+use App\Services\DeliveryOfferService\DeliveryOfferServiceInterface;
 use App\Services\IdempotencyService;
 use GraphQL\Error\UserError;
 use Illuminate\Auth\AuthenticationException;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class AcceptDeliveryJob
 {
+    public function __construct(private DeliveryOfferServiceInterface $deliveryOfferService)
+    {
+    }
+
     /**
      * @param  array<string, mixed>  $args
      * @return array<string, mixed>
@@ -51,10 +55,7 @@ class AcceptDeliveryJob
                 $assignedDelivery = null;
 
                 DB::transaction(function () use ($deliveryId, $offerToken, $user, $courier, &$assignedDelivery): void {
-                    $cacheKey = $this->getOfferCacheKey($deliveryId, $user->id);
-                    $offerData = Cache::get($cacheKey);
-
-                    if (! is_array($offerData) || ($offerData['token'] ?? null) !== $offerToken) {
+                    if (! $this->deliveryOfferService->validateOffer($deliveryId, $user->id, $offerToken)) {
                         throw new UserError('Delivery offer is invalid or expired. Request a new offer.');
                     }
 
@@ -83,7 +84,7 @@ class AcceptDeliveryJob
                     ]);
 
                     $courier->update(['status' => CourierStatus::BUSY]);
-                    Cache::forget($cacheKey);
+                    $this->deliveryOfferService->consumeOffer($deliveryId, $user->id);
 
                     $delivery->order->events()->create([
                         'event_type' => OrderEventType::ORDER_COURIER_ASSIGNED->value,
@@ -126,8 +127,4 @@ class AcceptDeliveryJob
         return $user;
     }
 
-    private function getOfferCacheKey(string $deliveryId, string $courierId): string
-    {
-        return "delivery_offer:{$deliveryId}:{$courierId}";
-    }
 }

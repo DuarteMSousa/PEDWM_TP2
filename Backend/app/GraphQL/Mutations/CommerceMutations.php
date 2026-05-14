@@ -9,26 +9,21 @@ use App\Enums\PaymentEventType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
 use App\Enums\UserType;
-use App\Enums\DiscountOriginType;
-use App\Enums\DiscountTarget;
-use App\Enums\DiscountType;
 use App\Enums\NotificationType;
 use App\Models\Cart;
 use App\Models\CartItem;
-use App\Models\Coupon;
 use App\Models\Delivery;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\ProductOption;
-use App\Models\Promotion;
 use App\Models\Restaurant;
 use App\Models\RestaurantProduct;
 use App\Models\User;
 use App\Models\UserAddress;
+use App\Services\CheckoutDiscountService\CheckoutDiscountServiceInterface;
 use App\Services\IdempotencyService;
 use App\Services\NotificationService\NotificationServiceInterface;
-use Carbon\Carbon;
 use GraphQL\Error\UserError;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Support\Collection;
@@ -36,8 +31,10 @@ use Illuminate\Support\Facades\DB;
 
 class CommerceMutations
 {
-    public function __construct(private NotificationServiceInterface $notificationService)
-    {
+    public function __construct(
+        private NotificationServiceInterface $notificationService,
+        private CheckoutDiscountServiceInterface $checkoutDiscountService,
+    ) {
     }
 
     /**
@@ -284,13 +281,15 @@ class CommerceMutations
                     }
 
                     $deliveryFee = 0.0;
-                    $discountRows = $this->resolveCheckoutDiscounts(
+                    $discountResult = $this->checkoutDiscountService->resolveDiscounts(
                         chainId: $restaurant?->chain_id,
                         itemMetadata: $itemMetadata,
                         subTotal: $subTotal,
                         deliveryFee: $deliveryFee,
                         couponCode: $couponCode
                     );
+                    $discountRows = $discountResult['discounts'];
+                    $appliedCoupon = $discountResult['applied_coupon'];
 
                     foreach ($discountRows as $discountRow) {
                         $order->discounts()->create($discountRow);
@@ -357,6 +356,10 @@ class CommerceMutations
                         'status' => 'PENDING',
                         'delivery_fee' => 0,
                     ]);
+
+                    if ($appliedCoupon) {
+                        $appliedCoupon->increment('used_count');
+                    }
 
                     $cart->items()->delete();
                     $cart->update(['total' => 0]);
@@ -640,171 +643,6 @@ class CommerceMutations
             'total' => 0,
             'items' => [],
         ];
-    }
-
-    /**
-     * @param  Collection<string, array{order_item: OrderItem, product_id: ?string, category_id: ?string, line_total: float}>  $itemMetadata
-     * @return array<int, array<string, mixed>>
-     */
-    private function resolveCheckoutDiscounts(
-        ?string $chainId,
-        Collection $itemMetadata,
-        float $subTotal,
-        float $deliveryFee,
-        ?string $couponCode
-    ): array {
-        if (! $chainId) {
-            return [];
-        }
-
-        $discounts = [];
-        $now = Carbon::now();
-
-        $promotions = Promotion::query()
-            ->with('promotionItems')
-            ->where('chain_id', $chainId)
-            ->where(function ($query) use ($now): void {
-                $query->whereNull('start_date')->orWhere('start_date', '<=', $now);
-            })
-            ->where(function ($query) use ($now): void {
-                $query->whereNull('end_date')->orWhere('end_date', '>=', $now);
-            })
-            ->get();
-
-        foreach ($promotions as $promotion) {
-            $promotionType = DiscountType::from($promotion->type);
-            $promotionTarget = DiscountTarget::from($promotion->target);
-
-            if ($promotionTarget === DiscountTarget::ORDER) {
-                $value = (float) ($promotion->promotionItems->first()?->discount ?? 0);
-                $amount = $this->calculateDiscountAmount($subTotal, $promotionType, $value);
-
-                if ($amount > 0) {
-                    $discounts[] = [
-                        'name_snapshot' => $promotion->name,
-                        'description_snapshot' => $promotion->description,
-                        'discount_amount' => $amount,
-                        'discount_type' => $promotionType,
-                        'discount_target' => DiscountTarget::ORDER,
-                        'order_item_id' => null,
-                        'origin_type' => DiscountOriginType::PROMOTION,
-                        'origin_id' => $promotion->id,
-                    ];
-                }
-
-                continue;
-            }
-
-            if ($promotionTarget === DiscountTarget::DELIVERY) {
-                $value = (float) ($promotion->promotionItems->first()?->discount ?? 0);
-                $amount = $this->calculateDiscountAmount($deliveryFee, $promotionType, $value);
-
-                if ($amount > 0) {
-                    $discounts[] = [
-                        'name_snapshot' => $promotion->name,
-                        'description_snapshot' => $promotion->description,
-                        'discount_amount' => $amount,
-                        'discount_type' => $promotionType,
-                        'discount_target' => DiscountTarget::DELIVERY,
-                        'order_item_id' => null,
-                        'origin_type' => DiscountOriginType::PROMOTION,
-                        'origin_id' => $promotion->id,
-                    ];
-                }
-
-                continue;
-            }
-
-            if (! in_array($promotionTarget, [DiscountTarget::PRODUCT, DiscountTarget::CATEGORY], true)) {
-                continue;
-            }
-
-            foreach ($promotion->promotionItems as $promotionItem) {
-                foreach ($itemMetadata as $itemMeta) {
-                    $matchesProduct = $promotionTarget === DiscountTarget::PRODUCT
-                        && $promotionItem->product_id
-                        && $promotionItem->product_id === $itemMeta['product_id'];
-
-                    $matchesCategory = $promotionTarget === DiscountTarget::CATEGORY
-                        && $promotionItem->category_id
-                        && $promotionItem->category_id === $itemMeta['category_id'];
-
-                    if (! $matchesProduct && ! $matchesCategory) {
-                        continue;
-                    }
-
-                    $amount = $this->calculateDiscountAmount(
-                        $itemMeta['line_total'],
-                        $promotionType,
-                        (float) $promotionItem->discount
-                    );
-
-                    if ($amount <= 0) {
-                        continue;
-                    }
-
-                    $discounts[] = [
-                        'name_snapshot' => $promotion->name,
-                        'description_snapshot' => $promotion->description,
-                        'discount_amount' => $amount,
-                        'discount_type' => $promotionType,
-                        'discount_target' => $promotionTarget,
-                        'order_item_id' => $itemMeta['order_item']->id,
-                        'origin_type' => DiscountOriginType::PROMOTION,
-                        'origin_id' => $promotion->id,
-                    ];
-                }
-            }
-        }
-
-        if ($couponCode) {
-            $coupon = Coupon::query()
-                ->where('chain_id', $chainId)
-                ->whereRaw('LOWER(code) = ?', [mb_strtolower($couponCode)])
-                ->first();
-
-            if (! $coupon) {
-                throw new UserError('Coupon not found for this restaurant chain.');
-            }
-
-            if ($coupon->expiry_date && Carbon::parse($coupon->expiry_date)->isPast()) {
-                throw new UserError('Coupon has expired.');
-            }
-
-            $couponType = DiscountType::from($coupon->type);
-            $couponTarget = DiscountTarget::from($coupon->target);
-            $couponValue = (float) ($coupon->discount ?? 0);
-            $couponBase = $couponTarget === DiscountTarget::DELIVERY ? $deliveryFee : $subTotal;
-            $couponAmount = $this->calculateDiscountAmount($couponBase, $couponType, $couponValue);
-
-            if ($couponAmount > 0) {
-                $discounts[] = [
-                    'name_snapshot' => $coupon->code,
-                    'description_snapshot' => $coupon->description,
-                    'discount_amount' => $couponAmount,
-                    'discount_type' => $couponType,
-                    'discount_target' => $couponTarget,
-                    'order_item_id' => null,
-                    'origin_type' => DiscountOriginType::COUPON,
-                    'origin_id' => $coupon->id,
-                ];
-            }
-        }
-
-        return $discounts;
-    }
-
-    private function calculateDiscountAmount(float $baseAmount, DiscountType $discountType, float $discountValue): float
-    {
-        if ($baseAmount <= 0 || $discountValue <= 0) {
-            return 0.0;
-        }
-
-        $amount = $discountType === DiscountType::PERCENTAGE
-            ? ($baseAmount * $discountValue) / 100
-            : $discountValue;
-
-        return round(max(0, min($amount, $baseAmount)), 2);
     }
 
     private function canManageRestaurantOrder(User $user, Order $order): bool

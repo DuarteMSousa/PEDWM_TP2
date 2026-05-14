@@ -195,6 +195,8 @@ const COURIER_AVAILABLE_DELIVERIES_QUERY = `
       estimated_pickup_time_min
       pickup_address
       dropoff_address
+      offer_token
+      offer_expires_at
       created_at
     }
   }
@@ -306,7 +308,7 @@ export async function removeCartItem({ session, cartItemId }) {
   return data.removeCartItem
 }
 
-export async function checkoutCart(session) {
+export async function checkoutCart(session, { couponCode = null } = {}) {
   const idempotencyKey =
     typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
 
@@ -315,6 +317,7 @@ export async function checkoutCart(session) {
     variables: {
       input: {
         payment_method: 'CASH',
+        coupon_code: couponCode,
       },
     },
     headers: {
@@ -371,14 +374,14 @@ export async function fetchCourierAvailableDeliveries(session, { limit = 20 } = 
   return data.courierAvailableDeliveries ?? []
 }
 
-export async function acceptDeliveryJob({ session, deliveryId }) {
+export async function acceptDeliveryJob({ session, deliveryId, offerToken }) {
   const idempotencyKey =
     typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}`
 
   const data = await graphqlRequest({
     query: ACCEPT_DELIVERY_JOB_MUTATION,
     variables: {
-      input: { delivery_id: deliveryId },
+      input: { delivery_id: deliveryId, offer_token: offerToken },
     },
     headers: {
       ...buildAuthHeaders({

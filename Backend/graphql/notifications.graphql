@@ -22,6 +22,26 @@ type MarkAllNotificationsReadPayload {
   affected_count: Int!
 }
 
+input RegisterPushTokenInput {
+  token: String!
+  provider: String = "expo"
+  platform: String
+}
+
+type RegisterPushTokenPayload {
+  ok: Boolean!
+  push_token_id: ID!
+  is_active: Boolean!
+}
+
+input UnregisterPushTokenInput {
+  token: String!
+}
+
+type UnregisterPushTokenPayload {
+  ok: Boolean!
+}
+
 extend type Query {
   userNotifications(unread_only: Boolean = false, limit: Int = 50): [UserNotification!]!
     @field(resolver: "App\\GraphQL\\Queries\\NotificationQueries@userNotifications")
@@ -33,4 +53,10 @@ extend type Mutation {
 
   markAllNotificationsRead: MarkAllNotificationsReadPayload!
     @field(resolver: "App\\GraphQL\\Mutations\\MarkAllNotificationsRead")
+
+  registerPushToken(input: RegisterPushTokenInput!): RegisterPushTokenPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\RegisterPushToken")
+
+  unregisterPushToken(input: UnregisterPushTokenInput!): UnregisterPushTokenPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\UnregisterPushToken")
 }

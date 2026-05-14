@@ -17,7 +17,13 @@ class Coupon extends Model
         'description',
         'type',
         'target',
+        'product_id',
+        'category_id',
         'discount',
+        'min_order_total',
+        'max_discount_amount',
+        'max_uses',
+        'used_count',
         'expiry_date',
     ];
 
@@ -26,6 +32,10 @@ class Coupon extends Model
         return [
             'expiry_date' => 'datetime',
             'discount' => 'float',
+            'min_order_total' => 'float',
+            'max_discount_amount' => 'float',
+            'max_uses' => 'integer',
+            'used_count' => 'integer',
         ];
     }
 
@@ -37,6 +47,16 @@ class Coupon extends Model
     public function promotionItems(): HasMany
     {
         return $this->hasMany(PromotionItem::class);
+    }
+
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
     }
 
     public function orderDiscounts(): HasMany

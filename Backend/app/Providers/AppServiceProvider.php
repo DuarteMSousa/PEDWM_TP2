@@ -4,6 +4,10 @@ namespace App\Providers;
 
 use App\Services\CommerceService\CommerceService;
 use App\Services\CommerceService\CommerceServiceInterface;
+use App\Services\CheckoutDiscountService\CheckoutDiscountService;
+use App\Services\CheckoutDiscountService\CheckoutDiscountServiceInterface;
+use App\Services\DeliveryOfferService\DeliveryOfferService;
+use App\Services\DeliveryOfferService\DeliveryOfferServiceInterface;
 use App\Services\NotificationService\NotificationService;
 use App\Services\NotificationService\NotificationServiceInterface;
 use App\Services\ProductService\ProductService;
@@ -20,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->bind(CommerceServiceInterface::class, CommerceService::class);
+        $this->app->bind(CheckoutDiscountServiceInterface::class, CheckoutDiscountService::class);
+        $this->app->bind(DeliveryOfferServiceInterface::class, DeliveryOfferService::class);
         $this->app->bind(NotificationServiceInterface::class, NotificationService::class);
         $this->app->bind(ProductServiceInterface::class, ProductService::class);
         $this->app->bind(UserServiceInterface::class, UserService::class);

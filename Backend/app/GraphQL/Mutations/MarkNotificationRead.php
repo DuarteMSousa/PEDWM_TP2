@@ -3,12 +3,13 @@
 namespace App\GraphQL\Mutations;
 
 use App\Models\Notification;
-use App\Models\User;
+use App\Support\ResolvesAuthenticatedUser;
 use GraphQL\Error\UserError;
-use Illuminate\Auth\AuthenticationException;
 
 class MarkNotificationRead
 {
+    use ResolvesAuthenticatedUser;
+
     /**
      * @param  array<string, mixed>  $args
      * @return array<string, mixed>
@@ -39,21 +40,4 @@ class MarkNotificationRead
         ];
     }
 
-    private function resolveAuthenticatedUser(): User
-    {
-        $user = auth()->user();
-
-        if (! $user && app()->environment(['local', 'testing'])) {
-            $devUserId = request()->header('X-Dev-User-Id');
-            if ($devUserId) {
-                $user = User::query()->find($devUserId);
-            }
-        }
-
-        if (! $user) {
-            throw new AuthenticationException('Authentication required.');
-        }
-
-        return $user;
-    }
 }

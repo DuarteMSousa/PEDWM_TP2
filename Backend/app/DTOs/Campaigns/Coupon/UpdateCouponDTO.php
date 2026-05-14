@@ -15,6 +15,11 @@ class UpdateCouponDTO extends Data
         public readonly DiscountTarget $target ,
         public readonly string $expiry_date,
         public readonly float $discount = 0,
+        public readonly ?string $product_id = null,
+        public readonly ?string $category_id = null,
+        public readonly ?float $min_order_total = null,
+        public readonly ?float $max_discount_amount = null,
+        public readonly ?int $max_uses = null,
     ) {
     }
 

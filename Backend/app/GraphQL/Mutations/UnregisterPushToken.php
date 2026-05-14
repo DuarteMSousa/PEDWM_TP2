@@ -2,10 +2,10 @@
 
 namespace App\GraphQL\Mutations;
 
-use App\Models\Notification;
+use App\Models\UserPushToken;
 use App\Support\ResolvesAuthenticatedUser;
 
-class MarkAllNotificationsRead
+class UnregisterPushToken
 {
     use ResolvesAuthenticatedUser;
 
@@ -16,16 +16,14 @@ class MarkAllNotificationsRead
     public function __invoke(null $_, array $args): array
     {
         $user = $this->resolveAuthenticatedUser();
+        $token = (string) $args['input']['token'];
 
-        $affected = Notification::query()
+        UserPushToken::query()
             ->where('user_id', $user->id)
-            ->whereNull('read_at')
-            ->update(['read_at' => now()]);
+            ->where('token', $token)
+            ->update(['is_active' => false]);
 
-        return [
-            'ok' => true,
-            'affected_count' => $affected,
-        ];
+        return ['ok' => true];
     }
-
 }
+

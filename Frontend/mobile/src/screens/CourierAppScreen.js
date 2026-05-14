@@ -216,12 +216,13 @@ export function CourierAppScreen({ session, onLogout }) {
     }
   }
 
-  async function handleAcceptOffer(deliveryId) {
+  async function handleAcceptOffer(offer) {
     try {
       setLoading(true)
       const payload = await acceptDeliveryJob({
         session,
-        deliveryId,
+        deliveryId: offer.delivery_id,
+        offerToken: offer.offer_token,
       })
 
       setActiveDelivery(payload)
@@ -397,7 +398,7 @@ export function CourierAppScreen({ session, onLogout }) {
                         <View style={styles.actionsRow}>
                           <Pressable
                             style={styles.acceptBtn}
-                            onPress={() => handleAcceptOffer(offer.delivery_id)}
+                            onPress={() => handleAcceptOffer(offer)}
                             disabled={loading}
                           >
                             <Text style={styles.acceptBtnText}>Aceitar entrega</Text>

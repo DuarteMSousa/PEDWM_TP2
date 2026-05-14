@@ -10,6 +10,8 @@ use App\Repositories\ChainManagerRepository\ChainManagerRepository;
 use App\Repositories\ChainManagerRepository\ChainManagerRepositoryInterface;
 use App\Repositories\CouponRepository\CouponRepository;
 use App\Repositories\CouponRepository\CouponRepositoryInterface;
+use App\Repositories\DeliveryOfferRepository\DeliveryOfferRepository;
+use App\Repositories\DeliveryOfferRepository\DeliveryOfferRepositoryInterface;
 use App\Repositories\CourierRepository\CourierRepository;
 use App\Repositories\CourierRepository\CourierRepositoryInterface;
 use App\Repositories\LocalManagerRepository\LocalManagerRepository;
@@ -45,6 +47,7 @@ class AppRepositoryProvider extends ServiceProvider
         $this->app->bind(CategoryRepositoryInterface::class, CategoryRepository::class);
         $this->app->bind(ChainManagerRepositoryInterface::class, ChainManagerRepository::class);
         $this->app->bind(CouponRepositoryInterface::class, CouponRepository::class);
+        $this->app->bind(DeliveryOfferRepositoryInterface::class, DeliveryOfferRepository::class);
         $this->app->bind(CourierRepositoryInterface::class, CourierRepository::class);
         $this->app->bind(LocalManagerRepositoryInterface::class, LocalManagerRepository::class);
         $this->app->bind(OrderRepositoryInterface::class, OrderRepository::class);

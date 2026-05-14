@@ -140,12 +140,13 @@ export async function acceptRestaurantOrder({ session, orderId }) {
   return data.acceptRestaurantOrder
 }
 
-export async function rejectRestaurantOrder({ session, orderId }) {
+export async function rejectRestaurantOrder({ session, orderId, reason = null }) {
   const data = await graphqlRequest({
     query: REJECT_RESTAURANT_ORDER_MUTATION,
     variables: {
       input: {
         order_id: orderId,
+        reason,
       },
     },
     headers: buildAuthHeaders({
