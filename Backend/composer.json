@@ -16,7 +16,7 @@
         "laravel/tinker": "^3.0",
         "mll-lab/laravel-graphql-playground": "^1.1",
         "nuwave/lighthouse": "^6.66",
-        "spatie/laravel-data": "^4.18"
+        "spatie/laravel-data": "^4.23"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
