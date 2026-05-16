@@ -2,13 +2,13 @@
 
 namespace App\Services\PaymentService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Payment\CreatePaymentDTO;
 use App\Enums\PaymentEventType;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
 use App\Services\OrderService\OrderServiceInterface;
 use App\Services\OutboxService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -29,23 +29,23 @@ class PaymentService implements PaymentServiceInterface
         return Payment::query()->findOrFail($paymentId)->events()->orderBy('timestamp')->get();
     }
 
+    #[Transactional]
     public function create(CreatePaymentDTO $data): Payment
     {
-        return DB::transaction(function () use ($data): Payment {
-            $payment = Payment::query()->create([
-                'order_id' => $data->order_id,
-                'method' => $data->method->value,
-                'amount' => $data->amount,
-                'status' => PaymentStatus::PENDING->value,
-            ]);
+        $payment = Payment::query()->create([
+            'order_id' => $data->order_id,
+            'method' => $data->method->value,
+            'amount' => $data->amount,
+            'status' => PaymentStatus::PENDING->value,
+        ]);
 
-            $payment->load('order');
-            $this->recordEvent($payment, PaymentEventType::PAYMENT_CREATED, []);
+        $payment->load('order');
+        $this->recordEvent($payment, PaymentEventType::PAYMENT_CREATED, []);
 
-            return $payment->refresh()->load('events');
-        });
+        return $payment->refresh()->load('events');
     }
 
+    #[Transactional]
     public function confirm(string $paymentId, ?string $transactionId): Payment
     {
         return $this->setStatus($paymentId, PaymentStatus::COMPLETED, PaymentEventType::PAYMENT_COMPLETED, [
@@ -54,6 +54,7 @@ class PaymentService implements PaymentServiceInterface
         ]);
     }
 
+    #[Transactional]
     public function cancel(string $paymentId, ?string $reason): Payment
     {
         return $this->setStatus($paymentId, PaymentStatus::CANCELLED, PaymentEventType::PAYMENT_CANCELLED, [
@@ -61,6 +62,7 @@ class PaymentService implements PaymentServiceInterface
         ]);
     }
 
+    #[Transactional]
     public function fail(string $paymentId, ?string $reason): Payment
     {
         return $this->setStatus($paymentId, PaymentStatus::FAILED, PaymentEventType::PAYMENT_FAILED, [
@@ -70,34 +72,32 @@ class PaymentService implements PaymentServiceInterface
 
     private function setStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload): Payment
     {
-        return DB::transaction(function () use ($paymentId, $status, $eventType, $payload) {
-            $payment = Payment::query()->with('order')->lockForUpdate()->findOrFail($paymentId);
-            $this->assertTransition($payment->status, $status);
-            $payment->fill([
-                'status' => $status->value,
-                'transaction_id' => $payload['transaction_id'] ?? $payment->transaction_id,
-                'paid_at' => $payload['paid_at'] ?? $payment->paid_at,
-            ]);
-            $payment->save();
+        $payment = Payment::query()->with('order')->lockForUpdate()->findOrFail($paymentId);
+        $this->assertTransition($payment->status, $status);
+        $payment->fill([
+            'status' => $status->value,
+            'transaction_id' => $payload['transaction_id'] ?? $payment->transaction_id,
+            'paid_at' => $payload['paid_at'] ?? $payment->paid_at,
+        ]);
+        $payment->save();
 
-            if ($eventType) {
-                $this->recordEvent($payment, $eventType, $payload);
-            }
+        if ($eventType) {
+            $this->recordEvent($payment, $eventType, $payload);
+        }
 
-            if ($status === PaymentStatus::COMPLETED) {
-                app(OrderServiceInterface::class)->confirmAfterPayment($payment->order, $payload['actor_user_id'] ?? 'payment');
-            }
+        if ($status === PaymentStatus::COMPLETED) {
+            app(OrderServiceInterface::class)->confirmAfterPayment($payment->order, $payload['actor_user_id'] ?? 'payment');
+        }
 
-            if (in_array($status, [PaymentStatus::FAILED, PaymentStatus::CANCELLED], true)) {
-                app(OrderServiceInterface::class)->cancelByClient(
-                    $payment->order->user_id,
-                    $payment->order_id,
-                    $payload['reason'] ?? $status->value
-                );
-            }
+        if (in_array($status, [PaymentStatus::FAILED, PaymentStatus::CANCELLED], true)) {
+            app(OrderServiceInterface::class)->cancelByClient(
+                $payment->order->user_id,
+                $payment->order_id,
+                $payload['reason'] ?? $status->value
+            );
+        }
 
-            return $payment->refresh()->load('events');
-        });
+        return $payment->refresh()->load('events');
     }
 
     private function assertTransition(PaymentStatus $from, PaymentStatus $to): void

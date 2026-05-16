@@ -2,6 +2,7 @@
 
 namespace App\Services\NotificationFeedService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Notification\RegisterPushTokenDTO;
 use App\Models\Notification;
 use App\Models\UserPushToken;
@@ -22,6 +23,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
         return $query->get();
     }
 
+    #[Transactional]
     public function markRead(string $userId, string $notificationId): array
     {
         $notification = Notification::query()
@@ -36,6 +38,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
         ];
     }
 
+    #[Transactional]
     public function markAllRead(string $userId): array
     {
         $affected = Notification::query()
@@ -49,6 +52,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
         ];
     }
 
+    #[Transactional]
     public function registerPushToken(string $userId, RegisterPushTokenDTO $data): array
     {
         $token = UserPushToken::query()->updateOrCreate(
@@ -71,6 +75,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
         ];
     }
 
+    #[Transactional]
     public function unregisterPushToken(string $userId, string $token): array
     {
         UserPushToken::query()

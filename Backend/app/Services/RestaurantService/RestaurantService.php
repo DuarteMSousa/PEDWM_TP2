@@ -2,6 +2,7 @@
 
 namespace App\Services\RestaurantService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Restaurant\CreateRestaurantDTO;
 use App\DTOs\Restaurant\SearchRestaurantsDTO;
 use App\DTOs\Restaurant\UpdateRestaurantDTO;
@@ -15,9 +16,7 @@ class RestaurantService implements RestaurantServiceInterface
 {
     private array $with = ['chain', 'address'];
 
-    public function __construct(private RestaurantRepositoryInterface $restaurantRepository)
-    {
-    }
+    public function __construct(private RestaurantRepositoryInterface $restaurantRepository) {}
 
     public function search(SearchRestaurantsDTO $filters)
     {
@@ -29,6 +28,7 @@ class RestaurantService implements RestaurantServiceInterface
         return Restaurant::query()->with($this->with)->find($id);
     }
 
+    #[Transactional]
     public function create(string $actorUserId, CreateRestaurantDTO $data): Restaurant
     {
         $this->validateInput($data->toArray());
@@ -42,6 +42,7 @@ class RestaurantService implements RestaurantServiceInterface
         ])->load($this->with);
     }
 
+    #[Transactional]
     public function update(string $actorUserId, string $id, UpdateRestaurantDTO $data): ?Restaurant
     {
         $restaurant = Restaurant::query()->find($id);
@@ -63,6 +64,7 @@ class RestaurantService implements RestaurantServiceInterface
         return $restaurant->load($this->with);
     }
 
+    #[Transactional]
     public function delete(string $actorUserId, string $id): bool
     {
         return (bool) Restaurant::query()->whereKey($id)->delete();

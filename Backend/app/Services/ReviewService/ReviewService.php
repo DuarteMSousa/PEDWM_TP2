@@ -2,6 +2,7 @@
 
 namespace App\Services\ReviewService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Review\CreateReviewDTO;
 use App\DTOs\Review\UpdateReviewDTO;
 use App\Models\Review;
@@ -28,11 +29,12 @@ class ReviewService implements ReviewServiceInterface
             ->items();
     }
 
+    #[Transactional]
     public function updateForUser(string $userId, string $reviewId, UpdateReviewDTO $data): ?Review
     {
         $review = Review::query()->where('user_id', $userId)->find($reviewId);
 
-        if (!$review) {
+        if (! $review) {
             return null;
         }
 
@@ -47,6 +49,7 @@ class ReviewService implements ReviewServiceInterface
         return $review;
     }
 
+    #[Transactional]
     public function deleteForUser(string $userId, string $reviewId): bool
     {
         return (bool) Review::query()
@@ -55,6 +58,7 @@ class ReviewService implements ReviewServiceInterface
             ->delete();
     }
 
+    #[Transactional]
     public function create(CreateReviewDTO $data): Review
     {
         $this->validateInput($data->toArray());

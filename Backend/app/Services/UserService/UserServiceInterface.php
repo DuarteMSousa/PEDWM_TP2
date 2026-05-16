@@ -15,5 +15,3 @@ interface UserServiceInterface
 
     public function deleteUser(string $id);
 }
-
-

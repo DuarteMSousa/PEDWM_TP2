@@ -90,19 +90,19 @@ class RayAopServiceProvider extends ServiceProvider
         $this->app->singleton(Aspect::class, function (): Aspect {
             $aspect = new Aspect(config('ray_aop.cache_dir'));
             $aspect->bind(
-                (new Matcher())->any(),
-                (new Matcher())->annotatedWith(Transactional::class),
+                (new Matcher)->any(),
+                (new Matcher)->annotatedWith(Transactional::class),
                 [
-                    new TransactionInterceptor(),
+                    new TransactionInterceptor,
                 ]
             );
 
             $aspect->bind(
-                (new Matcher())->any(),
-                (new Matcher())->any(),
+                (new Matcher)->any(),
+                (new Matcher)->any(),
                 [
-                    new ErrorHandlingInterceptor(),
-                    new LoggingInterceptor(),
+                    new ErrorHandlingInterceptor,
+                    new LoggingInterceptor,
                 ]
             );
 
@@ -148,16 +148,19 @@ class RayAopServiceProvider extends ServiceProvider
 
             if ($type instanceof ReflectionNamedType && ! $type->isBuiltin()) {
                 $arguments[] = $app->make($type->getName());
+
                 continue;
             }
 
             if ($parameter->isDefaultValueAvailable()) {
                 $arguments[] = $parameter->getDefaultValue();
+
                 continue;
             }
 
             if ($parameter->allowsNull()) {
                 $arguments[] = null;
+
                 continue;
             }
 

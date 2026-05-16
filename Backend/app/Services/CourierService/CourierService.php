@@ -2,6 +2,7 @@
 
 namespace App\Services\CourierService;
 
+use App\Aspects\Transactional;
 use App\Models\Courier;
 
 class CourierService implements CourierServiceInterface
@@ -11,6 +12,7 @@ class CourierService implements CourierServiceInterface
         return Courier::query()->with('user')->find($userId);
     }
 
+    #[Transactional]
     public function setStatus(string $userId, string $status): Courier
     {
         $courier = Courier::query()->findOrFail($userId);
@@ -19,6 +21,7 @@ class CourierService implements CourierServiceInterface
         return $courier->refresh()->load('user');
     }
 
+    #[Transactional]
     public function updateLocation(string $courierId, float $latitude, float $longitude): Courier
     {
         $courier = Courier::query()->findOrFail($courierId);

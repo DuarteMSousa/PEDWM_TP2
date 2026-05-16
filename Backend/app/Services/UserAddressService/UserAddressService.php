@@ -2,10 +2,10 @@
 
 namespace App\Services\UserAddressService;
 
+use App\Aspects\Transactional;
 use App\DTOs\UserAddress\CreateUserAddressDTO;
 use App\DTOs\UserAddress\UpdateUserAddressDTO;
 use App\Models\UserAddress;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class UserAddressService implements UserAddressServiceInterface
@@ -19,43 +19,42 @@ class UserAddressService implements UserAddressServiceInterface
             ->get();
     }
 
+    #[Transactional]
     public function createForUser(string $userId, CreateUserAddressDTO $data): UserAddress
     {
-        return DB::transaction(function () use ($userId, $data) {
-            if ($data->is_default === true) {
-                $this->clearDefault($userId);
-            }
+        if ($data->is_default === true) {
+            $this->clearDefault($userId);
+        }
 
-            return UserAddress::query()->create([
-                'user_id' => $userId,
-                ...$this->createPayload($data),
-            ]);
-        });
+        return UserAddress::query()->create([
+            'user_id' => $userId,
+            ...$this->createPayload($data),
+        ]);
     }
 
+    #[Transactional]
     public function updateForUser(string $userId, string $addressId, UpdateUserAddressDTO $data): ?UserAddress
     {
-        return DB::transaction(function () use ($userId, $addressId, $data) {
-            $address = UserAddress::query()
-                ->where('user_id', $userId)
-                ->find($addressId);
+        $address = UserAddress::query()
+            ->where('user_id', $userId)
+            ->find($addressId);
 
-            if (!$address) {
-                return null;
-            }
+        if (! $address) {
+            return null;
+        }
 
-            if ($data->is_default === true) {
-                $this->clearDefault($userId);
-            }
+        if ($data->is_default === true) {
+            $this->clearDefault($userId);
+        }
 
-            $this->validateInput([...$address->toArray(), ...array_filter($data->toArray(), static fn ($value) => $value !== null)]);
-            $address->fill($this->updatePayload($data));
-            $address->save();
+        $this->validateInput([...$address->toArray(), ...array_filter($data->toArray(), static fn ($value) => $value !== null)]);
+        $address->fill($this->updatePayload($data));
+        $address->save();
 
-            return $address;
-        });
+        return $address;
     }
 
+    #[Transactional]
     public function deleteForUser(string $userId, string $addressId): bool
     {
         return (bool) UserAddress::query()
@@ -64,23 +63,22 @@ class UserAddressService implements UserAddressServiceInterface
             ->delete();
     }
 
+    #[Transactional]
     public function setDefault(string $userId, string $addressId): ?UserAddress
     {
-        return DB::transaction(function () use ($userId, $addressId) {
-            $address = UserAddress::query()
-                ->where('user_id', $userId)
-                ->find($addressId);
+        $address = UserAddress::query()
+            ->where('user_id', $userId)
+            ->find($addressId);
 
-            if (!$address) {
-                return null;
-            }
+        if (! $address) {
+            return null;
+        }
 
-            $this->clearDefault($userId);
-            $address->is_default = true;
-            $address->save();
+        $this->clearDefault($userId);
+        $address->is_default = true;
+        $address->save();
 
-            return $address;
-        });
+        return $address;
     }
 
     private function clearDefault(string $userId): void

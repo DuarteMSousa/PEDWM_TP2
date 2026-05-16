@@ -3,8 +3,7 @@
 namespace App\Services\OrderService;
 
 use App\DTOs\Order\CheckoutDTO;
-use App\Enums\OrderEventType;
-use App\Enums\OrderStatus;
+use App\Models\Cart;
 use App\Models\Order;
 
 interface OrderServiceInterface
@@ -35,7 +34,7 @@ interface OrderServiceInterface
 
     public function markReady(string $actorUserId, string $orderId): Order;
 
-    public function repeatOrder(string $userId, string $orderId): \App\Models\Cart;
+    public function repeatOrder(string $userId, string $orderId): Cart;
 
     public function confirmAfterPayment(Order $order, string $actorUserId): Order;
 

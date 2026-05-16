@@ -3,6 +3,7 @@
 namespace App\Services\TrackingService;
 
 use App\DTOs\Tracking\UpdateCourierLocationDTO;
+use App\Models\CourierPositionHistory;
 
 interface TrackingServiceInterface
 {
@@ -10,7 +11,7 @@ interface TrackingServiceInterface
 
     public function deliveryTracking(string $deliveryId): array;
 
-    public function courierLastPosition(string $courierId): ?\App\Models\CourierPositionHistory;
+    public function courierLastPosition(string $courierId): ?CourierPositionHistory;
 
     public function updateCourierLocation(UpdateCourierLocationDTO $data): array;
 }

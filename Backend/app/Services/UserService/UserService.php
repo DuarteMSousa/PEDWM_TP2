@@ -2,10 +2,10 @@
 
 namespace App\Services\UserService;
 
+use App\Aspects\Transactional;
 use App\DTOs\User\CreateUserDTO;
 use App\DTOs\User\UpdateUserDTO;
 use App\Repositories\UserRepository\UserRepositoryInterface;
-use Illuminate\Support\Facades\DB;
 
 class UserService implements UserServiceInterface
 {
@@ -16,24 +16,21 @@ class UserService implements UserServiceInterface
         return $this->userRepository->findById($id);
     }
 
+    #[Transactional]
     public function createUser(CreateUserDTO $data)
     {
-        return DB::transaction(function () use ($data) {
-            return $this->userRepository->createUser($data->withHashedPassword());
-        });
+        return $this->userRepository->createUser($data->withHashedPassword());
     }
 
+    #[Transactional]
     public function updateUser(string $id, UpdateUserDTO $data)
     {
-        return DB::transaction(function () use ($id, $data) {
-            return $this->userRepository->updateUser($id, $data);
-        });
+        return $this->userRepository->updateUser($id, $data);
     }
 
+    #[Transactional]
     public function deleteUser(string $id)
     {
-        return DB::transaction(function () use ($id) {
-            return $this->userRepository->deleteUser($id);
-        });
+        return $this->userRepository->deleteUser($id);
     }
 }

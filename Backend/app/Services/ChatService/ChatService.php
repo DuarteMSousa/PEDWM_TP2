@@ -2,6 +2,7 @@
 
 namespace App\Services\ChatService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Chat\AddChatParticipantDTO;
 use App\DTOs\Chat\CreateOrderChatDTO;
 use App\DTOs\Chat\SendMessageDTO;
@@ -9,7 +10,6 @@ use App\Models\Chat;
 use App\Models\ChatParticipant;
 use App\Models\Message;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
 
 class ChatService implements ChatServiceInterface
 {
@@ -44,27 +44,27 @@ class ChatService implements ChatServiceInterface
             ->get();
     }
 
+    #[Transactional]
     public function createOrderChat(string $actorUserId, CreateOrderChatDTO $data): Chat
     {
-        return DB::transaction(function () use ($data) {
-            $chat = Chat::query()->create([
-                'order_id' => $data->order_id,
-                'type' => $data->type->value,
+        $chat = Chat::query()->create([
+            'order_id' => $data->order_id,
+            'type' => $data->type->value,
+        ]);
+
+        foreach ($data->participant_user_ids as $userId) {
+            $user = User::query()->findOrFail($userId);
+            $chat->participants()->create([
+                'user_id' => $user->id,
+                'user_type' => $user->user_type->value ?? $user->user_type,
+                'joined_at' => now(),
             ]);
+        }
 
-            foreach ($data->participant_user_ids as $userId) {
-                $user = User::query()->findOrFail($userId);
-                $chat->participants()->create([
-                    'user_id' => $user->id,
-                    'user_type' => $user->user_type->value ?? $user->user_type,
-                    'joined_at' => now(),
-                ]);
-            }
-
-            return $chat->load(['participants', 'messages']);
-        });
+        return $chat->load(['participants', 'messages']);
     }
 
+    #[Transactional]
     public function close(string $chatId): Chat
     {
         $chat = Chat::query()->findOrFail($chatId);
@@ -73,6 +73,7 @@ class ChatService implements ChatServiceInterface
         return $chat->refresh()->load(['participants', 'messages']);
     }
 
+    #[Transactional]
     public function addParticipant(string $actorUserId, AddChatParticipantDTO $data): ChatParticipant
     {
         return ChatParticipant::query()->create([
@@ -83,11 +84,13 @@ class ChatService implements ChatServiceInterface
         ]);
     }
 
+    #[Transactional]
     public function removeParticipant(string $participantId): bool
     {
         return (bool) ChatParticipant::query()->whereKey($participantId)->delete();
     }
 
+    #[Transactional]
     public function sendMessage(string $senderUserId, SendMessageDTO $data): Message
     {
         $participant = ChatParticipant::query()
@@ -103,6 +106,7 @@ class ChatService implements ChatServiceInterface
         ]);
     }
 
+    #[Transactional]
     public function markAsRead(string $chatId, string $userId): ChatParticipant
     {
         $participant = ChatParticipant::query()

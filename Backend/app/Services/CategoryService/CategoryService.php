@@ -2,6 +2,7 @@
 
 namespace App\Services\CategoryService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Category\CreateCategoryDTO;
 use App\DTOs\Category\UpdateCategoryDTO;
 use App\Models\Category;
@@ -35,6 +36,7 @@ class CategoryService implements CategoryServiceInterface
         return $query->orderBy('name')->limit($limit)->get();
     }
 
+    #[Transactional]
     public function create(string $actorUserId, CreateCategoryDTO $data): Category
     {
         $this->validateInput($data->toArray());
@@ -45,6 +47,7 @@ class CategoryService implements CategoryServiceInterface
         ])->load('products.optionGroups.options');
     }
 
+    #[Transactional]
     public function update(string $actorUserId, string $id, UpdateCategoryDTO $data): ?Category
     {
         $category = Category::query()->find($id);
@@ -63,6 +66,7 @@ class CategoryService implements CategoryServiceInterface
         return $category->load('products.optionGroups.options');
     }
 
+    #[Transactional]
     public function delete(string $actorUserId, string $id): bool
     {
         return (bool) Category::query()->whereKey($id)->delete();

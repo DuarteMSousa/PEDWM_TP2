@@ -2,6 +2,7 @@
 
 namespace App\Services\NotificationService;
 
+use App\Aspects\Transactional;
 use App\Enums\NotificationType;
 use App\Models\Notification;
 use App\Services\OutboxService;
@@ -9,13 +10,12 @@ use Illuminate\Support\Str;
 
 class NotificationService implements NotificationServiceInterface
 {
-    public function __construct(private OutboxService $outboxService)
-    {
-    }
+    public function __construct(private OutboxService $outboxService) {}
 
     /**
      * @param  array<string, mixed>  $data
      */
+    #[Transactional]
     public function createAndDispatch(
         string $userId,
         NotificationType $type,
@@ -57,4 +57,3 @@ class NotificationService implements NotificationServiceInterface
         return $notification;
     }
 }
-

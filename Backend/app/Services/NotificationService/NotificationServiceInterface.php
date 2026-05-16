@@ -19,4 +19,3 @@ interface NotificationServiceInterface
         ?string $actorId = null
     ): Notification;
 }
-

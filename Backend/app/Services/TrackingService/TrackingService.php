@@ -2,14 +2,13 @@
 
 namespace App\Services\TrackingService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Tracking\UpdateCourierLocationDTO;
-use App\Models\Courier;
 use App\Models\CourierPositionHistory;
 use App\Models\Delivery;
 use App\Models\Order;
 use App\Services\CourierService\CourierServiceInterface;
 use App\Services\OutboxService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class TrackingService implements TrackingServiceInterface
@@ -50,47 +49,46 @@ class TrackingService implements TrackingServiceInterface
             ->first();
     }
 
+    #[Transactional]
     public function updateCourierLocation(UpdateCourierLocationDTO $data): array
     {
-        return DB::transaction(function () use ($data) {
-            $delivery = Delivery::query()
-                ->where('courier_id', $data->courier_id)
-                ->findOrFail($data->delivery_id);
+        $delivery = Delivery::query()
+            ->where('courier_id', $data->courier_id)
+            ->findOrFail($data->delivery_id);
 
-            app(CourierServiceInterface::class)->updateLocation(
-                $data->courier_id,
-                $data->latitude,
-                $data->longitude
-            );
+        app(CourierServiceInterface::class)->updateLocation(
+            $data->courier_id,
+            $data->latitude,
+            $data->longitude
+        );
 
-            $timestamp = $data->recorded_at ?? now()->toIso8601String();
-            CourierPositionHistory::query()->create([
-                'delivery_id' => $delivery->id,
-                'latitude' => $data->latitude,
-                'longitude' => $data->longitude,
-                'timestamp' => $timestamp,
-            ]);
+        $timestamp = $data->recorded_at ?? now()->toIso8601String();
+        CourierPositionHistory::query()->create([
+            'delivery_id' => $delivery->id,
+            'latitude' => $data->latitude,
+            'longitude' => $data->longitude,
+            'timestamp' => $timestamp,
+        ]);
 
-            app(OutboxService::class)->enqueue('delivery', $delivery->id, 'COURIER_POSITION_UPDATED', [
-                'eventId' => (string) Str::uuid(),
-                'eventName' => 'COURIER_POSITION_UPDATED',
-                'orderId' => $delivery->order_id,
-                'deliveryId' => $delivery->id,
-                'courierId' => $data->courier_id,
-                'lat' => $data->latitude,
-                'lng' => $data->longitude,
-                'heading' => $data->heading,
-                'speed' => $data->speed,
-                'accuracy' => $data->accuracy,
-                'recordedAt' => $timestamp,
-                'etaSeconds' => null,
-            ]);
+        app(OutboxService::class)->enqueue('delivery', $delivery->id, 'COURIER_POSITION_UPDATED', [
+            'eventId' => (string) Str::uuid(),
+            'eventName' => 'COURIER_POSITION_UPDATED',
+            'orderId' => $delivery->order_id,
+            'deliveryId' => $delivery->id,
+            'courierId' => $data->courier_id,
+            'lat' => $data->latitude,
+            'lng' => $data->longitude,
+            'heading' => $data->heading,
+            'speed' => $data->speed,
+            'accuracy' => $data->accuracy,
+            'recordedAt' => $timestamp,
+            'etaSeconds' => null,
+        ]);
 
-            return [
-                'ok' => true,
-                'delivery_id' => $delivery->id,
-                'recorded_at' => $timestamp,
-            ];
-        });
+        return [
+            'ok' => true,
+            'delivery_id' => $delivery->id,
+            'recorded_at' => $timestamp,
+        ];
     }
 }

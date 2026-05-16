@@ -2,12 +2,12 @@
 
 namespace App\Services\ProductService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Product\CreateProductDTO;
 use App\DTOs\Product\UpdateProductDTO;
 use App\Models\Category;
 use App\Models\Product;
 use App\Repositories\ProductRepository\ProductRepositoryInterface;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class ProductService implements ProductServiceInterface
@@ -32,29 +32,26 @@ class ProductService implements ProductServiceInterface
             ->optionGroups;
     }
 
+    #[Transactional]
     public function createProduct(string $actorUserId, CreateProductDTO $data)
     {
         $this->validateCreate($data);
 
-        return DB::transaction(function () use ($data) {
-            return $this->productRepository->createProduct($data);
-        });
+        return $this->productRepository->createProduct($data);
     }
 
+    #[Transactional]
     public function updateProduct(string $actorUserId, string $id, UpdateProductDTO $data)
     {
         $this->validateUpdate($id, $data);
 
-        return DB::transaction(function () use ($id, $data) {
-            return $this->productRepository->updateProduct($id, $data);
-        });
+        return $this->productRepository->updateProduct($id, $data);
     }
 
+    #[Transactional]
     public function deleteProduct(string $actorUserId, string $id)
     {
-        return DB::transaction(function () use ($id) {
-            return $this->productRepository->deleteProduct($id);
-        });
+        return $this->productRepository->deleteProduct($id);
     }
 
     private function validateCreate(CreateProductDTO $data): void

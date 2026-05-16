@@ -2,6 +2,7 @@
 
 namespace App\Services\RestaurantChainService;
 
+use App\Aspects\Transactional;
 use App\DTOs\RestaurantChain\CreateRestaurantChainDTO;
 use App\DTOs\RestaurantChain\UpdateRestaurantChainDTO;
 use App\Models\RestaurantChain;
@@ -19,6 +20,7 @@ class RestaurantChainService implements RestaurantChainServiceInterface
         return RestaurantChain::query()->orderBy('name')->limit($limit)->get();
     }
 
+    #[Transactional]
     public function create(string $actorUserId, CreateRestaurantChainDTO $data): RestaurantChain
     {
         $this->validateInput($data->toArray());
@@ -26,6 +28,7 @@ class RestaurantChainService implements RestaurantChainServiceInterface
         return RestaurantChain::query()->create(['name' => $data->name]);
     }
 
+    #[Transactional]
     public function update(string $actorUserId, string $id, UpdateRestaurantChainDTO $data): ?RestaurantChain
     {
         $chain = RestaurantChain::query()->find($id);
@@ -41,6 +44,7 @@ class RestaurantChainService implements RestaurantChainServiceInterface
         return $chain;
     }
 
+    #[Transactional]
     public function delete(string $actorUserId, string $id): bool
     {
         return (bool) RestaurantChain::query()->whereKey($id)->delete();

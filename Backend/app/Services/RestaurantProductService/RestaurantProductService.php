@@ -2,6 +2,7 @@
 
 namespace App\Services\RestaurantProductService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Product\CreateRestaurantProductDTO;
 use App\DTOs\Product\UpdateRestaurantProductDTO;
 use App\Models\Category;
@@ -45,11 +46,13 @@ class RestaurantProductService implements RestaurantProductServiceInterface
         ];
     }
 
+    #[Transactional]
     public function setAvailability(string $id, bool $isAvailable): ?RestaurantProduct
     {
-        return $this->update($id, ['is_available' => $isAvailable]);
+        return $this->update('', $id, new UpdateRestaurantProductDTO(is_available: $isAvailable));
     }
 
+    #[Transactional]
     public function create(string $actorUserId, CreateRestaurantProductDTO $data): RestaurantProduct
     {
         $this->validateInput($data->toArray());
@@ -63,6 +66,7 @@ class RestaurantProductService implements RestaurantProductServiceInterface
         ])->load($this->with);
     }
 
+    #[Transactional]
     public function update(string $actorUserId, string $id, UpdateRestaurantProductDTO $data): ?RestaurantProduct
     {
         $restaurantProduct = RestaurantProduct::query()->find($id);

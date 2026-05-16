@@ -2,6 +2,7 @@
 
 namespace App\Services\CouponService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Campaigns\Coupon\CreateCouponDTO;
 use App\DTOs\Campaigns\Coupon\UpdateCouponDTO;
 use App\Models\Category;
@@ -30,6 +31,7 @@ class CouponService implements CouponServiceInterface
         return Coupon::query()->find($id);
     }
 
+    #[Transactional]
     public function createCoupon(CreateCouponDTO $data): Coupon
     {
         $this->validateCoupon($data->chain_id, $data->discount, $data->product_id, $data->category_id);
@@ -37,6 +39,7 @@ class CouponService implements CouponServiceInterface
         return Coupon::query()->create($this->payload($data));
     }
 
+    #[Transactional]
     public function updateCoupon(string $id, UpdateCouponDTO $data): ?Coupon
     {
         $coupon = Coupon::query()->find($id);
@@ -57,6 +60,7 @@ class CouponService implements CouponServiceInterface
         return $coupon;
     }
 
+    #[Transactional]
     public function delete(string $id): bool
     {
         return (bool) Coupon::query()->whereKey($id)->delete();

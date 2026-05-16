@@ -2,12 +2,12 @@
 
 namespace App\Services\PromotionService;
 
+use App\Aspects\Transactional;
 use App\DTOs\Campaigns\Promotion\CreatePromotionDTO;
 use App\DTOs\Campaigns\Promotion\UpdatePromotionDTO;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\Promotion;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class PromotionService implements PromotionServiceInterface
@@ -28,28 +28,28 @@ class PromotionService implements PromotionServiceInterface
         return Promotion::query()->with($this->with)->find($id);
     }
 
+    #[Transactional]
     public function createPromotion(string $actorUserId, CreatePromotionDTO $data): Promotion
     {
         $items = $data->items?->toArray() ?? [];
         $this->validatePromotion($data->chain_id, $data->start_date, $data->end_date, $items);
 
-        return DB::transaction(function () use ($data, $items) {
-            $promotion = Promotion::query()->create([
-                'chain_id' => $data->chain_id,
-                'name' => $data->name,
-                'description' => $data->description,
-                'type' => $data->type->value,
-                'target' => $data->target->value,
-                'start_date' => $data->start_date,
-                'end_date' => $data->end_date,
-            ]);
+        $promotion = Promotion::query()->create([
+            'chain_id' => $data->chain_id,
+            'name' => $data->name,
+            'description' => $data->description,
+            'type' => $data->type->value,
+            'target' => $data->target->value,
+            'start_date' => $data->start_date,
+            'end_date' => $data->end_date,
+        ]);
 
-            $this->replaceItems($promotion, $items);
+        $this->replaceItems($promotion, $items);
 
-            return $promotion->load($this->with);
-        });
+        return $promotion->load($this->with);
     }
 
+    #[Transactional]
     public function updatePromotion(string $actorUserId, string $promotionId, UpdatePromotionDTO $data): Promotion
     {
         $promotion = Promotion::query()->with($this->with)->findOrFail($promotionId);
@@ -59,24 +59,23 @@ class PromotionService implements PromotionServiceInterface
 
         $this->validatePromotion($promotion->chain_id, $startDate, $endDate, $items ?? []);
 
-        return DB::transaction(function () use ($promotion, $data, $items) {
-            $promotion->update(array_filter([
-                'name' => $data->name,
-                'description' => $data->description,
-                'type' => $data->type?->value,
-                'target' => $data->target?->value,
-                'start_date' => $data->start_date,
-                'end_date' => $data->end_date,
-            ], static fn ($value) => $value !== null));
+        $promotion->update(array_filter([
+            'name' => $data->name,
+            'description' => $data->description,
+            'type' => $data->type?->value,
+            'target' => $data->target?->value,
+            'start_date' => $data->start_date,
+            'end_date' => $data->end_date,
+        ], static fn ($value) => $value !== null));
 
-            if ($items !== null) {
-                $this->replaceItems($promotion, $items);
-            }
+        if ($items !== null) {
+            $this->replaceItems($promotion, $items);
+        }
 
-            return $promotion->refresh()->load($this->with);
-        });
+        return $promotion->refresh()->load($this->with);
     }
 
+    #[Transactional]
     public function deletePromotion(string $actorUserId, string $id): bool
     {
         return (bool) Promotion::query()->whereKey($id)->delete();
@@ -110,6 +109,7 @@ class PromotionService implements PromotionServiceInterface
 
         if ($items === []) {
             $promotion->promotionItems()->delete();
+
             return;
         }
 

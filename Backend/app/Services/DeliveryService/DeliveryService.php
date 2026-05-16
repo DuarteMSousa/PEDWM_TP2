@@ -2,6 +2,7 @@
 
 namespace App\Services\DeliveryService;
 
+use App\Aspects\Transactional;
 use App\Domain\StateMachines\Deliveries\DeliveryStateFactory;
 use App\Enums\CourierStatus;
 use App\Enums\DeliveryEventType;
@@ -11,10 +12,9 @@ use App\Jobs\AssignCourierToDeliveryJob;
 use App\Jobs\ExpireDeliveryOfferJob;
 use App\Models\Delivery;
 use App\Models\DeliveryOffer;
-use App\Services\OutboxService;
 use App\Services\CourierService\CourierServiceInterface;
 use App\Services\OrderService\OrderServiceInterface;
-use Illuminate\Support\Facades\DB;
+use App\Services\OutboxService;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -63,6 +63,7 @@ class DeliveryService implements DeliveryServiceInterface
             ->get();
     }
 
+    #[Transactional]
     public function createForOrder(string $orderId, float $deliveryFee): Delivery
     {
         return Delivery::query()->firstOrCreate(
@@ -71,6 +72,7 @@ class DeliveryService implements DeliveryServiceInterface
         )->load($this->with);
     }
 
+    #[Transactional]
     public function offerToCourier(string $deliveryId, string $courierId, int $ttlSeconds = 30): DeliveryOffer
     {
         $offer = DeliveryOffer::query()->create([
@@ -86,57 +88,57 @@ class DeliveryService implements DeliveryServiceInterface
         return $offer->load(['delivery.order', 'courier.user']);
     }
 
+    #[Transactional]
     public function acceptOffer(string $offerId): Delivery
     {
-        return DB::transaction(function () use ($offerId) {
-            $offer = DeliveryOffer::query()
-                ->with(['delivery.order', 'courier'])
-                ->whereKey($offerId)
-                ->lockForUpdate()
-                ->firstOrFail();
+        $offer = DeliveryOffer::query()
+            ->with(['delivery.order', 'courier'])
+            ->whereKey($offerId)
+            ->lockForUpdate()
+            ->firstOrFail();
 
-            if ($offer->status !== DeliveryOfferStatus::PENDING) {
-                throw ValidationException::withMessages(['offer_id' => 'Offer is not pending.']);
-            }
+        if ($offer->status !== DeliveryOfferStatus::PENDING) {
+            throw ValidationException::withMessages(['offer_id' => 'Offer is not pending.']);
+        }
 
-            if ($offer->expires_at->isPast()) {
-                $offer->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
-                $this->broadcastJobEvent('JOB_EXPIRED', $offer);
+        if ($offer->expires_at->isPast()) {
+            $offer->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
+            $this->broadcastJobEvent('JOB_EXPIRED', $offer);
 
-                throw ValidationException::withMessages(['offer_id' => 'Offer expired.']);
-            }
+            throw ValidationException::withMessages(['offer_id' => 'Offer expired.']);
+        }
 
-            $delivery = Delivery::query()->whereKey($offer->delivery_id)->lockForUpdate()->firstOrFail();
+        $delivery = Delivery::query()->whereKey($offer->delivery_id)->lockForUpdate()->firstOrFail();
 
-            if ($delivery->courier_id !== null && $delivery->courier_id !== $offer->courier_id) {
-                throw ValidationException::withMessages(['delivery_id' => 'Delivery already assigned.']);
-            }
+        if ($delivery->courier_id !== null && $delivery->courier_id !== $offer->courier_id) {
+            throw ValidationException::withMessages(['delivery_id' => 'Delivery already assigned.']);
+        }
 
-            if ($offer->courier->status !== CourierStatus::AVAILABLE) {
-                throw ValidationException::withMessages(['courier_id' => 'Courier is not available.']);
-            }
+        if ($offer->courier->status !== CourierStatus::AVAILABLE) {
+            throw ValidationException::withMessages(['courier_id' => 'Courier is not available.']);
+        }
 
-            $offer->update([
-                'status' => DeliveryOfferStatus::ACCEPTED->value,
-                'accepted_at' => now(),
-            ]);
+        $offer->update([
+            'status' => DeliveryOfferStatus::ACCEPTED->value,
+            'accepted_at' => now(),
+        ]);
 
-            $delivery->update(['courier_id' => $offer->courier_id]);
-            DeliveryOffer::query()
-                ->where('delivery_id', $delivery->id)
-                ->where('id', '!=', $offer->id)
-                ->where('status', DeliveryOfferStatus::PENDING->value)
-                ->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
+        $delivery->update(['courier_id' => $offer->courier_id]);
+        DeliveryOffer::query()
+            ->where('delivery_id', $delivery->id)
+            ->where('id', '!=', $offer->id)
+            ->where('status', DeliveryOfferStatus::PENDING->value)
+            ->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
 
-            app(CourierServiceInterface::class)->setStatus($offer->courier_id, CourierStatus::BUSY->value);
-            $this->recordEvent($delivery, DeliveryEventType::DELIVERY_ACCEPTED, $offer->courier_id);
-            app(OrderServiceInterface::class)->recordCourierAssigned($delivery->order, $offer->courier_id);
-            $this->broadcastJobEvent('JOB_ACCEPTED', $offer);
+        app(CourierServiceInterface::class)->setStatus($offer->courier_id, CourierStatus::BUSY->value);
+        $this->recordEvent($delivery, DeliveryEventType::DELIVERY_ACCEPTED, $offer->courier_id);
+        app(OrderServiceInterface::class)->recordCourierAssigned($delivery->order, $offer->courier_id);
+        $this->broadcastJobEvent('JOB_ACCEPTED', $offer);
 
-            return $delivery->refresh()->load($this->with);
-        });
+        return $delivery->refresh()->load($this->with);
     }
 
+    #[Transactional]
     public function rejectOffer(string $offerId): bool
     {
         $offer = DeliveryOffer::query()
@@ -155,37 +157,35 @@ class DeliveryService implements DeliveryServiceInterface
         return true;
     }
 
+    #[Transactional]
     public function markPickedUp(string $deliveryId, string $courierId): Delivery
     {
-        return DB::transaction(function () use ($deliveryId, $courierId) {
-            $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::PICKED_UP, ['pickup_time' => now()]);
-            app(OrderServiceInterface::class)->recordPickedUp($delivery->order, $courierId);
+        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::PICKED_UP, ['pickup_time' => now()]);
+        app(OrderServiceInterface::class)->recordPickedUp($delivery->order, $courierId);
 
-            return $delivery->refresh()->load($this->with);
-        });
+        return $delivery->refresh()->load($this->with);
     }
 
+    #[Transactional]
     public function markInTransit(string $deliveryId, string $courierId): Delivery
     {
-        return DB::transaction(function () use ($deliveryId, $courierId) {
-            $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::IN_TRANSIT);
-            app(OrderServiceInterface::class)->markOutForDelivery($delivery->order, $courierId);
+        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::IN_TRANSIT);
+        app(OrderServiceInterface::class)->markOutForDelivery($delivery->order, $courierId);
 
-            return $delivery->refresh()->load($this->with);
-        });
+        return $delivery->refresh()->load($this->with);
     }
 
+    #[Transactional]
     public function markDelivered(string $deliveryId, string $courierId): Delivery
     {
-        return DB::transaction(function () use ($deliveryId, $courierId) {
-            $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::DELIVERED, ['delivery_time' => now()]);
-            app(OrderServiceInterface::class)->markDelivered($delivery->order, $courierId);
-            app(CourierServiceInterface::class)->setStatus($courierId, CourierStatus::AVAILABLE->value);
+        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::DELIVERED, ['delivery_time' => now()]);
+        app(OrderServiceInterface::class)->markDelivered($delivery->order, $courierId);
+        app(CourierServiceInterface::class)->setStatus($courierId, CourierStatus::AVAILABLE->value);
 
-            return $delivery->refresh()->load($this->with);
-        });
+        return $delivery->refresh()->load($this->with);
     }
 
+    #[Transactional]
     public function markFailed(string $deliveryId, string $courierId, string $reason): Delivery
     {
         return $this->setStatus($deliveryId, $courierId, DeliveryStatus::FAILED, ['failure_reason' => $reason]);
