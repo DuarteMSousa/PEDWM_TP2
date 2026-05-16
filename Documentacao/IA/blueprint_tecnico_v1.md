@@ -85,11 +85,10 @@ Regra de consistencia:
 - `order.status = READY` apenas quando todos `order_items` estiverem `READY` ou `CANCELLED`.
 
 ## PaymentStatus
-Valores: `PENDING`, `COMPLETED`, `FAILED`, `REFUNDED`
+Valores: `PENDING`, `COMPLETED`, `FAILED`
 
 Transicoes:
 1. `PENDING -> COMPLETED | FAILED`
-2. `COMPLETED -> REFUNDED`
 
 Regra:
 - `order` so avanca para `CONFIRMED` apos `payment=COMPLETED` (exceto metodo `CASH`, onde confirma no checkout).
@@ -144,7 +143,6 @@ Transicoes:
 - `PAYMENT_CREATED`
 - `PAYMENT_COMPLETED`
 - `PAYMENT_FAILED`
-- `PAYMENT_REFUNDED`
 
 ## Payload padrao
 ```json

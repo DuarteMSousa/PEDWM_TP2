@@ -68,13 +68,6 @@ class PaymentService implements PaymentServiceInterface
         ]);
     }
 
-    public function refund(string $paymentId, ?string $reason): Payment
-    {
-        return $this->setStatus($paymentId, PaymentStatus::REFUNDED, null, [
-            'reason' => $reason,
-        ]);
-    }
-
     private function setStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload): Payment
     {
         return DB::transaction(function () use ($paymentId, $status, $eventType, $payload) {
@@ -111,8 +104,8 @@ class PaymentService implements PaymentServiceInterface
     {
         $allowed = match ($from) {
             PaymentStatus::PENDING => [PaymentStatus::COMPLETED, PaymentStatus::FAILED, PaymentStatus::CANCELLED],
-            PaymentStatus::COMPLETED => [PaymentStatus::REFUNDED],
-            PaymentStatus::FAILED, PaymentStatus::REFUNDED, PaymentStatus::CANCELLED => [],
+            PaymentStatus::COMPLETED => [],
+            PaymentStatus::FAILED, PaymentStatus::CANCELLED => [],
         };
 
         if (! in_array($to, $allowed, true)) {

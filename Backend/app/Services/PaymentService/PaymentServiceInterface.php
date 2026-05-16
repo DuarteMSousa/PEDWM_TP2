@@ -21,5 +21,4 @@ interface PaymentServiceInterface
 
     public function fail(string $paymentId, ?string $reason): Payment;
 
-    public function refund(string $paymentId, ?string $reason): Payment;
 }
