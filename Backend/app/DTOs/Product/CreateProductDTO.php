@@ -16,7 +16,7 @@ class CreateProductDTO extends Data
         public readonly float $price,
         public readonly ?string $description,
         #[DataCollectionOf(CreateProductOptionGroupDTO::class)]
-        public readonly DataCollection $option_groups,
+        public readonly ?DataCollection $option_groups = null,
     ) {
     }
 

@@ -1,0 +1,65 @@
+input SearchRestaurantsInput {
+  q: String = ""
+  name: String = ""
+  chainName: String = ""
+  city: String = ""
+  country: String = ""
+  postalCode: String = ""
+  pageNumber: Int = 1
+  pageSize: Int = 20
+}
+
+input CreateRestaurantChainInput {
+  name: String!
+}
+
+input UpdateRestaurantChainInput {
+  name: String
+}
+
+input CreateRestaurantInput {
+  chain_id: ID!
+  name: String!
+  opening_hours: String!
+  closing_hours: String!
+  delivery_radius: Float!
+}
+
+input UpdateRestaurantInput {
+  chain_id: ID
+  name: String
+  opening_hours: String
+  closing_hours: String
+  delivery_radius: Float
+}
+
+extend type Query {
+  restaurants(input: SearchRestaurantsInput): [Restaurant!]!
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurants")
+  restaurant(id: ID!): Restaurant
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurant")
+  restaurantChains: [RestaurantChain!]!
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurantChains")
+  restaurantChain(id: ID!): RestaurantChain
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurantChain")
+  chainManagerRestaurants(chain_id: ID!): [Restaurant!]!
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@chainManagerRestaurants")
+  localManagerRestaurant(user_id: ID!): Restaurant
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@localManagerRestaurant")
+}
+
+extend type Mutation {
+  createRestaurantChain(input: CreateRestaurantChainInput!): RestaurantChain!
+    @field(resolver: "App\\GraphQL\\Mutations\\RestaurantMutations@createRestaurantChain")
+  updateRestaurantChain(id: ID!, input: UpdateRestaurantChainInput!): RestaurantChain!
+    @field(resolver: "App\\GraphQL\\Mutations\\RestaurantMutations@updateRestaurantChain")
+  deleteRestaurantChain(id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\RestaurantMutations@deleteRestaurantChain")
+
+  createRestaurant(input: CreateRestaurantInput!): Restaurant!
+    @field(resolver: "App\\GraphQL\\Mutations\\RestaurantMutations@createRestaurant")
+  updateRestaurant(id: ID!, input: UpdateRestaurantInput!): Restaurant!
+    @field(resolver: "App\\GraphQL\\Mutations\\RestaurantMutations@updateRestaurant")
+  deleteRestaurant(id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\RestaurantMutations@deleteRestaurant")
+}

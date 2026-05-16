@@ -9,12 +9,12 @@ use Spatie\LaravelData\Data;
 class UpdateCouponDTO extends Data
 {
     public function __construct(
-        public readonly string $code,
-        public readonly string $description,
-        public readonly DiscountType $type ,
-        public readonly DiscountTarget $target ,
-        public readonly string $expiry_date,
-        public readonly float $discount = 0,
+        public readonly ?string $code = null,
+        public readonly ?string $description = null,
+        public readonly ?DiscountType $type = null,
+        public readonly ?DiscountTarget $target = null,
+        public readonly ?string $expiry_date = null,
+        public readonly ?float $discount = null,
         public readonly ?string $product_id = null,
         public readonly ?string $category_id = null,
         public readonly ?float $min_order_total = null,

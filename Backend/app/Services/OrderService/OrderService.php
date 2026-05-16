@@ -1,0 +1,295 @@
+<?php
+
+namespace App\Services\OrderService;
+
+use App\DTOs\Order\CheckoutDTO;
+use App\Enums\OrderEventType;
+use App\Enums\OrderItemStatus;
+use App\Enums\OrderStatus;
+use App\Enums\PaymentEventType;
+use App\Enums\PaymentStatus;
+use App\Models\Cart;
+use App\Models\Order;
+use App\Models\OrderEvent;
+use App\Models\OrderItem;
+use App\Models\Payment;
+use App\Models\UserAddress;
+use App\Services\CartService\CartServiceInterface;
+use Illuminate\Support\Facades\DB;
+
+class OrderService implements OrderServiceInterface
+{
+    private array $with = [
+        'items.options',
+        'address',
+        'events',
+        'discounts',
+        'payment.events',
+        'delivery',
+    ];
+
+    public function clientOrders(string $userId, ?array $statuses = null, int $page = 1, int $perPage = 20)
+    {
+        $query = Order::query()
+            ->with($this->with)
+            ->where('user_id', $userId)
+            ->orderByDesc('created_at');
+
+        if ($statuses) {
+            $query->whereIn('status', $statuses);
+        }
+
+        return $query->paginate($perPage, ['*'], 'page', $page)->items();
+    }
+
+    public function clientOrder(string $userId, string $orderId): ?Order
+    {
+        return Order::query()
+            ->with($this->with)
+            ->where('user_id', $userId)
+            ->find($orderId);
+    }
+
+    public function restaurantOrders(string $restaurantId, ?array $statuses = null, int $page = 1, int $perPage = 20)
+    {
+        $query = Order::query()
+            ->with($this->with)
+            ->where('restaurant_id', $restaurantId)
+            ->orderByDesc('created_at');
+
+        if ($statuses) {
+            $query->whereIn('status', $statuses);
+        }
+
+        return $query->paginate($perPage, ['*'], 'page', $page)->items();
+    }
+
+    public function restaurantActiveOrders(string $restaurantId)
+    {
+        return Order::query()
+            ->with($this->with)
+            ->where('restaurant_id', $restaurantId)
+            ->whereNotIn('status', [OrderStatus::DELIVERED->value, OrderStatus::CANCELLED->value])
+            ->orderBy('created_at')
+            ->get();
+    }
+
+    public function restaurantOrder(string $restaurantId, string $orderId): ?Order
+    {
+        return Order::query()
+            ->with($this->with)
+            ->where('restaurant_id', $restaurantId)
+            ->find($orderId);
+    }
+
+    public function events(string $orderId)
+    {
+        return OrderEvent::query()
+            ->where('order_id', $orderId)
+            ->orderBy('timestamp')
+            ->get();
+    }
+
+    public function checkout(string $clientUserId, CheckoutDTO $data): array
+    {
+        return DB::transaction(function () use ($clientUserId, $data) {
+            $cart = Cart::query()
+                ->with(['items.restaurantProduct.product', 'items.options.productOption'])
+                ->where('user_id', $clientUserId)
+                ->when($data->cart_id, fn ($query, $cartId) => $query->whereKey($cartId))
+                ->firstOrFail();
+
+            if ($cart->items->isEmpty()) {
+                throw new \RuntimeException('Cart is empty.');
+            }
+
+            $firstRestaurantProduct = $cart->items->first()->restaurantProduct;
+            $restaurant = $firstRestaurantProduct->restaurant()->firstOrFail();
+            $method = $data->payment_method;
+            $paymentStatus = $method === PaymentMethod::CASH ? PaymentStatus::COMPLETED : PaymentStatus::PENDING;
+            $orderStatus = $paymentStatus === PaymentStatus::COMPLETED ? OrderStatus::CONFIRMED : OrderStatus::PENDING;
+
+            $order = Order::query()->create([
+                'user_id' => $clientUserId,
+                'restaurant_id' => $restaurant->id,
+                'status' => $orderStatus->value,
+                'total' => $cart->total,
+                'restaurant_name_snapshot' => $restaurant->name,
+            ]);
+
+            foreach ($cart->items as $cartItem) {
+                $orderItem = $order->items()->create([
+                    'restaurant_product_id' => $cartItem->restaurant_product_id,
+                    'status' => OrderItemStatus::PENDING->value,
+                    'quantity' => $cartItem->quantity,
+                    'unit_price' => $cartItem->unit_price,
+                    'product_name_snapshot' => $cartItem->restaurantProduct->product->name,
+                    'total_price' => $cartItem->total_price,
+                ]);
+
+                foreach ($cartItem->options as $cartOption) {
+                    $orderItem->options()->create([
+                        'product_option_id' => $cartOption->product_option_id,
+                        'option_name_snapshot' => $cartOption->productOption->name,
+                        'extra_price' => $cartOption->extra_price,
+                    ]);
+                }
+            }
+
+            if ($data->address_id !== null) {
+                $address = UserAddress::query()
+                    ->where('user_id', $clientUserId)
+                    ->findOrFail($data->address_id);
+
+                $order->address()->create([
+                    'street' => $address->street,
+                    'city' => $address->city,
+                    'postal_code' => $address->postal_code,
+                    'country' => $address->country,
+                    'latitude' => $address->latitude,
+                    'longitude' => $address->longitude,
+                ]);
+            }
+
+            $payment = $order->payment()->create([
+                'method' => $method->value,
+                'status' => $paymentStatus->value,
+                'amount' => $cart->total,
+                'paid_at' => $paymentStatus === PaymentStatus::COMPLETED ? now() : null,
+                'expired_at' => $paymentStatus === PaymentStatus::PENDING ? now()->addMinutes(10) : null,
+            ]);
+
+            $this->recordEvent($order, OrderEventType::ORDER_CREATED, $clientUserId);
+            if ($orderStatus === OrderStatus::CONFIRMED) {
+                $this->recordEvent($order, OrderEventType::ORDER_CONFIRMED, $clientUserId);
+            }
+
+            $payment->events()->create([
+                'event_type' => PaymentEventType::PAYMENT_CREATED->value,
+                'timestamp' => now(),
+                'payload' => ['actor_user_id' => $clientUserId],
+            ]);
+
+            $cart->items()->delete();
+            $cart->update(['total' => 0]);
+
+            return [
+                'order' => $order->load($this->with),
+                'payment' => $payment->refresh()->load('events'),
+            ];
+        });
+    }
+
+    public function cancelByClient(string $userId, string $orderId, ?string $reason): Order
+    {
+        $order = Order::query()->where('user_id', $userId)->findOrFail($orderId);
+
+        return $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, $userId, ['reason' => $reason]);
+    }
+
+    public function acceptByRestaurant(string $actorUserId, string $orderId): Order
+    {
+        $order = Order::query()->findOrFail($orderId);
+
+        return $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
+    }
+
+    public function rejectByRestaurant(string $actorUserId, string $orderId, ?string $reason): Order
+    {
+        $order = Order::query()->findOrFail($orderId);
+
+        return $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, $actorUserId, ['reason' => $reason]);
+    }
+
+    public function startPreparing(string $actorUserId, string $orderId): Order
+    {
+        $order = Order::query()->findOrFail($orderId);
+
+        return $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
+    }
+
+    public function updateItemStatus(string $actorUserId, string $orderItemId, string $status): Order
+    {
+        return DB::transaction(function () use ($actorUserId, $orderItemId, $status) {
+            $item = OrderItem::query()->with('order.items')->findOrFail($orderItemId);
+            $item->update(['status' => $status]);
+            $order = $item->order->refresh()->load('items');
+
+            $notCancelled = $order->items->where('status', '!=', OrderItemStatus::CANCELLED->value);
+            $allReady = $notCancelled->isNotEmpty()
+                && $notCancelled->every(fn ($orderItem) => $orderItem->status->value === OrderItemStatus::READY->value);
+
+            if ($allReady) {
+                return $this->transition($order, OrderStatus::READY, OrderEventType::ORDER_READY, $actorUserId);
+            }
+
+            return $order->load($this->with);
+        });
+    }
+
+    public function markReady(string $actorUserId, string $orderId): Order
+    {
+        $order = Order::query()->findOrFail($orderId);
+
+        return $this->transition($order, OrderStatus::READY, OrderEventType::ORDER_READY, $actorUserId);
+    }
+
+    public function repeatOrder(string $userId, string $orderId): \App\Models\Cart
+    {
+        return DB::transaction(function () use ($userId, $orderId) {
+            $order = Order::query()->with('items.options')->where('user_id', $userId)->findOrFail($orderId);
+            $cart = app(CartServiceInterface::class)->forUser($userId);
+            $cart->items()->delete();
+
+            foreach ($order->items as $item) {
+                $cartItem = $cart->items()->create([
+                    'restaurant_product_id' => $item->restaurant_product_id,
+                    'quantity' => $item->quantity,
+                    'unit_price' => $item->unit_price,
+                    'total_price' => $item->total_price,
+                ]);
+
+                foreach ($item->options as $option) {
+                    $cartItem->options()->create([
+                        'product_option_id' => $option->product_option_id,
+                        'extra_price' => $option->extra_price,
+                    ]);
+                }
+            }
+
+            return app(CartServiceInterface::class)->recalculate($cart->id);
+        });
+    }
+
+    public function markOutForDelivery(Order $order, string $actorUserId): Order
+    {
+        return $this->transition($order, OrderStatus::OUT_FOR_DELIVERY, OrderEventType::ORDER_OUT_FOR_DELIVERY, $actorUserId);
+    }
+
+    public function markDelivered(Order $order, string $actorUserId): Order
+    {
+        return $this->transition($order, OrderStatus::DELIVERED, OrderEventType::ORDER_COMPLETED, $actorUserId);
+    }
+
+    private function transition(Order $order, OrderStatus $status, OrderEventType $eventType, string $actorUserId, array $payload = []): Order
+    {
+        return DB::transaction(function () use ($order, $status, $eventType, $actorUserId, $payload) {
+            $order->update(['status' => $status->value]);
+            $this->recordEvent($order, $eventType, $actorUserId, $payload);
+
+            return $order->refresh()->load($this->with);
+        });
+    }
+
+    private function recordEvent(Order $order, OrderEventType $eventType, string $actorUserId, array $payload = []): void
+    {
+        $order->events()->create([
+            'event_type' => $eventType->value,
+            'timestamp' => now(),
+            'payload' => [
+                'actor_user_id' => $actorUserId,
+                ...$payload,
+            ],
+        ]);
+    }
+}

@@ -1,0 +1,43 @@
+input CreateOrderChatInput {
+  order_id: ID!
+  type: ChatType!
+  participant_user_ids: [ID!]!
+}
+
+input AddChatParticipantInput {
+  chat_id: ID!
+  user_id: ID!
+  user_type: String!
+}
+
+input SendMessageInput {
+  chat_id: ID!
+  sender_user_id: ID!
+  content: String!
+}
+
+extend type Query {
+  orderChats(order_id: ID!): [Chat!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@orderChats")
+  chat(id: ID!): Chat
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@chat")
+  chatMessages(chat_id: ID!, page: Int = 1, per_page: Int = 50): [Message!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@chatMessages")
+  chatParticipants(chat_id: ID!): [ChatParticipant!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@chatParticipants")
+}
+
+extend type Mutation {
+  createOrderChat(input: CreateOrderChatInput!): Chat!
+    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@createOrderChat")
+  closeChat(chat_id: ID!): Chat!
+    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@closeChat")
+  addChatParticipant(input: AddChatParticipantInput!): ChatParticipant!
+    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@addChatParticipant")
+  removeChatParticipant(participant_id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@removeChatParticipant")
+  sendMessage(input: SendMessageInput!): Message!
+    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@sendMessage")
+  markChatAsRead(chat_id: ID!, user_id: ID!): ChatParticipant!
+    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@markChatAsRead")
+}

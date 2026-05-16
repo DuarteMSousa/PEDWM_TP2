@@ -10,6 +10,7 @@ class CreateUserDTO extends Data
         public readonly string $name,
         public readonly string $email,
         public readonly string $password,
+        public readonly string $user_type = 'customer',
     ) {
     }
 
@@ -19,6 +20,7 @@ class CreateUserDTO extends Data
             name: $this->name,
             email: $this->email,
             password: bcrypt($this->password),
+            user_type: $this->user_type,
         );
     }
 }

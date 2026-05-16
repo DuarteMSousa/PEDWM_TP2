@@ -29,7 +29,7 @@ class ProductRepository implements ProductRepositoryInterface
             'description' => $data->description,
         ]);
 
-        foreach ($data->option_groups as $groupDTO) {
+        foreach ($data->option_groups ?? [] as $groupDTO) {
             $group = $product->optionGroups()->create([
                 'name' => $groupDTO->name,
                 'min_options' => $groupDTO->min_options,

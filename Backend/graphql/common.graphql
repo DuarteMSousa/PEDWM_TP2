@@ -1,0 +1,406 @@
+scalar JSON @scalar(class: "App\\GraphQL\\Scalars\\JSON")
+
+enum CourierStatus {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum OrderItemStatus {
+  PENDING
+  PREPARING
+  READY
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  MBWAY
+  PAYPAL
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum DeliveryStatus {
+  PENDING
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum DiscountTarget {
+  ORDER
+  PRODUCT
+  DELIVERY
+  CATEGORY
+}
+
+enum DiscountOriginType {
+  PROMOTION
+  COUPON
+}
+
+enum ReviewTargetTypeInput {
+  RESTAURANT
+  COURIER
+}
+
+enum ChatType {
+  CUSTOMER_RESTAURANT
+  CUSTOMER_COURIER
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  user_type: String
+  created_at: String
+  updated_at: String
+}
+
+type UserAddress {
+  id: ID!
+  user_id: ID!
+  street: String!
+  city: String!
+  postal_code: String!
+  country: String!
+  latitude: Float!
+  longitude: Float!
+  is_default: Boolean!
+  label: String
+  created_at: String
+  updated_at: String
+}
+
+type RestaurantChain {
+  id: ID!
+  name: String!
+  created_at: String
+  updated_at: String
+}
+
+type RestaurantAddress {
+  id: ID!
+  restaurant_id: ID!
+  street: String!
+  city: String!
+  postal_code: String!
+  country: String!
+  latitude: Float!
+  longitude: Float!
+}
+
+type Restaurant {
+  id: ID!
+  chain_id: ID!
+  name: String!
+  opening_hours: String!
+  closing_hours: String!
+  delivery_radius: Float!
+  rating_sum: Float
+  rating_count: Int
+  chain: RestaurantChain
+  address: RestaurantAddress
+  restaurantProducts: [RestaurantProduct!]
+  created_at: String
+  updated_at: String
+}
+
+type Category {
+  id: ID!
+  chain_id: ID!
+  name: String!
+  products: [Product!]
+}
+
+type Product {
+  id: ID!
+  category_id: ID!
+  name: String!
+  price: Float!
+  description: String
+  optionGroups: [ProductOptionGroup!]
+}
+
+type ProductOptionGroup {
+  id: ID!
+  product_id: ID!
+  name: String!
+  max_options: Int!
+  min_options: Int!
+  options: [ProductOption!]
+}
+
+type ProductOption {
+  id: ID!
+  option_group_id: ID!
+  name: String!
+  extra_price: Float!
+  default_option: Boolean!
+}
+
+type RestaurantProduct {
+  id: ID!
+  restaurant_id: ID!
+  product_id: ID!
+  local_price: Float
+  is_available: Boolean!
+  estimated_preparation_time_min: Int
+  product: Product
+  restaurant: Restaurant
+}
+
+type RestaurantMenu {
+  restaurant: Restaurant!
+  categories: [Category!]!
+  products: [RestaurantProduct!]!
+}
+
+type Cart {
+  id: ID!
+  user_id: ID!
+  total: Float!
+  items: [CartItem!]
+}
+
+type CartItem {
+  id: ID!
+  cart_id: ID!
+  restaurant_product_id: ID!
+  quantity: Int!
+  unit_price: Float!
+  total_price: Float!
+  restaurantProduct: RestaurantProduct
+  options: [CartItemOption!]
+}
+
+type CartItemOption {
+  id: ID!
+  cart_item_id: ID!
+  product_option_id: ID!
+  extra_price: Float
+  productOption: ProductOption
+}
+
+type Order {
+  id: ID!
+  user_id: ID!
+  restaurant_id: ID!
+  status: OrderStatus!
+  total: Float!
+  restaurant_name_snapshot: String!
+  items: [OrderItem!]
+  address: OrderAddress
+  payment: Payment
+  delivery: Delivery
+  events: [OrderEvent!]
+  discounts: [OrderDiscount!]
+  created_at: String
+  updated_at: String
+}
+
+type OrderItem {
+  id: ID!
+  order_id: ID!
+  restaurant_product_id: ID!
+  status: OrderItemStatus!
+  quantity: Int!
+  unit_price: Float!
+  product_name_snapshot: String!
+  total_price: Float!
+  options: [OrderItemOption!]
+}
+
+type OrderItemOption {
+  id: ID!
+  order_item_id: ID!
+  product_option_id: ID!
+  option_name_snapshot: String!
+  extra_price: Float!
+}
+
+type OrderAddress {
+  id: ID!
+  order_id: ID!
+  street: String!
+  city: String!
+  postal_code: String!
+  country: String!
+  latitude: Float!
+  longitude: Float!
+}
+
+type OrderEvent {
+  id: ID!
+  order_id: ID!
+  event_type: String!
+  timestamp: String
+  payload: JSON
+}
+
+type OrderDiscount {
+  id: ID!
+  order_id: ID!
+  name_snapshot: String!
+  description_snapshot: String
+  discount_amount: Float!
+  discount_type: DiscountType!
+  discount_target: DiscountTarget!
+  order_item_id: ID
+  origin_type: DiscountOriginType!
+  origin_id: ID!
+}
+
+type Payment {
+  id: ID!
+  order_id: ID!
+  method: PaymentMethod!
+  status: PaymentStatus!
+  transaction_id: String
+  paid_at: String
+  expired_at: String
+  amount: Float!
+  events: [PaymentEvent!]
+}
+
+type PaymentEvent {
+  id: ID!
+  payment_id: ID!
+  event_type: String!
+  timestamp: String
+  payload: JSON
+}
+
+type Courier {
+  user_id: ID!
+  status: CourierStatus!
+  latitude: Float
+  longitude: Float
+  last_location_update: String
+  rating_sum: Float
+  rating_count: Int
+  user: User
+}
+
+type Delivery {
+  id: ID!
+  order_id: ID!
+  courier_id: ID
+  status: DeliveryStatus!
+  pickup_time: String
+  delivery_time: String
+  delivery_fee: Float!
+  order: Order
+  courier: Courier
+  positionHistory: [CourierPosition!]
+}
+
+type CourierPosition {
+  id: ID!
+  delivery_id: ID!
+  latitude: Float!
+  longitude: Float!
+  timestamp: String!
+}
+
+type Promotion {
+  id: ID!
+  chain_id: ID!
+  name: String!
+  description: String
+  type: DiscountType!
+  target: DiscountTarget!
+  start_date: String
+  end_date: String
+  promotionItems: [PromotionItem!]
+}
+
+type PromotionItem {
+  id: ID!
+  promotion_id: ID
+  product_id: ID
+  category_id: ID
+  discount: Float!
+}
+
+type Coupon {
+  id: ID!
+  chain_id: ID!
+  code: String!
+  description: String
+  type: DiscountType!
+  target: DiscountTarget!
+  expiry_date: String
+}
+
+type ReviewView {
+  id: ID!
+  user_id: ID!
+  rating: Int!
+  comment: String
+  target_type: String!
+  target_id: ID!
+  created_at: String
+  updated_at: String
+}
+
+type UserNotification {
+  id: ID!
+  user_id: ID!
+  type: String!
+  title: String!
+  message: String!
+  sent_at: String
+  read_at: String
+}
+
+type Chat {
+  id: ID!
+  order_id: ID!
+  type: ChatType!
+  closed_at: String
+  participants: [ChatParticipant!]
+  messages: [Message!]
+}
+
+type ChatParticipant {
+  id: ID!
+  chat_id: ID!
+  user_id: ID!
+  user_type: String!
+  joined_at: String
+  last_read_at: String
+}
+
+type Message {
+  id: ID!
+  chat_id: ID!
+  sender_participant_id: ID!
+  content: String!
+  timestamp: String!
+  read_at: String
+}

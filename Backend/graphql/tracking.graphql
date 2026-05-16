@@ -1,74 +1,44 @@
-type TrackingPosition {
-  lat: Float!
-  lng: Float!
-  recorded_at: String
-}
-
-type TrackingEvent {
-  event_type: String!
-  timestamp: String
-}
-
-type RoutePoint {
-  lat: Float!
-  lng: Float!
-}
-
 type OrderTracking {
-  order_id: ID!
-  order_status: String!
-  delivery_id: ID
-  delivery_status: String
-  courier_id: ID
-  restaurant_name: String
-  customer_name: String
-  courier_latitude: Float
-  courier_longitude: Float
-  last_location_update: String
-  pickup_latitude: Float
-  pickup_longitude: Float
-  dropoff_latitude: Float
-  dropoff_longitude: Float
-  route_provider: String
-  route_distance_km: Float
-  route_duration_seconds: Int
-  route_points: [RoutePoint!]!
-  distance_km_remaining: Float
+  order: Order!
+  delivery: Delivery
+  courier: Courier
+  last_position: CourierPosition
   eta_seconds: Int
-  latest_position: TrackingPosition
-  positions: [TrackingPosition!]!
-  events: [TrackingEvent!]!
 }
 
-enum DeliveryStatusInput {
-  PENDING
-  PICKED_UP
-  IN_TRANSIT
-  DELIVERED
-  FAILED
+type DeliveryTracking {
+  delivery: Delivery!
+  last_position: CourierPosition
+  eta_seconds: Int
 }
 
-input UpdateDeliveryStatusInput {
+input UpdateCourierLocationInput {
+  courier_id: ID!
   delivery_id: ID!
-  status: DeliveryStatusInput!
+  latitude: Float!
+  longitude: Float!
+  heading: Float
+  speed: Float
+  accuracy: Float
   recorded_at: String
 }
 
-type UpdateDeliveryStatusPayload {
+type UpdateCourierLocationPayload {
   ok: Boolean!
   delivery_id: ID!
-  order_id: ID!
-  delivery_status: String!
-  order_status: String!
   recorded_at: String!
 }
 
 extend type Query {
-  orderTracking(order_id: ID!): OrderTracking!
+  orderTracking(user_id: ID!, order_id: ID!): OrderTracking!
     @field(resolver: "App\\GraphQL\\Queries\\TrackingQueries@orderTracking")
+  deliveryTracking(delivery_id: ID!): DeliveryTracking!
+    @field(resolver: "App\\GraphQL\\Queries\\TrackingQueries@deliveryTracking")
+  courierLastPosition(courier_id: ID!): CourierPosition
+    @field(resolver: "App\\GraphQL\\Queries\\TrackingQueries@courierLastPosition")
 }
 
 extend type Mutation {
-  updateDeliveryStatus(input: UpdateDeliveryStatusInput!): UpdateDeliveryStatusPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\UpdateDeliveryStatus")
+  updateCourierLocation(input: UpdateCourierLocationInput!): UpdateCourierLocationPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\TrackingMutations@updateCourierLocation")
 }

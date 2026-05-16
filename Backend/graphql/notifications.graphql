@@ -1,16 +1,3 @@
-type UserNotification {
-  id: ID!
-  type: String!
-  title: String!
-  message: String!
-  sent_at: String
-  read_at: String
-}
-
-input MarkNotificationReadInput {
-  notification_id: ID!
-}
-
 type MarkNotificationReadPayload {
   ok: Boolean!
   notification_id: ID!
@@ -43,20 +30,20 @@ type UnregisterPushTokenPayload {
 }
 
 extend type Query {
-  userNotifications(unread_only: Boolean = false, limit: Int = 50): [UserNotification!]!
-    @field(resolver: "App\\GraphQL\\Queries\\NotificationQueries@userNotifications")
+  clientNotifications(user_id: ID!, unread_only: Boolean = false, limit: Int = 50): [UserNotification!]!
+    @field(resolver: "App\\GraphQL\\Queries\\NotificationQueries@clientNotifications")
 }
 
 extend type Mutation {
-  markNotificationRead(input: MarkNotificationReadInput!): MarkNotificationReadPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\MarkNotificationRead")
+  markNotificationRead(user_id: ID!, notification_id: ID!): MarkNotificationReadPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@markNotificationRead")
 
-  markAllNotificationsRead: MarkAllNotificationsReadPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\MarkAllNotificationsRead")
+  markAllClientNotificationsRead(user_id: ID!): MarkAllNotificationsReadPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@markAllClientNotificationsRead")
 
-  registerPushToken(input: RegisterPushTokenInput!): RegisterPushTokenPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\RegisterPushToken")
+  registerPushToken(user_id: ID!, input: RegisterPushTokenInput!): RegisterPushTokenPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@registerPushToken")
 
-  unregisterPushToken(input: UnregisterPushTokenInput!): UnregisterPushTokenPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\UnregisterPushToken")
+  unregisterPushToken(user_id: ID!, input: UnregisterPushTokenInput!): UnregisterPushTokenPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@unregisterPushToken")
 }

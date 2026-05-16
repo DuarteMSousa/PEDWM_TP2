@@ -1,0 +1,85 @@
+input CreatePromotionInput {
+  chain_id: ID!
+  name: String!
+  description: String
+  type: DiscountType!
+  target: DiscountTarget!
+  start_date: String
+  end_date: String
+  items: [PromotionItemInput!] = []
+}
+
+input UpdatePromotionInput {
+  name: String
+  description: String
+  type: DiscountType
+  target: DiscountTarget
+  start_date: String
+  end_date: String
+  items: [PromotionItemInput!]
+}
+
+input PromotionItemInput {
+  id: ID
+  product_id: ID
+  category_id: ID
+  discount: Float!
+}
+
+input CreateCouponInput {
+  chain_id: ID!
+  code: String!
+  description: String
+  type: DiscountType!
+  target: DiscountTarget!
+  discount: Float!
+  product_id: ID
+  category_id: ID
+  min_order_total: Float
+  max_discount_amount: Float
+  max_uses: Int
+  expiry_date: String
+}
+
+input UpdateCouponInput {
+  code: String
+  description: String
+  type: DiscountType
+  target: DiscountTarget
+  discount: Float
+  product_id: ID
+  category_id: ID
+  min_order_total: Float
+  max_discount_amount: Float
+  max_uses: Int
+  expiry_date: String
+}
+
+extend type Query {
+  chainPromotions(chain_id: ID!): [Promotion!]!
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@chainPromotions")
+  promotion(id: ID!): Promotion
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@promotion")
+  chainCoupons(chain_id: ID!): [Coupon!]!
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@chainCoupons")
+  coupon(id: ID!): Coupon
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@coupon")
+  couponByCode(code: String!): Coupon
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@couponByCode")
+}
+
+extend type Mutation {
+  createPromotion(actor_user_id: ID!, input: CreatePromotionInput!): Promotion!
+    @field(resolver: "App\\GraphQL\\Mutations\\CampaignMutations@createPromotion")
+  updatePromotion(actor_user_id: ID!, id: ID!, input: UpdatePromotionInput!): Promotion!
+    @field(resolver: "App\\GraphQL\\Mutations\\CampaignMutations@updatePromotion")
+  deletePromotion(actor_user_id: ID!, id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\CampaignMutations@deletePromotion")
+
+  createCoupon(input: CreateCouponInput!): Coupon!
+    @field(resolver: "App\\GraphQL\\Mutations\\CampaignMutations@createCoupon")
+  updateCoupon(id: ID!, input: UpdateCouponInput!): Coupon!
+    @field(resolver: "App\\GraphQL\\Mutations\\CampaignMutations@updateCoupon")
+  deleteCoupon(id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\CampaignMutations@deleteCoupon")
+}

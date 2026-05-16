@@ -29,12 +29,18 @@ class CartRepository implements CartRepositoryInterface
         return Cart::create($data->toArray());
     }
 
-    public function addCartItem(AddCartItemDTO $data)
+    public function addCartItem(string $cartId, AddCartItemDTO $data, float $unitPrice, float $totalPrice)
     {
-        return CartItem::create($data->toArray());
+        return CartItem::create([
+            'cart_id' => $cartId,
+            'restaurant_product_id' => $data->restaurant_product_id,
+            'quantity' => $data->quantity,
+            'unit_price' => $unitPrice,
+            'total_price' => $totalPrice,
+        ]);
     }
 
-    public function updateCartItem(string $cartItemId, UpdateCartItemDTO $data)
+    public function updateCartItem(string $cartItemId, UpdateCartItemDTO $data, float $totalPrice)
     {
         $cartItem = CartItem::find($cartItemId);
 
@@ -42,7 +48,10 @@ class CartRepository implements CartRepositoryInterface
             return null;
         }
 
-        $cartItem->update($data->toArray());
+        $cartItem->update([
+            'quantity' => $data->quantity,
+            'total_price' => $totalPrice,
+        ]);
 
         return $cartItem;
     }

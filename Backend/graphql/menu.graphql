@@ -1,0 +1,94 @@
+input CreateCategoryInput {
+  chain_id: ID!
+  name: String!
+}
+
+input UpdateCategoryInput {
+  chain_id: ID
+  name: String
+}
+
+input CreateProductInput {
+  category_id: ID!
+  name: String!
+  price: Float!
+  description: String
+  option_groups: [ProductOptionGroupInput!] = []
+}
+
+input UpdateProductInput {
+  name: String
+  price: Float
+  description: String
+  option_groups: [ProductOptionGroupInput!]
+}
+
+input CreateRestaurantProductInput {
+  restaurant_id: ID!
+  product_id: ID!
+  local_price: Float
+  is_available: Boolean = true
+  estimated_preparation_time_min: Int
+}
+
+input UpdateRestaurantProductInput {
+  restaurant_id: ID
+  product_id: ID
+  local_price: Float
+  is_available: Boolean
+  estimated_preparation_time_min: Int
+}
+
+input ProductOptionGroupInput {
+  id: ID
+  name: String!
+  max_options: Int!
+  min_options: Int!
+  options: [ProductOptionInput!]!
+}
+
+input ProductOptionInput {
+  id: ID
+  name: String!
+  extra_price: Float = 0
+  default_option: Boolean = false
+}
+
+extend type Query {
+  restaurantMenu(restaurant_id: ID!): RestaurantMenu!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@restaurantMenu")
+  restaurantCategories(restaurant_id: ID!): [Category!]!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@restaurantCategories")
+  chainCategories(chain_id: ID!): [Category!]!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@chainCategories")
+  product(id: ID!): Product
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@product")
+  restaurantProduct(id: ID!): RestaurantProduct
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@restaurantProduct")
+  productOptionGroups(product_id: ID!): [ProductOptionGroup!]!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@productOptionGroups")
+}
+
+extend type Mutation {
+  createCategory(input: CreateCategoryInput!): Category!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@createCategory")
+  updateCategory(id: ID!, input: UpdateCategoryInput!): Category!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@updateCategory")
+  deleteCategory(id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@deleteCategory")
+
+  createProduct(actor_user_id: ID!, input: CreateProductInput!): Product!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@createProduct")
+  updateProduct(actor_user_id: ID!, id: ID!, input: UpdateProductInput!): Product!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@updateProduct")
+  deleteProduct(actor_user_id: ID!, id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@deleteProduct")
+
+  createRestaurantProduct(input: CreateRestaurantProductInput!): RestaurantProduct!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@createRestaurantProduct")
+  updateRestaurantProduct(id: ID!, input: UpdateRestaurantProductInput!): RestaurantProduct!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@updateRestaurantProduct")
+  setRestaurantProductAvailability(id: ID!, is_available: Boolean!): RestaurantProduct!
+    @field(resolver: "App\\GraphQL\\Mutations\\MenuMutations@setRestaurantProductAvailability")
+
+}

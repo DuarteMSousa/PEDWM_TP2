@@ -1,12 +1,16 @@
-# graphql/schema.graphql
-
 type Query
 type Mutation
 
+#import common.graphql
 #import user.graphql
-#import realtime.graphql
+#import restaurants.graphql
+#import menu.graphql
+#import carts.graphql
+#import orders.graphql
+#import payments.graphql
+#import deliveries.graphql
 #import tracking.graphql
-#import operations.graphql
 #import notifications.graphql
-#import commerce.graphql
 #import reviews.graphql
+#import campaigns.graphql
+#import chat.graphql

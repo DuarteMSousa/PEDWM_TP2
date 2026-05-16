@@ -11,9 +11,11 @@ interface ProductServiceInterface
 
     public function getByCategoryId(string $categoryId);
 
-    public function createProduct(CreateProductDTO $data);
+    public function getOptionGroups(string $productId);
 
-    public function updateProduct(string $id, UpdateProductDTO $data);
+    public function createProduct(string $actorUserId, CreateProductDTO $data);
 
-    public function deleteProduct(string $id);
+    public function updateProduct(string $actorUserId, string $id, UpdateProductDTO $data);
+
+    public function deleteProduct(string $actorUserId, string $id);
 }

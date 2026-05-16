@@ -2,170 +2,63 @@
 
 namespace App\GraphQL\Mutations;
 
-use App\Services\UserService\UserServiceInterface;
 use App\DTOs\User\CreateUserDTO;
 use App\DTOs\User\UpdateUserDTO;
-use App\Models\UserAddress;
-use App\Support\ResolvesAuthenticatedUser;
-use GraphQL\Error\UserError;
-use Illuminate\Support\Facades\DB;
+use App\DTOs\UserAddress\CreateUserAddressDTO;
+use App\DTOs\UserAddress\UpdateUserAddressDTO;
+use App\Services\UserAddressService\UserAddressServiceInterface;
+use App\Services\UserService\UserServiceInterface;
 
 class UserMutations
 {
-    use ResolvesAuthenticatedUser;
-
-    public function __construct(private UserServiceInterface $userService)
-    {
+    public function __construct(
+        private UserServiceInterface $userService,
+        private UserAddressServiceInterface $userAddressService,
+    ) {
     }
 
     public function create($_, array $args)
     {
-        $dto = CreateUserDTO::from($args['input']);
+        $input = $args['input'];
 
-        return $this->userService->createUser($dto);
+        return $this->userService->createUser(new CreateUserDTO(
+            name: $input['name'],
+            email: $input['email'],
+            password: $input['password'],
+            user_type: $input['user_type'] ?? 'customer',
+        ));
     }
 
     public function update($_, array $args)
     {
-        $dto = UpdateUserDTO::from($args['input']);
-
-        return $this->userService->updateUser($args['id'], $dto);
+        return $this->userService->updateUser($args['id'], new UpdateUserDTO(
+            name: $args['input']['name'] ?? null,
+            email: $args['input']['email'] ?? null,
+        ));
     }
 
-    public function delete($_, array $args)
+    public function delete($_, array $args): bool
     {
-        $this->userService->deleteUser($args['id']);
-        return true;
+        return $this->userService->deleteUser($args['id']);
     }
 
-    public function updateMyProfile($_, array $args)
+    public function createClientAddress($_, array $args)
     {
-        $user = $this->resolveAuthenticatedUser();
-        $dto = UpdateUserDTO::from($args['input']);
-
-        return $this->userService->updateUser($user->id, $dto);
+        return $this->userAddressService->createForUser($args['user_id'], CreateUserAddressDTO::from($args['input']));
     }
 
-    public function createMyAddress($_, array $args)
+    public function updateClientAddress($_, array $args)
     {
-        $user = $this->resolveAuthenticatedUser();
-        $input = $args['input'];
-        $isDefault = (bool) ($input['is_default'] ?? false);
-
-        return DB::transaction(function () use ($user, $input, $isDefault) {
-            if ($isDefault) {
-                UserAddress::query()->where('user_id', $user->id)->update(['is_default' => false]);
-            } else {
-                $hasAnyAddress = UserAddress::query()->where('user_id', $user->id)->exists();
-                if (! $hasAnyAddress) {
-                    $isDefault = true;
-                }
-            }
-
-            return UserAddress::query()->create([
-                'user_id' => $user->id,
-                'street' => $input['street'],
-                'city' => $input['city'],
-                'postal_code' => $input['postal_code'],
-                'country' => $input['country'],
-                'latitude' => (float) $input['latitude'],
-                'longitude' => (float) $input['longitude'],
-                'is_default' => $isDefault,
-                'label' => $input['label'] ?? null,
-            ]);
-        });
+        return $this->userAddressService->updateForUser($args['user_id'], $args['address_id'], UpdateUserAddressDTO::from($args['input']));
     }
 
-    public function updateMyAddress($_, array $args)
+    public function deleteClientAddress($_, array $args): bool
     {
-        $user = $this->resolveAuthenticatedUser();
-        $addressId = (string) $args['address_id'];
-        $input = $args['input'];
-
-        /** @var UserAddress|null $address */
-        $address = UserAddress::query()
-            ->whereKey($addressId)
-            ->where('user_id', $user->id)
-            ->first();
-
-        if (! $address) {
-            throw new UserError('Address not found.');
-        }
-
-        return DB::transaction(function () use ($user, $address, $input) {
-            if (array_key_exists('is_default', $input) && (bool) $input['is_default']) {
-                UserAddress::query()->where('user_id', $user->id)->update(['is_default' => false]);
-            }
-
-            $address->update(array_filter([
-                'street' => $input['street'] ?? null,
-                'city' => $input['city'] ?? null,
-                'postal_code' => $input['postal_code'] ?? null,
-                'country' => $input['country'] ?? null,
-                'latitude' => isset($input['latitude']) ? (float) $input['latitude'] : null,
-                'longitude' => isset($input['longitude']) ? (float) $input['longitude'] : null,
-                'is_default' => $input['is_default'] ?? null,
-                'label' => $input['label'] ?? null,
-            ], fn ($value) => $value !== null));
-
-            return $address->fresh();
-        });
+        return $this->userAddressService->deleteForUser($args['user_id'], $args['address_id']);
     }
 
-    public function deleteMyAddress($_, array $args): bool
+    public function setDefaultClientAddress($_, array $args)
     {
-        $user = $this->resolveAuthenticatedUser();
-        $addressId = (string) $args['address_id'];
-
-        /** @var UserAddress|null $address */
-        $address = UserAddress::query()
-            ->whereKey($addressId)
-            ->where('user_id', $user->id)
-            ->first();
-
-        if (! $address) {
-            throw new UserError('Address not found.');
-        }
-
-        DB::transaction(function () use ($user, $address): void {
-            $wasDefault = (bool) $address->is_default;
-            $address->delete();
-
-            if ($wasDefault) {
-                $fallback = UserAddress::query()
-                    ->where('user_id', $user->id)
-                    ->orderBy('created_at')
-                    ->first();
-
-                if ($fallback) {
-                    $fallback->update(['is_default' => true]);
-                }
-            }
-        });
-
-        return true;
-    }
-
-    public function setDefaultMyAddress($_, array $args)
-    {
-        $user = $this->resolveAuthenticatedUser();
-        $addressId = (string) $args['address_id'];
-
-        /** @var UserAddress|null $address */
-        $address = UserAddress::query()
-            ->whereKey($addressId)
-            ->where('user_id', $user->id)
-            ->first();
-
-        if (! $address) {
-            throw new UserError('Address not found.');
-        }
-
-        DB::transaction(function () use ($user, $address): void {
-            UserAddress::query()->where('user_id', $user->id)->update(['is_default' => false]);
-            $address->update(['is_default' => true]);
-        });
-
-        return $address->fresh();
+        return $this->userAddressService->setDefault($args['user_id'], $args['address_id']);
     }
 }

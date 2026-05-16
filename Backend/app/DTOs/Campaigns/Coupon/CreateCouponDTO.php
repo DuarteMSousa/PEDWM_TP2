@@ -11,10 +11,10 @@ class CreateCouponDTO extends Data
     public function __construct(
         public readonly string $chain_id,
         public readonly string $code,
-        public readonly string $description,
+        public readonly ?string $description,
         public readonly DiscountType $type,
         public readonly DiscountTarget $target,
-        public readonly string $expiry_date,
+        public readonly ?string $expiry_date,
         public readonly float $discount = 0,
         public readonly ?string $product_id = null,
         public readonly ?string $category_id = null,

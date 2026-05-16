@@ -1,0 +1,32 @@
+input AddCartItemInput {
+  user_id: ID!
+  restaurant_product_id: ID!
+  quantity: Int!
+  option_ids: [ID!] = []
+}
+
+input UpdateCartItemInput {
+  user_id: ID!
+  quantity: Int!
+  option_ids: [ID!]
+}
+
+extend type Query {
+  clientCart(user_id: ID!): Cart
+    @field(resolver: "App\\GraphQL\\Queries\\CartQueries@clientCart")
+  clientCartById(user_id: ID!, cart_id: ID!): Cart
+    @field(resolver: "App\\GraphQL\\Queries\\CartQueries@clientCartById")
+}
+
+extend type Mutation {
+  createClientCart(user_id: ID!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@createClientCart")
+  addClientCartItem(input: AddCartItemInput!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@addClientCartItem")
+  updateClientCartItem(cart_item_id: ID!, input: UpdateCartItemInput!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@updateClientCartItem")
+  removeClientCartItem(user_id: ID!, cart_item_id: ID!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@removeClientCartItem")
+  clearClientCart(user_id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@clearClientCart")
+}

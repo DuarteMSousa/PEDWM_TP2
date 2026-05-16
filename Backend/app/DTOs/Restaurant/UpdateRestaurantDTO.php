@@ -7,9 +7,10 @@ use Spatie\LaravelData\Data;
 class UpdateRestaurantDTO extends Data
 {
     public function __construct(
-        public readonly string $name,
-        public readonly string $opening_hours,
-        public readonly string $closing_hours,
-        public readonly float $delivery_radius,
+        public readonly ?string $chain_id = null,
+        public readonly ?string $name = null,
+        public readonly ?string $opening_hours = null,
+        public readonly ?string $closing_hours = null,
+        public readonly ?float $delivery_radius = null,
     ) {}
 }

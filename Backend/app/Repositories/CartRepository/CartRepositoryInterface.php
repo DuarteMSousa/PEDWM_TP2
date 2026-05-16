@@ -15,9 +15,9 @@ interface CartRepositoryInterface
 
     public function createCart(CreateCartDTO $data);
 
-    public function addCartItem(AddCartItemDTO $data);
+    public function addCartItem(string $cartId, AddCartItemDTO $data, float $unitPrice, float $totalPrice);
 
-    public function updateCartItem(string $cartItemId, UpdateCartItemDTO $data);
+    public function updateCartItem(string $cartItemId, UpdateCartItemDTO $data, float $totalPrice);
 
     public function addCartItemOption(CartItemOptionDTO $data);
 

@@ -1,0 +1,25 @@
+input CreatePaymentInput {
+  order_id: ID!
+  method: PaymentMethod!
+  amount: Float!
+}
+
+extend type Query {
+  payment(id: ID!): Payment
+    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@payment")
+  orderPayment(order_id: ID!): Payment
+    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@orderPayment")
+  paymentEvents(payment_id: ID!): [PaymentEvent!]!
+    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@paymentEvents")
+}
+
+extend type Mutation {
+  createPayment(input: CreatePaymentInput!): Payment!
+    @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@createPayment")
+  confirmPayment(payment_id: ID!, transaction_id: String): Payment!
+    @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@confirmPayment")
+  failPayment(payment_id: ID!, reason: String): Payment!
+    @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@failPayment")
+  refundPayment(payment_id: ID!, reason: String): Payment!
+    @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@refundPayment")
+}

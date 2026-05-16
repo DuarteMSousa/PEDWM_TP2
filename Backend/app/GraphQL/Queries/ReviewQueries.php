@@ -2,45 +2,21 @@
 
 namespace App\GraphQL\Queries;
 
-use App\Enums\ReviewTargetType;
-use App\Models\Review;
-use App\Support\ResolvesAuthenticatedUser;
+use App\Services\ReviewService\ReviewServiceInterface;
 
 class ReviewQueries
 {
-    use ResolvesAuthenticatedUser;
-
-    /**
-     * @param  array<string, mixed>  $args
-     * @return array<int, Review>
-     */
-    public function myReviews(null $_, array $args): array
+    public function __construct(private ReviewServiceInterface $reviewService)
     {
-        $user = $this->resolveAuthenticatedUser();
-        $page = max(1, (int) ($args['page'] ?? 1));
-        $perPage = max(1, min((int) ($args['per_page'] ?? 20), 100));
-
-        return Review::query()
-            ->where('user_id', $user->id)
-            ->orderByDesc('created_at')
-            ->paginate($perPage, ['*'], 'page', $page)
-            ->items();
     }
 
-    /**
-     * @param  array<string, mixed>  $args
-     * @return array<int, Review>
-     */
-    public function targetReviews(null $_, array $args): array
+    public function clientReviews($_, array $args)
     {
-        $page = max(1, (int) ($args['page'] ?? 1));
-        $perPage = max(1, min((int) ($args['per_page'] ?? 20), 100));
+        return $this->reviewService->forUser($args['user_id'], $args['page'], $args['per_page']);
+    }
 
-        return Review::query()
-            ->where('target_type', ReviewTargetType::from($args['target_type'])->value)
-            ->where('target_id', $args['target_id'])
-            ->orderByDesc('created_at')
-            ->paginate($perPage, ['*'], 'page', $page)
-            ->items();
+    public function targetReviews($_, array $args)
+    {
+        return $this->reviewService->forTarget($args['target_type'], $args['target_id'], $args['page'], $args['per_page']);
     }
 }

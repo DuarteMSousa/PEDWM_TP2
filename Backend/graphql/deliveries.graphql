@@ -1,0 +1,40 @@
+input OfferDeliveryInput {
+  delivery_id: ID!
+  courier_id: ID!
+}
+
+extend type Query {
+  courierProfile(user_id: ID!): Courier
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierProfile")
+  courierActiveDelivery(courier_id: ID!): Delivery
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierActiveDelivery")
+  courierDeliveries(courier_id: ID!, statuses: [DeliveryStatus!]): [Delivery!]!
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierDeliveries")
+  delivery(id: ID!): Delivery
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@delivery")
+  orderDelivery(order_id: ID!): Delivery
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@orderDelivery")
+  courierDeliveryOffers(courier_id: ID!): [Delivery!]!
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierDeliveryOffers")
+}
+
+extend type Mutation {
+  setCourierStatus(user_id: ID!, status: CourierStatus!): Courier!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@setCourierStatus")
+  createDeliveryForOrder(order_id: ID!, delivery_fee: Float = 0): Delivery!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@createDeliveryForOrder")
+  offerDeliveryToCourier(input: OfferDeliveryInput!): Delivery!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@offerDeliveryToCourier")
+  acceptDeliveryOffer(delivery_id: ID!, courier_id: ID!): Delivery!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@acceptDeliveryOffer")
+  rejectDeliveryOffer(delivery_id: ID!, courier_id: ID!, reason: String): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@rejectDeliveryOffer")
+  markDeliveryPickedUp(delivery_id: ID!, courier_id: ID!): Delivery!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@markDeliveryPickedUp")
+  markDeliveryInTransit(delivery_id: ID!, courier_id: ID!): Delivery!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@markDeliveryInTransit")
+  markDeliveryDelivered(delivery_id: ID!, courier_id: ID!): Delivery!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@markDeliveryDelivered")
+  markDeliveryFailed(delivery_id: ID!, courier_id: ID!, reason: String!): Delivery!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@markDeliveryFailed")
+}
