@@ -3,6 +3,7 @@ input CheckoutInput {
   cart_id: ID
   address_id: ID
   payment_method: PaymentMethod!
+  coupon_code: String
 }
 
 type CheckoutPayload {

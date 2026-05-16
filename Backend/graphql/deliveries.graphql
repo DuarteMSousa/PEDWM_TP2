@@ -14,7 +14,7 @@ extend type Query {
     @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@delivery")
   orderDelivery(order_id: ID!): Delivery
     @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@orderDelivery")
-  courierDeliveryOffers(courier_id: ID!): [Delivery!]!
+  courierDeliveryOffers(courier_id: ID!): [DeliveryOffer!]!
     @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierDeliveryOffers")
 }
 
@@ -23,11 +23,11 @@ extend type Mutation {
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@setCourierStatus")
   createDeliveryForOrder(order_id: ID!, delivery_fee: Float = 0): Delivery!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@createDeliveryForOrder")
-  offerDeliveryToCourier(input: OfferDeliveryInput!): Delivery!
+  offerDeliveryToCourier(input: OfferDeliveryInput!): DeliveryOffer!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@offerDeliveryToCourier")
-  acceptDeliveryOffer(delivery_id: ID!, courier_id: ID!): Delivery!
+  acceptDeliveryOffer(offer_id: ID!): Delivery!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@acceptDeliveryOffer")
-  rejectDeliveryOffer(delivery_id: ID!, courier_id: ID!, reason: String): Boolean!
+  rejectDeliveryOffer(offer_id: ID!, reason: String): Boolean!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@rejectDeliveryOffer")
   markDeliveryPickedUp(delivery_id: ID!, courier_id: ID!): Delivery!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@markDeliveryPickedUp")

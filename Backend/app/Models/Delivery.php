@@ -6,7 +6,8 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use \App\Enums\DeliveryStatus;
+use App\Enums\DeliveryStatus;
+
 class Delivery extends Model
 {
     use HasUuids;
@@ -43,5 +44,15 @@ class Delivery extends Model
     public function positionHistory(): HasMany
     {
         return $this->hasMany(CourierPositionHistory::class);
+    }
+
+    public function events(): HasMany
+    {
+        return $this->hasMany(DeliveryEvent::class);
+    }
+
+    public function offers(): HasMany
+    {
+        return $this->hasMany(DeliveryOffer::class);
     }
 }

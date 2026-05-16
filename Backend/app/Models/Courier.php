@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use \App\Enums\CourierStatus;
+use App\Enums\CourierStatus;
 
 class Courier extends Model
 {
@@ -51,5 +51,10 @@ class Courier extends Model
     public function deliveries(): HasMany
     {
         return $this->hasMany(Delivery::class, 'courier_id', 'user_id');
+    }
+
+    public function deliveryOffers(): HasMany
+    {
+        return $this->hasMany(DeliveryOffer::class, 'courier_id', 'user_id');
     }
 }

@@ -30,12 +30,12 @@ class DeliveryMutations
 
     public function acceptDeliveryOffer($_, array $args)
     {
-        return $this->deliveryService->acceptOffer($args['delivery_id'], $args['courier_id']);
+        return $this->deliveryService->acceptOffer($args['offer_id']);
     }
 
     public function rejectDeliveryOffer($_, array $args): bool
     {
-        return $this->deliveryService->rejectOffer($args['delivery_id'], $args['courier_id']);
+        return $this->deliveryService->rejectOffer($args['offer_id']);
     }
 
     public function markDeliveryPickedUp($_, array $args)

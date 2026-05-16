@@ -21,6 +21,16 @@ class PaymentMutations
         return $this->paymentService->confirm($args['payment_id'], $args['transaction_id'] ?? null);
     }
 
+    public function payPayment($_, array $args)
+    {
+        return $this->paymentService->confirm($args['payment_id'], $args['transaction_id'] ?? null);
+    }
+
+    public function cancelPayment($_, array $args)
+    {
+        return $this->paymentService->cancel($args['payment_id'], $args['reason'] ?? null);
+    }
+
     public function failPayment($_, array $args)
     {
         return $this->paymentService->fail($args['payment_id'], $args['reason'] ?? null);

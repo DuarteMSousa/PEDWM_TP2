@@ -3,6 +3,7 @@
 namespace App\Services\DeliveryService;
 
 use App\Models\Delivery;
+use App\Models\DeliveryOffer;
 
 interface DeliveryServiceInterface
 {
@@ -18,11 +19,11 @@ interface DeliveryServiceInterface
 
     public function createForOrder(string $orderId, float $deliveryFee): Delivery;
 
-    public function offerToCourier(string $deliveryId, string $courierId): Delivery;
+    public function offerToCourier(string $deliveryId, string $courierId, int $ttlSeconds = 30): DeliveryOffer;
 
-    public function acceptOffer(string $deliveryId, string $courierId): Delivery;
+    public function acceptOffer(string $offerId): Delivery;
 
-    public function rejectOffer(string $deliveryId, string $courierId): bool;
+    public function rejectOffer(string $offerId): bool;
 
     public function markPickedUp(string $deliveryId, string $courierId): Delivery;
 

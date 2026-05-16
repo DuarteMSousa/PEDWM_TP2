@@ -37,6 +37,12 @@ interface OrderServiceInterface
 
     public function repeatOrder(string $userId, string $orderId): \App\Models\Cart;
 
+    public function confirmAfterPayment(Order $order, string $actorUserId): Order;
+
+    public function recordCourierAssigned(Order $order, string $actorUserId): Order;
+
+    public function recordPickedUp(Order $order, string $actorUserId): Order;
+
     public function markOutForDelivery(Order $order, string $actorUserId): Order;
 
     public function markDelivered(Order $order, string $actorUserId): Order;

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Events\ChatMessageSent;
 use App\Events\CourierPositionUpdated;
+use App\Events\DomainEventBroadcasted;
 use App\Events\UserNotificationCreated;
 use App\Models\OutboxEvent;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -69,8 +70,22 @@ class PublishOutboxEventJob implements ShouldQueue
             'COURIER_POSITION_UPDATED' => event(new CourierPositionUpdated($payload)),
             'CHAT_MESSAGE_SENT' => event(new ChatMessageSent($payload)),
             'USER_NOTIFICATION_CREATED' => $this->publishUserNotification($payload),
-            default => null,
+            default => $this->publishDomainEvent($eventName, $payload),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function publishDomainEvent(string $eventName, array $payload): void
+    {
+        $channels = $payload['channels'] ?? [];
+
+        if (! is_array($channels) || $channels === []) {
+            return;
+        }
+
+        event(new DomainEventBroadcasted($eventName, $channels, $payload));
     }
 
     /**

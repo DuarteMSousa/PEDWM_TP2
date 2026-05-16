@@ -17,6 +17,8 @@ interface PaymentServiceInterface
 
     public function confirm(string $paymentId, ?string $transactionId): Payment;
 
+    public function cancel(string $paymentId, ?string $reason): Payment;
+
     public function fail(string $paymentId, ?string $reason): Payment;
 
     public function refund(string $paymentId, ?string $reason): Payment;

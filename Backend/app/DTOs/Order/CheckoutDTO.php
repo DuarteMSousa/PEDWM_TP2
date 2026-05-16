@@ -11,6 +11,7 @@ class CheckoutDTO extends Data
         public readonly PaymentMethod $payment_method,
         public readonly ?string $cart_id = null,
         public readonly ?string $address_id = null,
+        public readonly ?string $coupon_code = null,
     ) {
     }
 }

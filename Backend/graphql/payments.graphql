@@ -18,6 +18,10 @@ extend type Mutation {
     @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@createPayment")
   confirmPayment(payment_id: ID!, transaction_id: String): Payment!
     @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@confirmPayment")
+  payPayment(payment_id: ID!, transaction_id: String): Payment!
+    @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@payPayment")
+  cancelPayment(payment_id: ID!, reason: String): Payment!
+    @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@cancelPayment")
   failPayment(payment_id: ID!, reason: String): Payment!
     @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@failPayment")
   refundPayment(payment_id: ID!, reason: String): Payment!

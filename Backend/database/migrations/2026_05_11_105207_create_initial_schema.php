@@ -176,7 +176,7 @@ return new class extends Migration {
             $table->uuid('id')->primary();
             $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
             $table->enum('method', ['CASH', 'CARD', 'MBWAY', 'PAYPAL']);
-            $table->enum('status', ['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED']);
+            $table->enum('status', ['PENDING', 'COMPLETED', 'FAILED', 'REFUNDED', 'CANCELLED']);
             $table->string('transaction_id')->nullable();
             $table->timestamp('paid_at')->nullable();
             $table->timestamp('expired_at')->nullable();
@@ -325,7 +325,7 @@ return new class extends Migration {
         Schema::create('order_events', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
-            $table->enum('event_type', ['ORDER_CREATED', 'ORDER_CONFIRMED', 'ORDER_PREPARING', 'ORDER_READY', 'ORDER_COURIER_ASSIGNED', 'ORDER_OUT_FOR_DELIVERY', 'ORDER_COMPLETED', 'ORDER_CANCELLED']);
+            $table->enum('event_type', ['ORDER_CREATED', 'ORDER_PAYMENT_COMPLETED', 'ORDER_CONFIRMED', 'ORDER_REJECTED', 'ORDER_PREPARING', 'ORDER_READY', 'ORDER_COURIER_ASSIGNED', 'ORDER_PICKED_UP', 'ORDER_OUT_FOR_DELIVERY', 'ORDER_DELIVERED', 'ORDER_CANCELLED']);
             $table->timestamp('timestamp');
             $table->jsonb('payload')->nullable();
         });
@@ -333,7 +333,7 @@ return new class extends Migration {
         Schema::create('payment_events', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('payment_id')->constrained('payments')->cascadeOnDelete();
-            $table->enum('event_type', ['PAYMENT_CREATED', 'PAYMENT_COMPLETED', 'PAYMENT_FAILED', 'PAYMENT_EXPIRED']);
+            $table->enum('event_type', ['PAYMENT_CREATED', 'PAYMENT_COMPLETED', 'PAYMENT_FAILED', 'PAYMENT_EXPIRED', 'PAYMENT_REFUNDED', 'PAYMENT_CANCELLED']);
             $table->timestamp('timestamp');
             $table->jsonb('payload')->nullable();
         });

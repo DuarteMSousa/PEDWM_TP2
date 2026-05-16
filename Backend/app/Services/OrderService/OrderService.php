@@ -2,20 +2,26 @@
 
 namespace App\Services\OrderService;
 
+use App\Domain\StateMachines\Orders\OrderStateFactory;
 use App\DTOs\Order\CheckoutDTO;
+use App\Enums\PaymentMethod;
 use App\Enums\OrderEventType;
 use App\Enums\OrderItemStatus;
 use App\Enums\OrderStatus;
 use App\Enums\PaymentEventType;
 use App\Enums\PaymentStatus;
+use App\Jobs\AssignCourierToDeliveryJob;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderEvent;
 use App\Models\OrderItem;
-use App\Models\Payment;
 use App\Models\UserAddress;
 use App\Services\CartService\CartServiceInterface;
+use App\Services\DeliveryService\DeliveryServiceInterface;
+use App\Services\OrderPricingService;
+use App\Services\OutboxService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class OrderService implements OrderServiceInterface
 {
@@ -25,7 +31,7 @@ class OrderService implements OrderServiceInterface
         'events',
         'discounts',
         'payment.events',
-        'delivery',
+        'delivery.events',
     ];
 
     public function clientOrders(string $userId, ?array $statuses = null, int $page = 1, int $perPage = 20)
@@ -94,7 +100,7 @@ class OrderService implements OrderServiceInterface
     {
         return DB::transaction(function () use ($clientUserId, $data) {
             $cart = Cart::query()
-                ->with(['items.restaurantProduct.product', 'items.options.productOption'])
+                ->with(['items.restaurantProduct.product.category', 'items.options.productOption'])
                 ->where('user_id', $clientUserId)
                 ->when($data->cart_id, fn ($query, $cartId) => $query->whereKey($cartId))
                 ->firstOrFail();
@@ -105,6 +111,7 @@ class OrderService implements OrderServiceInterface
 
             $firstRestaurantProduct = $cart->items->first()->restaurantProduct;
             $restaurant = $firstRestaurantProduct->restaurant()->firstOrFail();
+            $pricing = app(OrderPricingService::class)->price($cart, $restaurant, $data->coupon_code);
             $method = $data->payment_method;
             $paymentStatus = $method === PaymentMethod::CASH ? PaymentStatus::COMPLETED : PaymentStatus::PENDING;
             $orderStatus = $paymentStatus === PaymentStatus::COMPLETED ? OrderStatus::CONFIRMED : OrderStatus::PENDING;
@@ -113,10 +120,11 @@ class OrderService implements OrderServiceInterface
                 'user_id' => $clientUserId,
                 'restaurant_id' => $restaurant->id,
                 'status' => $orderStatus->value,
-                'total' => $cart->total,
+                'total' => $pricing['total'],
                 'restaurant_name_snapshot' => $restaurant->name,
             ]);
 
+            $cartItemToOrderItem = [];
             foreach ($cart->items as $cartItem) {
                 $orderItem = $order->items()->create([
                     'restaurant_product_id' => $cartItem->restaurant_product_id,
@@ -126,6 +134,7 @@ class OrderService implements OrderServiceInterface
                     'product_name_snapshot' => $cartItem->restaurantProduct->product->name,
                     'total_price' => $cartItem->total_price,
                 ]);
+                $cartItemToOrderItem[$cartItem->id] = $orderItem->id;
 
                 foreach ($cartItem->options as $cartOption) {
                     $orderItem->options()->create([
@@ -134,6 +143,21 @@ class OrderService implements OrderServiceInterface
                         'extra_price' => $cartOption->extra_price,
                     ]);
                 }
+            }
+
+            foreach ($pricing['discounts'] as $discount) {
+                $order->discounts()->create([
+                    'name_snapshot' => $discount['name_snapshot'],
+                    'description_snapshot' => $discount['description_snapshot'] ?? null,
+                    'discount_amount' => $discount['discount_amount'],
+                    'discount_type' => $discount['discount_type'],
+                    'discount_target' => $discount['discount_target'],
+                    'order_item_id' => isset($discount['cart_item_id'])
+                        ? ($cartItemToOrderItem[$discount['cart_item_id']] ?? null)
+                        : null,
+                    'origin_type' => $discount['origin_type'],
+                    'origin_id' => $discount['origin_id'],
+                ]);
             }
 
             if ($data->address_id !== null) {
@@ -154,13 +178,14 @@ class OrderService implements OrderServiceInterface
             $payment = $order->payment()->create([
                 'method' => $method->value,
                 'status' => $paymentStatus->value,
-                'amount' => $cart->total,
+                'amount' => $pricing['total'],
                 'paid_at' => $paymentStatus === PaymentStatus::COMPLETED ? now() : null,
                 'expired_at' => $paymentStatus === PaymentStatus::PENDING ? now()->addMinutes(10) : null,
             ]);
 
             $this->recordEvent($order, OrderEventType::ORDER_CREATED, $clientUserId);
             if ($orderStatus === OrderStatus::CONFIRMED) {
+                $this->recordEvent($order, OrderEventType::ORDER_PAYMENT_COMPLETED, $clientUserId);
                 $this->recordEvent($order, OrderEventType::ORDER_CONFIRMED, $clientUserId);
             }
 
@@ -169,6 +194,18 @@ class OrderService implements OrderServiceInterface
                 'timestamp' => now(),
                 'payload' => ['actor_user_id' => $clientUserId],
             ]);
+
+            if ($paymentStatus === PaymentStatus::COMPLETED) {
+                $payment->events()->create([
+                    'event_type' => PaymentEventType::PAYMENT_COMPLETED->value,
+                    'timestamp' => now(),
+                    'payload' => ['actor_user_id' => $clientUserId],
+                ]);
+            }
+
+            if ($pricing['coupon']) {
+                $pricing['coupon']->increment('used_count');
+            }
 
             $cart->items()->delete();
             $cart->update(['total' => 0]);
@@ -191,12 +228,18 @@ class OrderService implements OrderServiceInterface
     {
         $order = Order::query()->findOrFail($orderId);
 
-        return $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
+        $order = $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
+        $delivery = app(DeliveryServiceInterface::class)->createForOrder($order->id, 0);
+        AssignCourierToDeliveryJob::dispatch($delivery->id);
+
+        return $order;
     }
 
     public function rejectByRestaurant(string $actorUserId, string $orderId, ?string $reason): Order
     {
         $order = Order::query()->findOrFail($orderId);
+
+        $this->recordEvent($order, OrderEventType::ORDER_REJECTED, $actorUserId, ['reason' => $reason]);
 
         return $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, $actorUserId, ['reason' => $reason]);
     }
@@ -215,7 +258,9 @@ class OrderService implements OrderServiceInterface
             $item->update(['status' => $status]);
             $order = $item->order->refresh()->load('items');
 
-            $notCancelled = $order->items->where('status', '!=', OrderItemStatus::CANCELLED->value);
+            $notCancelled = $order->items->filter(
+                fn ($orderItem): bool => $orderItem->status !== OrderItemStatus::CANCELLED
+            );
             $allReady = $notCancelled->isNotEmpty()
                 && $notCancelled->every(fn ($orderItem) => $orderItem->status->value === OrderItemStatus::READY->value);
 
@@ -268,13 +313,35 @@ class OrderService implements OrderServiceInterface
 
     public function markDelivered(Order $order, string $actorUserId): Order
     {
-        return $this->transition($order, OrderStatus::DELIVERED, OrderEventType::ORDER_COMPLETED, $actorUserId);
+        return $this->transition($order, OrderStatus::DELIVERED, OrderEventType::ORDER_DELIVERED, $actorUserId);
+    }
+
+    public function confirmAfterPayment(Order $order, string $actorUserId): Order
+    {
+        $this->recordEvent($order, OrderEventType::ORDER_PAYMENT_COMPLETED, $actorUserId);
+
+        return $this->transition($order, OrderStatus::CONFIRMED, OrderEventType::ORDER_CONFIRMED, $actorUserId);
+    }
+
+    public function recordCourierAssigned(Order $order, string $actorUserId): Order
+    {
+        $this->recordEvent($order, OrderEventType::ORDER_COURIER_ASSIGNED, $actorUserId);
+
+        return $order->refresh()->load($this->with);
+    }
+
+    public function recordPickedUp(Order $order, string $actorUserId): Order
+    {
+        $this->recordEvent($order, OrderEventType::ORDER_PICKED_UP, $actorUserId);
+
+        return $order->refresh()->load($this->with);
     }
 
     private function transition(Order $order, OrderStatus $status, OrderEventType $eventType, string $actorUserId, array $payload = []): Order
     {
         return DB::transaction(function () use ($order, $status, $eventType, $actorUserId, $payload) {
-            $order->update(['status' => $status->value]);
+            $order = Order::query()->lockForUpdate()->findOrFail($order->id);
+            OrderStateFactory::from($order->status)->transition($order, $status);
             $this->recordEvent($order, $eventType, $actorUserId, $payload);
 
             return $order->refresh()->load($this->with);
@@ -283,13 +350,31 @@ class OrderService implements OrderServiceInterface
 
     private function recordEvent(Order $order, OrderEventType $eventType, string $actorUserId, array $payload = []): void
     {
+        $occurredAt = now();
+        $eventPayload = [
+            'eventId' => (string) Str::uuid(),
+            'eventName' => $eventType->value,
+            'aggregateType' => 'order',
+            'aggregateId' => $order->id,
+            'orderId' => $order->id,
+            'customerId' => $order->user_id,
+            'restaurantId' => $order->restaurant_id,
+            'actorId' => $actorUserId,
+            'occurredAt' => $occurredAt->toIso8601String(),
+            'data' => $payload,
+            'channels' => [
+                "customer.{$order->user_id}.orders",
+                "restaurant.{$order->restaurant_id}.orders",
+                "order.{$order->id}.tracking",
+            ],
+        ];
+
         $order->events()->create([
             'event_type' => $eventType->value,
-            'timestamp' => now(),
-            'payload' => [
-                'actor_user_id' => $actorUserId,
-                ...$payload,
-            ],
+            'timestamp' => $occurredAt,
+            'payload' => $eventPayload,
         ]);
+
+        app(OutboxService::class)->enqueue('order', $order->id, $eventType->value, $eventPayload);
     }
 }

@@ -8,7 +8,9 @@ use App\Models\CourierPositionHistory;
 use App\Models\Delivery;
 use App\Models\Order;
 use App\Services\CourierService\CourierServiceInterface;
+use App\Services\OutboxService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class TrackingService implements TrackingServiceInterface
 {
@@ -67,6 +69,21 @@ class TrackingService implements TrackingServiceInterface
                 'latitude' => $data->latitude,
                 'longitude' => $data->longitude,
                 'timestamp' => $timestamp,
+            ]);
+
+            app(OutboxService::class)->enqueue('delivery', $delivery->id, 'COURIER_POSITION_UPDATED', [
+                'eventId' => (string) Str::uuid(),
+                'eventName' => 'COURIER_POSITION_UPDATED',
+                'orderId' => $delivery->order_id,
+                'deliveryId' => $delivery->id,
+                'courierId' => $data->courier_id,
+                'lat' => $data->latitude,
+                'lng' => $data->longitude,
+                'heading' => $data->heading,
+                'speed' => $data->speed,
+                'accuracy' => $data->accuracy,
+                'recordedAt' => $timestamp,
+                'etaSeconds' => null,
             ]);
 
             return [
