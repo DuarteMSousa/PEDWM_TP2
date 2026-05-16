@@ -11,5 +11,4 @@ class UpdateUserDTO extends Data
         public readonly ?string $email = null
     ) {
     }
-
 }

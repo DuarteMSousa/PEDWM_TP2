@@ -7,7 +7,7 @@ input CreateOrderChatInput {
 input AddChatParticipantInput {
   chat_id: ID!
   user_id: ID!
-  user_type: String!
+  user_type: UserType!
 }
 
 input SendMessageInput {

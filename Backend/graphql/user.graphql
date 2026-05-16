@@ -2,7 +2,7 @@ input CreateUserInput {
     name: String!
     email: String!
     password: String!
-    user_type: String! = "customer"
+    user_type: UserType! = CUSTOMER
 }
 
 input UpdateUserInput {

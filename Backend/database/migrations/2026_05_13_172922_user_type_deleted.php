@@ -13,8 +13,8 @@ return new class extends Migration
     {
         if (! Schema::hasColumn('users', 'user_type')) {
             Schema::table('users', function (Blueprint $table): void {
-                $table->enum('user_type', ['customer', 'courier', 'chain_manager', 'local_manager'])
-                    ->default('customer');
+                $table->enum('user_type', ['CUSTOMER', 'COURIER', 'CHAIN_MANAGER', 'LOCAL_MANAGER'])
+                    ->default('CUSTOMER');
             });
         }
     }

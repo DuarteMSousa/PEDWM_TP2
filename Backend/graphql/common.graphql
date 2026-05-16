@@ -79,11 +79,18 @@ enum ChatType {
   CUSTOMER_COURIER
 }
 
+enum UserType {
+  CUSTOMER
+  COURIER
+  CHAIN_MANAGER
+  LOCAL_MANAGER
+}
+
 type User {
   id: ID!
   name: String!
   email: String!
-  user_type: String
+  user_type: UserType
   created_at: String
   updated_at: String
 }
@@ -420,7 +427,7 @@ type ChatParticipant {
   id: ID!
   chat_id: ID!
   user_id: ID!
-  user_type: String!
+  user_type: UserType!
   joined_at: String
   last_read_at: String
 }
