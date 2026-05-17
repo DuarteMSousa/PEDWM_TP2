@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Events\NotificationEventRecorded;
+use App\Listeners\CreateNotificationFromDomainEvent;
 use App\Services\CartService\CartService;
 use App\Services\CartService\CartServiceInterface;
 use App\Services\CategoryService\CategoryService;
@@ -40,6 +42,7 @@ use App\Services\UserAddressService\UserAddressService;
 use App\Services\UserAddressService\UserAddressServiceInterface;
 use App\Services\UserService\UserService;
 use App\Services\UserService\UserServiceInterface;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -75,6 +78,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Event::listen(NotificationEventRecorded::class, CreateNotificationFromDomainEvent::class);
     }
 }

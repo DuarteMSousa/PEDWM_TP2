@@ -28,7 +28,7 @@ class OutboxService
         ]);
 
         if ($dispatchNow) {
-            PublishOutboxEventJob::dispatch($outbox->id);
+            PublishOutboxEventJob::dispatch($outbox->id)->afterCommit();
         }
 
         return $outbox;

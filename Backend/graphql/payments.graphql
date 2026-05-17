@@ -24,6 +24,4 @@ extend type Mutation {
     @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@cancelPayment")
   failPayment(payment_id: ID!, reason: String): Payment!
     @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@failPayment")
-  refundPayment(payment_id: ID!, reason: String): Payment!
-    @field(resolver: "App\\GraphQL\\Mutations\\PaymentMutations@refundPayment")
 }

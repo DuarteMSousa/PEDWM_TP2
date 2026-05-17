@@ -49,6 +49,7 @@ enum DeliveryStatus {
 }
 
 enum NotificationType {
+    DELIVERY_UPDATE
     ORDER_UPDATE
     PROMOTION
     SYSTEM

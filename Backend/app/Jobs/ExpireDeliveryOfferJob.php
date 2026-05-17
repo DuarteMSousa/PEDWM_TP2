@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Enums\DeliveryOfferEventType;
 use App\Enums\DeliveryOfferStatus;
+use App\Events\NotificationEventRecorded;
 use App\Models\DeliveryOffer;
 use App\Services\OutboxService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,10 +28,11 @@ class ExpireDeliveryOfferJob implements ShouldQueue
         }
 
         $offer->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
+        $eventType = DeliveryOfferEventType::JOB_EXPIRED;
 
-        app(OutboxService::class)->enqueue('delivery_offer', $offer->id, 'JOB_EXPIRED', [
+        $payload = [
             'eventId' => (string) Str::uuid(),
-            'eventName' => 'JOB_EXPIRED',
+            'eventName' => $eventType->value,
             'aggregateType' => 'delivery_offer',
             'aggregateId' => $offer->id,
             'offerId' => $offer->id,
@@ -37,7 +40,10 @@ class ExpireDeliveryOfferJob implements ShouldQueue
             'courierId' => $offer->courier_id,
             'occurredAt' => now()->toIso8601String(),
             'channels' => ["courier.{$offer->courier_id}.jobs"],
-        ]);
+        ];
+
+        app(OutboxService::class)->enqueue('delivery_offer', $offer->id, $eventType->value, $payload);
+        NotificationEventRecorded::dispatch($eventType, $payload);
 
         AssignCourierToDeliveryJob::dispatch($offer->delivery_id);
     }

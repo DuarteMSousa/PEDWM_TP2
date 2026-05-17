@@ -3,6 +3,7 @@
 namespace App\Services\OrderService;
 
 use App\Aspects\Transactional;
+use App\Domain\Geo\GeoMath;
 use App\Domain\Orders\OrderItemRules;
 use App\Domain\StateMachines\Orders\OrderStateFactory;
 use App\DTOs\Order\CheckoutDTO;
@@ -12,7 +13,9 @@ use App\Enums\OrderStatus;
 use App\Enums\PaymentEventType;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentStatus;
+use App\Events\NotificationEventRecorded;
 use App\Jobs\AssignCourierToDeliveryJob;
+use App\Jobs\ExpirePendingPaymentJob;
 use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderEvent;
@@ -23,6 +26,7 @@ use App\Services\DeliveryService\DeliveryServiceInterface;
 use App\Services\OrderPricingService;
 use App\Services\OutboxService;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class OrderService implements OrderServiceInterface
 {
@@ -112,6 +116,9 @@ class OrderService implements OrderServiceInterface
 
         $firstRestaurantProduct = $cart->items->first()->restaurantProduct;
         $restaurant = $firstRestaurantProduct->restaurant()->firstOrFail();
+        $address = $this->validatedCheckoutAddress($clientUserId, $data->address_id);
+        $this->validateCheckoutCart($cart, $restaurant->id, $address);
+
         $pricing = app(OrderPricingService::class)->price($cart, $restaurant, $data->coupon_code);
         $method = $data->payment_method;
         $paymentStatus = $method === PaymentMethod::CASH ? PaymentStatus::COMPLETED : PaymentStatus::PENDING;
@@ -161,20 +168,14 @@ class OrderService implements OrderServiceInterface
             ]);
         }
 
-        if ($data->address_id !== null) {
-            $address = UserAddress::query()
-                ->where('user_id', $clientUserId)
-                ->findOrFail($data->address_id);
-
-            $order->address()->create([
-                'street' => $address->street,
-                'city' => $address->city,
-                'postal_code' => $address->postal_code,
-                'country' => $address->country,
-                'latitude' => $address->latitude,
-                'longitude' => $address->longitude,
-            ]);
-        }
+        $order->address()->create([
+            'street' => $address->street,
+            'city' => $address->city,
+            'postal_code' => $address->postal_code,
+            'country' => $address->country,
+            'latitude' => $address->latitude,
+            'longitude' => $address->longitude,
+        ]);
 
         $payment = $order->payment()->create([
             'method' => $method->value,
@@ -184,7 +185,9 @@ class OrderService implements OrderServiceInterface
             'expired_at' => $paymentStatus === PaymentStatus::PENDING ? now()->addMinutes(10) : null,
         ]);
 
-        $this->recordEvent($order, OrderEventType::ORDER_CREATED, $clientUserId);
+        $this->recordEvent($order, OrderEventType::ORDER_CREATED, $clientUserId, [
+            'paymentStatus' => $paymentStatus->value,
+        ]);
         if ($orderStatus === OrderStatus::CONFIRMED) {
             $this->recordEvent($order, OrderEventType::ORDER_PAYMENT_COMPLETED, $clientUserId);
             $this->recordEvent($order, OrderEventType::ORDER_CONFIRMED, $clientUserId);
@@ -202,8 +205,11 @@ class OrderService implements OrderServiceInterface
                 'timestamp' => now(),
                 'payload' => ['actor_user_id' => $clientUserId],
             ]);
+        } else {
+            ExpirePendingPaymentJob::dispatch($payment->id)
+                ->delay($payment->expired_at)
+                ->afterCommit();
         }
-
         if ($pricing['coupon']) {
             $pricing['coupon']->increment('used_count');
         }
@@ -232,7 +238,7 @@ class OrderService implements OrderServiceInterface
 
         $order = $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
         $delivery = app(DeliveryServiceInterface::class)->createForOrder($order->id, 0);
-        AssignCourierToDeliveryJob::dispatch($delivery->id);
+        AssignCourierToDeliveryJob::dispatch($delivery->id)->afterCommit();
 
         return $order;
     }
@@ -350,6 +356,60 @@ class OrderService implements OrderServiceInterface
         return $order->refresh()->load($this->with);
     }
 
+    private function validatedCheckoutAddress(string $clientUserId, ?string $addressId): UserAddress
+    {
+        if ($addressId === null) {
+            throw ValidationException::withMessages([
+                'address_id' => 'Checkout requires a delivery address.',
+            ]);
+        }
+
+        return UserAddress::query()
+            ->where('user_id', $clientUserId)
+            ->findOrFail($addressId);
+    }
+
+    private function validateCheckoutCart(Cart $cart, string $restaurantId, UserAddress $address): void
+    {
+        $cart->loadMissing(['items.restaurantProduct.restaurant.address']);
+
+        foreach ($cart->items as $item) {
+            if (! $item->restaurantProduct?->is_available) {
+                throw ValidationException::withMessages([
+                    'cart' => 'Cart contains an unavailable product.',
+                ]);
+            }
+
+            if ($item->restaurantProduct?->restaurant_id !== $restaurantId) {
+                throw ValidationException::withMessages([
+                    'cart' => 'Cart can only contain products from one restaurant.',
+                ]);
+            }
+        }
+
+        $restaurant = $cart->items->first()?->restaurantProduct?->restaurant;
+        $restaurantAddress = $restaurant?->address;
+
+        if (! $restaurantAddress) {
+            throw ValidationException::withMessages([
+                'restaurant_id' => 'Restaurant has no pickup address configured.',
+            ]);
+        }
+
+        $distanceKm = GeoMath::distanceKm(
+            (float) $restaurantAddress->latitude,
+            (float) $restaurantAddress->longitude,
+            (float) $address->latitude,
+            (float) $address->longitude
+        );
+
+        if ($restaurant->delivery_radius !== null && $distanceKm > (float) $restaurant->delivery_radius) {
+            throw ValidationException::withMessages([
+                'address_id' => 'Delivery address is outside the restaurant delivery radius.',
+            ]);
+        }
+    }
+
     private function recordEvent(Order $order, OrderEventType $eventType, string $actorUserId, array $payload = []): void
     {
         $occurredAt = now();
@@ -361,6 +421,7 @@ class OrderService implements OrderServiceInterface
             'orderId' => $order->id,
             'customerId' => $order->user_id,
             'restaurantId' => $order->restaurant_id,
+            'restaurantName' => $order->restaurant_name_snapshot,
             'actorId' => $actorUserId,
             'occurredAt' => $occurredAt->toIso8601String(),
             'data' => $payload,
@@ -378,5 +439,6 @@ class OrderService implements OrderServiceInterface
         ]);
 
         app(OutboxService::class)->enqueue('order', $order->id, $eventType->value, $eventPayload);
+        NotificationEventRecorded::dispatch($eventType, $eventPayload);
     }
 }

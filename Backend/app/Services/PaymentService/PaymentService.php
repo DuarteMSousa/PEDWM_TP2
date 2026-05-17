@@ -70,6 +70,15 @@ class PaymentService implements PaymentServiceInterface
         ]);
     }
 
+    #[Transactional]
+    public function expire(string $paymentId): Payment
+    {
+        return $this->setStatus($paymentId, PaymentStatus::FAILED, PaymentEventType::PAYMENT_EXPIRED, [
+            'reason' => 'PAYMENT_EXPIRED',
+            'actor_user_id' => 'payment-expiry',
+        ]);
+    }
+
     private function setStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload): Payment
     {
         $payment = Payment::query()->with('order')->lockForUpdate()->findOrFail($paymentId);

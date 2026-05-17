@@ -19,6 +19,7 @@ class OrderMutations
             payment_method: \App\Enums\PaymentMethod::from($input['payment_method']),
             cart_id: $input['cart_id'] ?? null,
             address_id: $input['address_id'] ?? null,
+            coupon_code: $input['coupon_code'] ?? null,
         ));
     }
 

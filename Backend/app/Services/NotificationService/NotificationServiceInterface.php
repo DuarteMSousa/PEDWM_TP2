@@ -4,6 +4,7 @@ namespace App\Services\NotificationService;
 
 use App\Enums\NotificationType;
 use App\Models\Notification;
+use BackedEnum;
 
 interface NotificationServiceInterface
 {
@@ -18,4 +19,9 @@ interface NotificationServiceInterface
         array $data = [],
         ?string $actorId = null
     ): Notification;
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function createFromEvent(BackedEnum $eventType, array $payload): ?Notification;
 }

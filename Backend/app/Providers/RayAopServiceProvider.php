@@ -81,7 +81,7 @@ class RayAopServiceProvider extends ServiceProvider
 
     public function register(): void
     {
-        if (! config('ray_aop.enabled')) {
+        if (! config('ray_aop.enabled') || ! class_exists(Aspect::class)) {
             return;
         }
 

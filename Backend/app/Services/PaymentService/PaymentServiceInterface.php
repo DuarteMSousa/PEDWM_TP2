@@ -20,4 +20,6 @@ interface PaymentServiceInterface
     public function cancel(string $paymentId, ?string $reason): Payment;
 
     public function fail(string $paymentId, ?string $reason): Payment;
+
+    public function expire(string $paymentId): Payment;
 }

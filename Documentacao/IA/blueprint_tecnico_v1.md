@@ -201,7 +201,7 @@ Tecnologia alvo: Laravel Reverb + broadcasting.
 
 ## 8. Politicas de Erro e Confiabilidade
 
-- Idempotency-Key obrigatoria em `checkout`, `payment callback`, `accept delivery`.
+- Idempotencia fora do escopo do TP2: os comandos recebem `user_id`/`actor_user_id` no payload e nao exigem `Idempotency-Key`.
 - Concurrency control com `lockForUpdate` em transicoes criticas.
 - Retry exponencial para notificacoes/outbox (max 10 tentativas).
 - Dead-letter logico quando excede retries.
@@ -253,7 +253,7 @@ Definition of Done:
 - Validar enum final em backend e frontend (mesmos valores)
 - Fechar contrato de payload dos eventos
 - Confirmar politica de cancelamento por falta de estafeta
-- Confirmar endpoint/callback de pagamento
+- Confirmar endpoint interno para marcar pagamento como pago
 - Fechar permissao de canais websocket por role
 
 ## 11. Estrutura recomendada no repositorio
@@ -276,7 +276,7 @@ Definition of Done:
 ## 12. Assuncoes usadas nesta v1
 
 - Uso de GraphQL para query/mutation e WebSocket para subscriptions/eventos.
-- `CASH` dispensa callback externo de pagamento.
+- `CASH` confirma no checkout; pagamentos eletronicos sao confirmados por endpoint interno (`payPayment`/`confirmPayment`).
 - MVP sem multi-tenant complexo; escopo por restaurant/chain direto.
 - Sem recomendacao de IA no MVP.
 
@@ -315,16 +315,16 @@ Aplicacao pratica no projeto:
 - Cross-cutting de auditoria em mudancas criticas de estado.
 - Cross-cutting de autorizacao por role/permissao.
 - Cross-cutting de observabilidade (logs estruturados + metricas de latencia).
-- Cross-cutting de idempotencia para comandos sensiveis.
+- Cross-cutting de validacao e logging para comandos sensiveis.
 
 Implementacao sugerida no stack Laravel:
-- `Middleware` para autenticacao/autorizacao e `Idempotency-Key`.
+- `Middleware`/servicos para validacao de contexto, logging e tratamento de erros.
 - `Observers`/`Listeners` para gerar trilha de auditoria.
 - `Traits` ou `Action decorators` para instrumentacao de logs/metricas.
 - `Policies/Gates` para autorizacao de recursos e canais websocket.
 
 Evidencias esperadas no codigo:
-- Middleware `EnsureIdempotencyKey`.
+- Interceptors AOP de transacao/logging/erro e validacoes nos servicos de dominio.
 - Listener `RecordOrderStateChangeAudit`.
 - Middleware/servico de logging com correlation id por request/evento.
 

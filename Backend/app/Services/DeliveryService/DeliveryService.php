@@ -6,8 +6,10 @@ use App\Aspects\Transactional;
 use App\Domain\StateMachines\Deliveries\DeliveryStateFactory;
 use App\Enums\CourierStatus;
 use App\Enums\DeliveryEventType;
+use App\Enums\DeliveryOfferEventType;
 use App\Enums\DeliveryOfferStatus;
 use App\Enums\DeliveryStatus;
+use App\Events\NotificationEventRecorded;
 use App\Jobs\AssignCourierToDeliveryJob;
 use App\Jobs\ExpireDeliveryOfferJob;
 use App\Models\Delivery;
@@ -82,8 +84,10 @@ class DeliveryService implements DeliveryServiceInterface
             'expires_at' => now()->addSeconds($ttlSeconds),
         ]);
 
-        $this->broadcastJobEvent('JOB_OFFERED', $offer);
-        ExpireDeliveryOfferJob::dispatch($offer->id)->delay($offer->expires_at);
+        $this->broadcastJobEvent(DeliveryOfferEventType::JOB_OFFERED, $offer);
+        ExpireDeliveryOfferJob::dispatch($offer->id)
+            ->delay($offer->expires_at)
+            ->afterCommit();
 
         return $offer->load(['delivery.order', 'courier.user']);
     }
@@ -103,7 +107,7 @@ class DeliveryService implements DeliveryServiceInterface
 
         if ($offer->expires_at->isPast()) {
             $offer->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
-            $this->broadcastJobEvent('JOB_EXPIRED', $offer);
+            $this->broadcastJobEvent(DeliveryOfferEventType::JOB_EXPIRED, $offer);
 
             throw ValidationException::withMessages(['offer_id' => 'Offer expired.']);
         }
@@ -133,7 +137,7 @@ class DeliveryService implements DeliveryServiceInterface
         app(CourierServiceInterface::class)->setStatus($offer->courier_id, CourierStatus::BUSY->value);
         $this->recordEvent($delivery, DeliveryEventType::DELIVERY_ACCEPTED, $offer->courier_id);
         app(OrderServiceInterface::class)->recordCourierAssigned($delivery->order, $offer->courier_id);
-        $this->broadcastJobEvent('JOB_ACCEPTED', $offer);
+        $this->broadcastJobEvent(DeliveryOfferEventType::JOB_ACCEPTED, $offer);
 
         return $delivery->refresh()->load($this->with);
     }
@@ -151,8 +155,8 @@ class DeliveryService implements DeliveryServiceInterface
             'status' => DeliveryOfferStatus::REJECTED->value,
             'rejected_at' => now(),
         ]);
-        $this->broadcastJobEvent('JOB_REJECTED', $offer);
-        AssignCourierToDeliveryJob::dispatch($offer->delivery_id);
+        $this->broadcastJobEvent(DeliveryOfferEventType::JOB_REJECTED, $offer);
+        AssignCourierToDeliveryJob::dispatch($offer->delivery_id)->afterCommit();
 
         return true;
     }
@@ -188,7 +192,9 @@ class DeliveryService implements DeliveryServiceInterface
     #[Transactional]
     public function markFailed(string $deliveryId, string $courierId, string $reason): Delivery
     {
-        return $this->setStatus($deliveryId, $courierId, DeliveryStatus::FAILED, ['failure_reason' => $reason]);
+        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::FAILED, ['failure_reason' => $reason]);
+
+        return $delivery;
     }
 
     private function setStatus(string $deliveryId, string $courierId, DeliveryStatus $status, array $extra = []): Delivery
@@ -216,6 +222,7 @@ class DeliveryService implements DeliveryServiceInterface
 
     private function recordEvent(Delivery $delivery, DeliveryEventType $eventType, string $actorUserId, array $payload = []): void
     {
+        $delivery->loadMissing('order');
         $occurredAt = now();
         $eventPayload = [
             'eventId' => (string) Str::uuid(),
@@ -224,6 +231,7 @@ class DeliveryService implements DeliveryServiceInterface
             'aggregateId' => $delivery->id,
             'deliveryId' => $delivery->id,
             'orderId' => $delivery->order_id,
+            'customerId' => $delivery->order?->user_id,
             'courierId' => $delivery->courier_id,
             'actorId' => $actorUserId,
             'occurredAt' => $occurredAt->toIso8601String(),
@@ -241,13 +249,14 @@ class DeliveryService implements DeliveryServiceInterface
         ]);
 
         app(OutboxService::class)->enqueue('delivery', $delivery->id, $eventType->value, $eventPayload);
+        NotificationEventRecorded::dispatch($eventType, $eventPayload);
     }
 
-    private function broadcastJobEvent(string $eventName, DeliveryOffer $offer): void
+    private function broadcastJobEvent(DeliveryOfferEventType $eventType, DeliveryOffer $offer): void
     {
         $payload = [
             'eventId' => (string) Str::uuid(),
-            'eventName' => $eventName,
+            'eventName' => $eventType->value,
             'aggregateType' => 'delivery_offer',
             'aggregateId' => $offer->id,
             'offerId' => $offer->id,
@@ -259,6 +268,7 @@ class DeliveryService implements DeliveryServiceInterface
             'channels' => ["courier.{$offer->courier_id}.jobs"],
         ];
 
-        app(OutboxService::class)->enqueue('delivery_offer', $offer->id, $eventName, $payload);
+        app(OutboxService::class)->enqueue('delivery_offer', $offer->id, $eventType->value, $payload);
+        NotificationEventRecorded::dispatch($eventType, $payload);
     }
 }

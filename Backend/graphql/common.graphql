@@ -231,6 +231,8 @@ type Order {
   address: OrderAddress
   payment: Payment
   delivery: Delivery
+  user: User
+  restaurant: Restaurant
   events: [OrderEvent!]
   discounts: [OrderDiscount!]
   created_at: String
