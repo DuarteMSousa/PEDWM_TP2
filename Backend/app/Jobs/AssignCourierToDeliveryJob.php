@@ -14,6 +14,8 @@ class AssignCourierToDeliveryJob implements ShouldQueue
 {
     use Queueable;
 
+    private const MAX_ASSIGNMENT_ATTEMPTS = 3;
+
     public function __construct(public string $deliveryId) {}
 
     public function handle(): void
@@ -28,6 +30,12 @@ class AssignCourierToDeliveryJob implements ShouldQueue
 
         $attemptedCourierIds = $delivery->offers->pluck('courier_id')->all();
         $restaurantAddress = $delivery->order?->restaurant?->address;
+
+        if (count($attemptedCourierIds) >= self::MAX_ASSIGNMENT_ATTEMPTS) {
+            $this->failDeliveryWithoutCourier($delivery);
+
+            return;
+        }
 
         $couriers = Courier::query()
             ->where('status', CourierStatus::AVAILABLE->value)
@@ -49,9 +57,19 @@ class AssignCourierToDeliveryJob implements ShouldQueue
         $courier = $couriers->first();
 
         if (! $courier) {
+            $this->failDeliveryWithoutCourier($delivery);
+
             return;
         }
 
         app(DeliveryServiceInterface::class)->offerToCourier($delivery->id, $courier->user_id);
+    }
+
+    private function failDeliveryWithoutCourier(Delivery $delivery): void
+    {
+        app(DeliveryServiceInterface::class)->markFailedBySystem(
+            $delivery->id,
+            'NO_COURIER_AVAILABLE'
+        );
     }
 }

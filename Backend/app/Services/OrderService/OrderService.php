@@ -119,7 +119,7 @@ class OrderService implements OrderServiceInterface
         $address = $this->validatedCheckoutAddress($clientUserId, $data->address_id);
         $this->validateCheckoutCart($cart, $restaurant->id, $address);
 
-        $pricing = app(OrderPricingService::class)->price($cart, $restaurant, $data->coupon_code);
+        $pricing = app(OrderPricingService::class)->price($cart, $restaurant, $address, $data->coupon_code);
         $method = $data->payment_method;
         $paymentStatus = $method === PaymentMethod::CASH ? PaymentStatus::COMPLETED : PaymentStatus::PENDING;
         $orderStatus = $paymentStatus === PaymentStatus::COMPLETED ? OrderStatus::CONFIRMED : OrderStatus::PENDING;
@@ -232,12 +232,28 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
+    public function cancelBySystem(string $orderId, string $reason): Order
+    {
+        $order = Order::query()->findOrFail($orderId);
+
+        if (in_array($order->status, [OrderStatus::DELIVERED, OrderStatus::CANCELLED], true)) {
+            return $order->load($this->with);
+        }
+
+        return $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, 'system', [
+            'reason' => $reason,
+        ]);
+    }
+
+    #[Transactional]
     public function acceptByRestaurant(string $actorUserId, string $orderId): Order
     {
         $order = Order::query()->findOrFail($orderId);
 
         $order = $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
-        $delivery = app(DeliveryServiceInterface::class)->createForOrder($order->id, 0);
+        $order->loadMissing(['restaurant.address', 'address']);
+        $deliveryFee = app(OrderPricingService::class)->deliveryFee($order->restaurant, $order->address);
+        $delivery = app(DeliveryServiceInterface::class)->createForOrder($order->id, $deliveryFee);
         AssignCourierToDeliveryJob::dispatch($delivery->id)->afterCommit();
 
         return $order;

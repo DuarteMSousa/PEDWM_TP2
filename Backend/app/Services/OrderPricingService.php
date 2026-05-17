@@ -2,27 +2,44 @@
 
 namespace App\Services;
 
+use App\Domain\Geo\GeoMath;
 use App\Domain\Pricing\PricingCalculator;
 use App\Enums\DiscountOriginType;
 use App\Enums\DiscountTarget;
 use App\Enums\DiscountType;
 use App\Models\Cart;
 use App\Models\Coupon;
+use App\Models\OrderAddress;
 use App\Models\Promotion;
 use App\Models\Restaurant;
+use App\Models\UserAddress;
 use Illuminate\Validation\ValidationException;
 
 class OrderPricingService
 {
+    private const DELIVERY_BASE_FEE = 1.50;
+    private const DELIVERY_FEE_PER_KM = 0.45;
+    private const DELIVERY_MAX_FEE = 6.00;
+
     /**
      * @return array{subtotal: float, discount_total: float, delivery_fee: float, total: float, discounts: array<int, array<string, mixed>>, coupon: Coupon|null}
      */
-    public function price(Cart $cart, Restaurant $restaurant, ?string $couponCode = null): array
+    public function price(
+        Cart $cart,
+        Restaurant $restaurant,
+        UserAddress|OrderAddress|string|null $address = null,
+        ?string $couponCode = null
+    ): array
     {
+        if (! $address instanceof UserAddress && ! $address instanceof OrderAddress) {
+            $couponCode = $address;
+            $address = null;
+        }
+
         $cart->loadMissing(['items.restaurantProduct.product.category', 'items.options']);
 
         $subtotal = PricingCalculator::calculateSubtotal($cart->items->pluck('total_price'));
-        $deliveryFee = 0.0;
+        $deliveryFee = $address ? $this->deliveryFee($restaurant, $address) : 0.0;
         $discounts = [];
 
         foreach ($this->activePromotions((string) $restaurant->chain_id) as $promotion) {
@@ -49,6 +66,29 @@ class OrderPricingService
             'discounts' => $discounts,
             'coupon' => $coupon,
         ];
+    }
+
+    public function deliveryFee(Restaurant $restaurant, UserAddress|OrderAddress $address): float
+    {
+        $restaurant->loadMissing('address');
+
+        if (! $restaurant->address) {
+            throw ValidationException::withMessages([
+                'restaurant_id' => 'Restaurant has no pickup address configured.',
+            ]);
+        }
+
+        $distanceKm = GeoMath::distanceKm(
+            (float) $restaurant->address->latitude,
+            (float) $restaurant->address->longitude,
+            (float) $address->latitude,
+            (float) $address->longitude
+        );
+
+        return round(min(
+            self::DELIVERY_MAX_FEE,
+            self::DELIVERY_BASE_FEE + ($distanceKm * self::DELIVERY_FEE_PER_KM)
+        ), 2);
     }
 
     private function activePromotions(string $chainId)

@@ -24,6 +24,8 @@ interface OrderServiceInterface
 
     public function cancelByClient(string $userId, string $orderId, ?string $reason): Order;
 
+    public function cancelBySystem(string $orderId, string $reason): Order;
+
     public function acceptByRestaurant(string $actorUserId, string $orderId): Order;
 
     public function rejectByRestaurant(string $actorUserId, string $orderId, ?string $reason): Order;

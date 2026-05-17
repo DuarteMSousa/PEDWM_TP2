@@ -197,6 +197,29 @@ class DeliveryService implements DeliveryServiceInterface
         return $delivery;
     }
 
+    #[Transactional]
+    public function markFailedBySystem(string $deliveryId, string $reason): Delivery
+    {
+        $delivery = Delivery::query()
+            ->with('order')
+            ->whereKey($deliveryId)
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        if ($delivery->status === DeliveryStatus::FAILED || $delivery->status === DeliveryStatus::DELIVERED) {
+            return $delivery->load($this->with);
+        }
+
+        DeliveryStateFactory::from($delivery->status)->transition($delivery, DeliveryStatus::FAILED);
+        $this->recordEvent($delivery->refresh(), DeliveryEventType::DELIVERY_FAILED, 'system', [
+            'reason' => $reason,
+        ]);
+
+        app(OrderServiceInterface::class)->cancelBySystem($delivery->order_id, $reason);
+
+        return $delivery->refresh()->load($this->with);
+    }
+
     private function setStatus(string $deliveryId, string $courierId, DeliveryStatus $status, array $extra = []): Delivery
     {
         $delivery = Delivery::query()

@@ -32,4 +32,6 @@ interface DeliveryServiceInterface
     public function markDelivered(string $deliveryId, string $courierId): Delivery;
 
     public function markFailed(string $deliveryId, string $courierId, string $reason): Delivery;
+
+    public function markFailedBySystem(string $deliveryId, string $reason): Delivery;
 }

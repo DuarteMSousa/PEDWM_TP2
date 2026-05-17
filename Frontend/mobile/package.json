@@ -12,6 +12,7 @@
     "@react-native-community/netinfo": "^12.0.1",
     "expo": "~54.0.33",
     "expo-location": "~19.0.8",
+    "expo-notifications": "~0.32.17",
     "expo-status-bar": "~3.0.9",
     "laravel-echo": "^2.3.4",
     "pusher-js": "^8.5.0",
