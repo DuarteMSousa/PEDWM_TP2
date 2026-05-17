@@ -3,6 +3,7 @@
 namespace App\Services\CartService;
 
 use App\Aspects\Transactional;
+use App\Domain\Pricing\PricingCalculator;
 use App\DTOs\Cart\AddCartItemDTO;
 use App\DTOs\Cart\UpdateCartItemDTO;
 use App\Models\Cart;
@@ -40,14 +41,19 @@ class CartService implements CartServiceInterface
         $optionIds = $data->option_ids;
         $options = ProductOption::query()->whereIn('id', $optionIds)->get();
         $unitPrice = $restaurantProduct->local_price ?? $restaurantProduct->product->price;
-        $quantity = max(1, $data->quantity);
+        $quantity = PricingCalculator::normalizeQuantity($data->quantity);
+        $lineTotal = PricingCalculator::calculateCartItemTotal(
+            (float) $unitPrice,
+            $options->pluck('extra_price'),
+            $quantity
+        );
 
         $item = CartItem::query()->create([
             'cart_id' => $cart->id,
             'restaurant_product_id' => $restaurantProduct->id,
             'quantity' => $quantity,
             'unit_price' => $unitPrice,
-            'total_price' => ($unitPrice + $options->sum('extra_price')) * $quantity,
+            'total_price' => $lineTotal,
         ]);
 
         foreach ($options as $option) {
@@ -81,10 +87,15 @@ class CartService implements CartServiceInterface
             $options = $item->options;
         }
 
-        $quantity = max(1, $data->quantity);
+        $quantity = PricingCalculator::normalizeQuantity($data->quantity);
+        $lineTotal = PricingCalculator::calculateCartItemTotal(
+            (float) $item->unit_price,
+            $options->pluck('extra_price'),
+            $quantity
+        );
         $item->update([
             'quantity' => $quantity,
-            'total_price' => ($item->unit_price + $options->sum('extra_price')) * $quantity,
+            'total_price' => $lineTotal,
         ]);
 
         return $this->recalculate($item->cart_id);
@@ -116,7 +127,7 @@ class CartService implements CartServiceInterface
     public function recalculate(string $cartId): Cart
     {
         $cart = Cart::query()->with($this->with)->findOrFail($cartId);
-        $cart->update(['total' => $cart->items->sum('total_price')]);
+        $cart->update(['total' => PricingCalculator::calculateSubtotal($cart->items->pluck('total_price'))]);
 
         return $cart->refresh()->load($this->with);
     }

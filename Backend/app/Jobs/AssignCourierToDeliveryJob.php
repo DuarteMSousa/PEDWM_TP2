@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Domain\Geo\GeoMath;
 use App\Enums\CourierStatus;
 use App\Models\Courier;
 use App\Models\Delivery;
@@ -13,9 +14,7 @@ class AssignCourierToDeliveryJob implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public string $deliveryId)
-    {
-    }
+    public function __construct(public string $deliveryId) {}
 
     public function handle(): void
     {
@@ -39,7 +38,7 @@ class AssignCourierToDeliveryJob implements ShouldQueue
                     return PHP_FLOAT_MAX;
                 }
 
-                return $this->distanceKm(
+                return GeoMath::distanceKm(
                     (float) $courier->latitude,
                     (float) $courier->longitude,
                     (float) $restaurantAddress->latitude,
@@ -54,16 +53,5 @@ class AssignCourierToDeliveryJob implements ShouldQueue
         }
 
         app(DeliveryServiceInterface::class)->offerToCourier($delivery->id, $courier->user_id);
-    }
-
-    private function distanceKm(float $fromLat, float $fromLng, float $toLat, float $toLng): float
-    {
-        $earthRadiusKm = 6371;
-        $dLat = deg2rad($toLat - $fromLat);
-        $dLng = deg2rad($toLng - $fromLng);
-        $a = sin($dLat / 2) ** 2
-            + cos(deg2rad($fromLat)) * cos(deg2rad($toLat)) * sin($dLng / 2) ** 2;
-
-        return $earthRadiusKm * (2 * atan2(sqrt($a), sqrt(1 - $a)));
     }
 }

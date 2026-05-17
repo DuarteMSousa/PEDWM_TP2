@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Domain\Geo\GeoMath;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -21,7 +22,7 @@ class RoutingService
             ];
         }
 
-        $fallback = $this->fallbackRoute($originLat, $originLng, $destinationLat, $destinationLng);
+        $fallback = GeoMath::fallbackRoute($originLat, $originLng, $destinationLat, $destinationLng);
 
         if (! config('services.osrm.enabled', true)) {
             return $fallback;
@@ -98,37 +99,5 @@ class RoutingService
                 return $fallback;
             }
         });
-    }
-
-    /**
-     * @return array{points: array<int, array{lat: float, lng: float}>, distance_km: float|null, duration_seconds: int|null, provider: string}
-     */
-    private function fallbackRoute(float $originLat, float $originLng, float $destinationLat, float $destinationLng): array
-    {
-        $distanceKm = $this->haversineKm($originLat, $originLng, $destinationLat, $destinationLng);
-
-        return [
-            'points' => [
-                ['lat' => $originLat, 'lng' => $originLng],
-                ['lat' => $destinationLat, 'lng' => $destinationLng],
-            ],
-            'distance_km' => round($distanceKm, 2),
-            'duration_seconds' => max(60, (int) round(($distanceKm / 25) * 3600)),
-            'provider' => 'fallback',
-        ];
-    }
-
-    private function haversineKm(float $lat1, float $lng1, float $lat2, float $lng2): float
-    {
-        $earthRadiusKm = 6371;
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLng = deg2rad($lng2 - $lng1);
-
-        $a = sin($dLat / 2) ** 2
-            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
-
-        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
-
-        return $earthRadiusKm * $c;
     }
 }

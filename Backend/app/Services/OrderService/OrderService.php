@@ -3,6 +3,7 @@
 namespace App\Services\OrderService;
 
 use App\Aspects\Transactional;
+use App\Domain\Orders\OrderItemRules;
 use App\Domain\StateMachines\Orders\OrderStateFactory;
 use App\DTOs\Order\CheckoutDTO;
 use App\Enums\OrderEventType;
@@ -261,11 +262,7 @@ class OrderService implements OrderServiceInterface
         $item->update(['status' => $status]);
         $order = $item->order->refresh()->load('items');
 
-        $notCancelled = $order->items->filter(
-            fn ($orderItem): bool => $orderItem->status !== OrderItemStatus::CANCELLED
-        );
-        $allReady = $notCancelled->isNotEmpty()
-            && $notCancelled->every(fn ($orderItem) => $orderItem->status->value === OrderItemStatus::READY->value);
+        $allReady = OrderItemRules::allNonCancelledReady($order->items->pluck('status'));
 
         if ($allReady) {
             return $this->transition($order, OrderStatus::READY, OrderEventType::ORDER_READY, $actorUserId);

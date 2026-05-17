@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Domain\Pricing\PricingCalculator;
 use App\Enums\DiscountOriginType;
 use App\Enums\DiscountTarget;
 use App\Enums\DiscountType;
@@ -20,7 +21,7 @@ class OrderPricingService
     {
         $cart->loadMissing(['items.restaurantProduct.product.category', 'items.options']);
 
-        $subtotal = round((float) $cart->items->sum('total_price'), 2);
+        $subtotal = PricingCalculator::calculateSubtotal($cart->items->pluck('total_price'));
         $deliveryFee = 0.0;
         $discounts = [];
 
@@ -36,12 +37,9 @@ class OrderPricingService
             $discounts[] = $this->couponDiscount($cart, $coupon, $subtotal, $deliveryFee);
         }
 
-        $discounts = array_values(array_filter(
-            $discounts,
-            static fn (array $discount): bool => ($discount['discount_amount'] ?? 0) > 0
-        ));
-        $discountTotal = round(array_sum(array_column($discounts, 'discount_amount')), 2);
-        $total = max(0, round($subtotal + $deliveryFee - $discountTotal, 2));
+        $discounts = PricingCalculator::onlyPositiveDiscounts($discounts);
+        $discountTotal = PricingCalculator::calculateDiscountTotal($discounts);
+        $total = PricingCalculator::calculateTotal($subtotal, $deliveryFee, $discountTotal);
 
         return [
             'subtotal' => $subtotal,
@@ -79,8 +77,8 @@ class OrderPricingService
         $target = DiscountTarget::from($promotion->target);
 
         if ($target === DiscountTarget::ORDER) {
-            $base = (float) $cart->items->sum('total_price');
-            $amount = $this->discountAmount($base, (float) $this->promotionDiscountValue($promotion), $type);
+            $base = PricingCalculator::calculateSubtotal($cart->items->pluck('total_price'));
+            $amount = PricingCalculator::discountAmount($base, (float) $this->promotionDiscountValue($promotion), $type);
 
             return [[
                 'name_snapshot' => $promotion->name,
@@ -108,7 +106,7 @@ class OrderPricingService
                     continue;
                 }
 
-                $amount = $this->discountAmount((float) $cartItem->total_price, (float) $promotionItem->discount, $type);
+                $amount = PricingCalculator::discountAmount((float) $cartItem->total_price, (float) $promotionItem->discount, $type);
                 $discounts[] = [
                     'name_snapshot' => $promotion->name,
                     'description_snapshot' => $promotion->description,
@@ -164,7 +162,7 @@ class OrderPricingService
             DiscountTarget::PRODUCT, DiscountTarget::CATEGORY => $this->couponTargetBase($cart, $coupon, $target),
         };
 
-        $amount = $this->discountAmount($base, (float) $coupon->discount, $type);
+        $amount = PricingCalculator::discountAmount($base, (float) $coupon->discount, $type);
 
         if ($coupon->max_discount_amount !== null) {
             $amount = min($amount, (float) $coupon->max_discount_amount);
@@ -202,17 +200,5 @@ class OrderPricingService
     private function promotionDiscountValue(Promotion $promotion): float
     {
         return (float) ($promotion->promotionItems->first()?->discount ?? 0);
-    }
-
-    private function discountAmount(float $base, float $discount, DiscountType $type): float
-    {
-        if ($base <= 0 || $discount <= 0) {
-            return 0.0;
-        }
-
-        return round(match ($type) {
-            DiscountType::PERCENTAGE => $base * min($discount, 100) / 100,
-            DiscountType::FIXED_AMOUNT => min($base, $discount),
-        }, 2);
     }
 }
