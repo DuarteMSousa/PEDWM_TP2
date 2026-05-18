@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   acceptRestaurantOrder,
   cancelRestaurantOrder,
@@ -39,6 +39,27 @@ function formatTime(value) {
   return new Date(value).toLocaleTimeString()
 }
 
+function playKitchenBeep(ref) {
+  try {
+    if (typeof window === 'undefined') return
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext
+    if (!AudioContextClass) return
+    if (!ref.current) ref.current = new AudioContextClass()
+    const ctx = ref.current
+    const oscillator = ctx.createOscillator()
+    const gain = ctx.createGain()
+    oscillator.connect(gain)
+    gain.connect(ctx.destination)
+    oscillator.frequency.value = 880
+    gain.gain.setValueAtTime(0.25, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+    oscillator.start()
+    oscillator.stop(ctx.currentTime + 0.35)
+  } catch {
+    // ignore
+  }
+}
+
 function formatEventType(eventType) {
   return String(eventType ?? '')
     .replaceAll('_', ' ')
@@ -58,6 +79,8 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
   const [cancelTarget, setCancelTarget] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
   const [dialogLoading, setDialogLoading] = useState(false)
+  const [pendingAlerts, setPendingAlerts] = useState([])
+  const beepRef = useRef(null)
 
   const loadOrders = useCallback(async () => {
     try {
@@ -89,7 +112,15 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
         restaurantId: session.restaurantId,
         authToken: session.token,
         devUserId: session.devUserId,
-        onEvent: () => {
+        onEvent: (eventName, payload) => {
+          if (eventName === 'ORDER_CREATED') {
+            playKitchenBeep(beepRef)
+            const orderId = payload?.data?.order_id ?? payload?.orderId ?? null
+            setPendingAlerts((current) => {
+              if (!orderId || current.includes(orderId)) return current
+              return [...current, orderId]
+            })
+          }
           loadOrders()
         },
         onError: () => {},
@@ -223,6 +254,11 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
     if (onNavigate) onNavigate('chat')
   }
 
+  function handleOpenDetail(orderId) {
+    if (onSelectOrder) onSelectOrder(orderId)
+    if (onNavigate) onNavigate('order-detail')
+  }
+
   return (
     <section className="rb-page">
       <header className="rb-page-head rb-page-head-row">
@@ -235,6 +271,20 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
           <span>Dados reais do backend com estados por item.</span>
         </div>
       </header>
+
+      {pendingAlerts.length > 0 ? (
+        <div className="rb-pending-alert">
+          <strong>Nova encomenda recebida!</strong>
+          <span>{pendingAlerts.length} pedido(s) por aceitar</span>
+          <button
+            type="button"
+            className="rb-btn-outline"
+            onClick={() => setPendingAlerts([])}
+          >
+            OK, vi
+          </button>
+        </div>
+      ) : null}
 
       <h3 className="rb-section-title">
         Encomendas pendentes <span>{pendingOrders.length}</span>
@@ -294,6 +344,13 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
                 onClick={() => handleOpenChat(order.order_id)}
               >
                 Chat
+              </button>
+              <button
+                type="button"
+                className="rb-btn-outline"
+                onClick={() => handleOpenDetail(order.order_id)}
+              >
+                Detalhe
               </button>
             </div>
           </article>
@@ -417,6 +474,14 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
               disabled={busyOrderId === order.order_id}
             >
               Abrir chat
+            </button>
+            <button
+              type="button"
+              className="rb-btn-outline"
+              onClick={() => handleOpenDetail(order.order_id)}
+              disabled={busyOrderId === order.order_id}
+            >
+              Detalhe
             </button>
             {['CONFIRMED', 'PREPARING'].includes(order.order_status) ? (
               <button

@@ -21,7 +21,10 @@ function mapRestaurant(restaurant) {
     id: restaurant.id,
     name: restaurant.name,
     city: restaurant.address?.city ?? '',
+    country: restaurant.address?.country ?? '',
+    postal_code: restaurant.address?.postal_code ?? '',
     rating: ratingCount > 0 ? Number(restaurant.rating_sum ?? 0) / ratingCount : 0,
+    rating_count: ratingCount,
   }
 }
 
@@ -109,13 +112,13 @@ function mapTracking(payload) {
 }
 
 const RESTAURANTS_QUERY = `
-  query Restaurants {
-    restaurants {
+  query Restaurants($input: SearchRestaurantsInput) {
+    restaurants(input: $input) {
       id
       name
       rating_sum
       rating_count
-      address { city }
+      address { city country postal_code }
     }
   }
 `
@@ -270,8 +273,8 @@ const ORDERS_QUERY = `
 `
 
 const ORDERS_HISTORY_QUERY = `
-  query ClientOrdersHistory($userId: ID!, $statuses: [OrderStatus!], $perPage: Int) {
-    clientOrders(user_id: $userId, statuses: $statuses, per_page: $perPage) {
+  query ClientOrdersHistory($userId: ID!, $statuses: [OrderStatus!], $page: Int, $perPage: Int) {
+    clientOrders(user_id: $userId, statuses: $statuses, page: $page, per_page: $perPage) {
       id
       restaurant_id
       status
@@ -313,6 +316,38 @@ const REPEAT_CLIENT_ORDER_MUTATION = `
         unit_price
         total_price
         restaurantProduct { product { name } }
+      }
+    }
+  }
+`
+
+const CLIENT_ORDER_DETAIL_QUERY = `
+  query ClientOrderDetail($userId: ID!, $orderId: ID!) {
+    clientOrder(user_id: $userId, order_id: $orderId) {
+      id
+      restaurant_id
+      status
+      total
+      restaurant_name_snapshot
+      created_at
+      updated_at
+      payment { id status method paid_at amount }
+      delivery { id status pickup_time delivery_time delivery_fee }
+      items {
+        id
+        quantity
+        unit_price
+        product_name_snapshot
+        total_price
+        options { id option_name_snapshot extra_price }
+      }
+      address { street city postal_code country }
+      events { event_type timestamp }
+      discounts {
+        id
+        name_snapshot
+        discount_amount
+        discount_type
       }
     }
   }
@@ -523,6 +558,35 @@ const CREATE_REVIEW_MUTATION = `
   }
 `
 
+const UPDATE_REVIEW_MUTATION = `
+  mutation UpdateReview($userId: ID!, $reviewId: ID!, $input: UpdateReviewInput!) {
+    updateReview(user_id: $userId, review_id: $reviewId, input: $input) {
+      id
+      rating
+      comment
+    }
+  }
+`
+
+const DELETE_REVIEW_MUTATION = `
+  mutation DeleteReview($userId: ID!, $reviewId: ID!) {
+    deleteReview(user_id: $userId, review_id: $reviewId)
+  }
+`
+
+const CLIENT_REVIEWS_QUERY = `
+  query ClientReviews($userId: ID!, $perPage: Int) {
+    clientReviews(user_id: $userId, per_page: $perPage) {
+      id
+      rating
+      comment
+      target_type
+      target_id
+      created_at
+    }
+  }
+`
+
 const UPDATE_USER_MUTATION = `
   mutation UpdateUser($id: ID!, $input: UpdateUserInput!) {
     updateUser(id: $id, input: $input) {
@@ -688,9 +752,20 @@ const MARK_DELIVERY_FAILED_MUTATION = `
   }
 `
 
-export async function fetchRestaurants(session) {
+export async function fetchRestaurants(session, filters = {}) {
+  const input = {
+    q: filters.q ?? '',
+    name: filters.name ?? '',
+    chainName: filters.chainName ?? '',
+    city: filters.city ?? '',
+    country: filters.country ?? '',
+    postalCode: filters.postalCode ?? '',
+    pageNumber: filters.pageNumber ?? 1,
+    pageSize: filters.pageSize ?? 20,
+  }
   const data = await graphqlRequest({
     query: RESTAURANTS_QUERY,
+    variables: { input },
     ...requestOptions(session),
   })
 
@@ -924,6 +999,46 @@ export async function createClientReview({ session, rating, comment = null, targ
   return data.createReview
 }
 
+export async function updateClientReview({ session, reviewId, rating, comment }) {
+  const data = await graphqlRequest({
+    query: UPDATE_REVIEW_MUTATION,
+    variables: {
+      userId: sessionUserId(session),
+      reviewId,
+      input: {
+        rating,
+        comment: comment && comment.trim() !== '' ? comment.trim() : null,
+      },
+    },
+    ...requestOptions(session),
+  })
+  return data.updateReview
+}
+
+export async function deleteClientReview({ session, reviewId }) {
+  const data = await graphqlRequest({
+    query: DELETE_REVIEW_MUTATION,
+    variables: {
+      userId: sessionUserId(session),
+      reviewId,
+    },
+    ...requestOptions(session),
+  })
+  return { ok: Boolean(data.deleteReview) }
+}
+
+export async function fetchClientReviewsHistory({ session, limit = 50 } = {}) {
+  const data = await graphqlRequest({
+    query: CLIENT_REVIEWS_QUERY,
+    variables: {
+      userId: sessionUserId(session),
+      perPage: limit,
+    },
+    ...requestOptions(session),
+  })
+  return data.clientReviews ?? []
+}
+
 export async function updateClientUser({ session, name = null, email = null }) {
   const input = {}
   if (name && name.trim() !== '') input.name = name.trim()
@@ -1085,12 +1200,18 @@ export async function fetchMyOrders(session, { activeOnly = false, limit = 10 } 
   return (data.clientOrders ?? []).map(mapOrderSummary)
 }
 
-export async function fetchClientOrdersHistory({ session, statuses = null, limit = 30 } = {}) {
+export async function fetchClientOrdersHistory({
+  session,
+  statuses = null,
+  limit = 30,
+  page = 1,
+} = {}) {
   const data = await graphqlRequest({
     query: ORDERS_HISTORY_QUERY,
     variables: {
       userId: sessionUserId(session),
       statuses,
+      page,
       perPage: limit,
     },
     ...requestOptions(session),
@@ -1148,6 +1269,15 @@ export async function repeatClientOrderToCart({ session, orderId }) {
   })
 
   return mapCart(data.repeatClientOrder)
+}
+
+export async function fetchClientOrderDetail({ session, orderId }) {
+  const data = await graphqlRequest({
+    query: CLIENT_ORDER_DETAIL_QUERY,
+    variables: { userId: sessionUserId(session), orderId },
+    ...requestOptions(session),
+  })
+  return data.clientOrder
 }
 
 export async function fetchOrderTracking({ session, orderId }) {

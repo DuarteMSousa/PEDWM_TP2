@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import {
+  Modal,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native'
 import NetInfo from '@react-native-community/netinfo'
 import { RealtimeTopicsCard } from '../components/realtime/RealtimeTopicsCard'
 import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
@@ -9,12 +19,20 @@ import {
   checkoutCart,
   createClientAddress,
   createClientReview,
+  deleteClientReview,
+  fetchClientReviewsHistory,
+  updateClientReview,
+  deleteClientAddress,
+  updateClientAddress,
   createOrderChat,
+  fetchChatMessages,
   fetchOrderChats,
+  markChatRead,
   sendChatMessage,
   updateClientUser,
   fetchClientAddresses,
   fetchClientNotifications,
+  fetchClientOrderDetail,
   fetchClientOrdersHistory,
   fetchMyCart,
   fetchMyOrders,
@@ -99,6 +117,9 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
   )
   const [ordersHistory, setOrdersHistory] = useState([])
   const [ordersLoading, setOrdersLoading] = useState(false)
+  const [ordersPage, setOrdersPage] = useState(1)
+  const [hasMoreOrders, setHasMoreOrders] = useState(true)
+  const ORDERS_PAGE_SIZE = 15
   const [cancelTargetOrder, setCancelTargetOrder] = useState(null)
   const [cancelReason, setCancelReason] = useState('')
   const [isCancellingOrder, setIsCancellingOrder] = useState(false)
@@ -121,10 +142,13 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
   })
   const [showAddressForm, setShowAddressForm] = useState(false)
   const [isSavingAddress, setIsSavingAddress] = useState(false)
+  const [editingAddressId, setEditingAddressId] = useState(null)
+  const [deleteAddressTarget, setDeleteAddressTarget] = useState(null)
   const [optionsTargetProduct, setOptionsTargetProduct] = useState(null)
   const [optionGroups, setOptionGroups] = useState([])
   const [optionSelections, setOptionSelections] = useState({})
   const [isLoadingOptions, setIsLoadingOptions] = useState(false)
+  const [optionQuantity, setOptionQuantity] = useState(1)
   const [pendingPayment, setPendingPayment] = useState(null)
   const [paymentRemainingSeconds, setPaymentRemainingSeconds] = useState(null)
   const [isPayingNow, setIsPayingNow] = useState(false)
@@ -132,12 +156,19 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
   const [reviewRating, setReviewRating] = useState(5)
   const [reviewComment, setReviewComment] = useState('')
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const [clientReviews, setClientReviews] = useState([])
+  const [showReviewsHistory, setShowReviewsHistory] = useState(false)
+  const [editingReview, setEditingReview] = useState(null)
+  const [orderDetailModal, setOrderDetailModal] = useState({ visible: false, order: null, loading: false })
   const [profileDraft, setProfileDraft] = useState({
     name: session?.name ?? '',
     email: session?.email ?? '',
   })
   const [isSavingProfile, setIsSavingProfile] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [restaurantFilters, setRestaurantFilters] = useState({ q: '', city: '', postalCode: '' })
+  const [restaurantsLoading, setRestaurantsLoading] = useState(false)
+  const [menuCategory, setMenuCategory] = useState('')
   const [chatModalState, setChatModalState] = useState({
     visible: false,
     chat: null,
@@ -502,6 +533,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       if (defaultAddress) {
         setSelectedAddressId(defaultAddress.id)
       }
+      refreshReviewsHistory()
       setErrorText('')
     } catch (error) {
       setErrorText(error.message)
@@ -549,13 +581,27 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
 
     try {
       setIsSavingAddress(true)
-      const created = await createClientAddress({
-        session,
-        input: { ...trimmed, latitude: lat, longitude: lng },
-      })
+      let savedId
+      if (editingAddressId) {
+        const updated = await updateClientAddress({
+          session,
+          addressId: editingAddressId,
+          input: { ...trimmed, latitude: lat, longitude: lng },
+        })
+        savedId = updated.id
+        setSuccessText('Morada atualizada.')
+      } else {
+        const created = await createClientAddress({
+          session,
+          input: { ...trimmed, latitude: lat, longitude: lng },
+        })
+        savedId = created.id
+        setSuccessText('Morada criada.')
+      }
       await reloadAddresses()
-      setSelectedAddressId(created.id)
+      if (savedId) setSelectedAddressId(savedId)
       setShowAddressForm(false)
+      setEditingAddressId(null)
       setAddressDraft({
         label: '',
         street: '',
@@ -566,7 +612,42 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
         longitude: '',
         is_default: false,
       })
-      setSuccessText('Morada criada.')
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsSavingAddress(false)
+    }
+  }
+
+  function startEditAddress(address) {
+    setEditingAddressId(address.id)
+    setAddressDraft({
+      label: address.label ?? '',
+      street: address.street,
+      city: address.city,
+      postal_code: address.postal_code,
+      country: address.country,
+      latitude: String(address.latitude),
+      longitude: String(address.longitude),
+      is_default: Boolean(address.is_default),
+    })
+    setShowAddressForm(true)
+  }
+
+  async function confirmDeleteAddress() {
+    if (!deleteAddressTarget) return
+    try {
+      setIsSavingAddress(true)
+      await deleteClientAddress({ session, addressId: deleteAddressTarget.id })
+      const refreshed = addresses.filter((address) => address.id !== deleteAddressTarget.id)
+      setAddresses(refreshed)
+      if (selectedAddressId === deleteAddressTarget.id) {
+        const fallback = refreshed.find((address) => address.is_default) ?? refreshed[0] ?? null
+        setSelectedAddressId(fallback?.id ?? null)
+      }
+      setDeleteAddressTarget(null)
+      setSuccessText('Morada apagada.')
       setErrorText('')
     } catch (error) {
       setErrorText(error.message)
@@ -590,7 +671,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
     }
   }
 
-  async function loadInbox() {
+  async function loadInbox({ append = false, currentLimit = INBOX_MAX_ITEMS } = {}) {
     if (!ensureOnline('atualizar inbox')) {
       return
     }
@@ -600,7 +681,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       const data = await fetchClientNotifications({
         session,
         unreadOnly: false,
-        limit: INBOX_MAX_ITEMS,
+        limit: currentLimit,
       })
       setInboxItems(data)
       setErrorText('')
@@ -609,6 +690,11 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
     } finally {
       setInboxLoading(false)
     }
+  }
+
+  async function loadMoreInbox() {
+    const nextLimit = inboxItems.length + INBOX_MAX_ITEMS
+    await loadInbox({ currentLimit: nextLimit })
   }
 
   async function handleMarkInboxItemRead(notificationId) {
@@ -656,15 +742,43 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
     loadInbox()
   }
 
-  async function loadOrdersHistory() {
+  async function applyRestaurantFilters(filters) {
+    if (!ensureOnline('procurar restaurantes')) return
+    try {
+      setRestaurantsLoading(true)
+      const next = await fetchRestaurants(session, filters)
+      setRestaurants(next)
+      if (next.length > 0 && !next.find((restaurant) => restaurant.id === restaurantId)) {
+        setRestaurantId(next[0].id)
+      }
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setRestaurantsLoading(false)
+    }
+  }
+
+  async function loadOrdersHistory({ append = false } = {}) {
     if (!ensureOnline('carregar pedidos')) {
       return
     }
 
     try {
       setOrdersLoading(true)
-      const data = await fetchClientOrdersHistory({ session, limit: 30 })
-      setOrdersHistory(data)
+      const targetPage = append ? ordersPage + 1 : 1
+      const data = await fetchClientOrdersHistory({
+        session,
+        limit: ORDERS_PAGE_SIZE,
+        page: targetPage,
+      })
+      if (append) {
+        setOrdersHistory((current) => [...current, ...data])
+      } else {
+        setOrdersHistory(data)
+      }
+      setOrdersPage(targetPage)
+      setHasMoreOrders(data.length === ORDERS_PAGE_SIZE)
       setErrorText('')
     } catch (error) {
       setErrorText(error.message)
@@ -675,7 +789,9 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
 
   function openOrdersHistory() {
     setRoute('orders')
-    loadOrdersHistory()
+    setOrdersPage(1)
+    setHasMoreOrders(true)
+    loadOrdersHistory({ append: false })
   }
 
   function requestCancelOrder(order) {
@@ -751,6 +867,10 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
         participants: target.participants ?? [],
       })
       setErrorText('')
+
+      if (target.id) {
+        markChatRead({ session, chatId: target.id }).catch(() => {})
+      }
     } catch (error) {
       setErrorText(error.message)
     } finally {
@@ -795,8 +915,38 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
     setChatDraft('')
   }
 
+  async function loadMoreChatMessages() {
+    if (!chatModalState.chat?.id) return
+    try {
+      const newLimit = chatModalState.messages.length + 50
+      const older = await fetchChatMessages({
+        session,
+        chatId: chatModalState.chat.id,
+        limit: newLimit,
+      })
+      setChatModalState((current) => ({
+        ...current,
+        messages: older,
+      }))
+    } catch (error) {
+      setErrorText(error.message)
+    }
+  }
+
+  function hasReviewFor(targetType, targetId) {
+    return clientReviews.some(
+      (review) =>
+        String(review.target_type).toUpperCase() === String(targetType).toUpperCase() &&
+        String(review.target_id) === String(targetId),
+    )
+  }
+
   function openReviewModal(order, targetType, targetId) {
     if (!order || !targetType || !targetId) return
+    if (hasReviewFor(targetType, targetId)) {
+      setErrorText('Ja avaliou este destinatario. Veja em "Minhas avaliacoes" para editar.')
+      return
+    }
     setReviewTarget({
       orderId: order.id,
       restaurantName: order.restaurant_name,
@@ -805,7 +955,21 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
     })
     setReviewRating(5)
     setReviewComment('')
+    setEditingReview(null)
     setErrorText('')
+  }
+
+  function openEditReview(review) {
+    setEditingReview(review)
+    setReviewTarget({
+      orderId: null,
+      restaurantName: null,
+      targetType: review.target_type,
+      targetId: review.target_id,
+    })
+    setReviewRating(Number(review.rating))
+    setReviewComment(review.comment ?? '')
+    setShowReviewsHistory(false)
   }
 
   async function submitReview() {
@@ -814,22 +978,54 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
 
     try {
       setIsSubmittingReview(true)
-      await createClientReview({
-        session,
-        rating: reviewRating,
-        comment: reviewComment,
-        targetType: reviewTarget.targetType,
-        targetId: reviewTarget.targetId,
-      })
-      setSuccessText('Avaliacao enviada. Obrigado!')
+      if (editingReview) {
+        await updateClientReview({
+          session,
+          reviewId: editingReview.id,
+          rating: reviewRating,
+          comment: reviewComment,
+        })
+        setSuccessText('Avaliacao atualizada.')
+      } else {
+        await createClientReview({
+          session,
+          rating: reviewRating,
+          comment: reviewComment,
+          targetType: reviewTarget.targetType,
+          targetId: reviewTarget.targetId,
+        })
+        setSuccessText('Avaliacao enviada. Obrigado!')
+      }
+      await refreshReviewsHistory()
       setErrorText('')
       setReviewTarget(null)
       setReviewRating(5)
       setReviewComment('')
+      setEditingReview(null)
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setIsSubmittingReview(false)
+    }
+  }
+
+  async function refreshReviewsHistory() {
+    try {
+      const reviews = await fetchClientReviewsHistory({ session })
+      setClientReviews(reviews)
+    } catch {
+      // ignore silently — review history is optional
+    }
+  }
+
+  async function handleDeleteReview(review) {
+    if (!ensureOnline('apagar avaliacao')) return
+    try {
+      await deleteClientReview({ session, reviewId: review.id })
+      setClientReviews((current) => current.filter((item) => item.id !== review.id))
+      setSuccessText('Avaliacao apagada.')
+    } catch (error) {
+      setErrorText(error.message)
     }
   }
 
@@ -852,6 +1048,18 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       setErrorText(error.message)
     } finally {
       setIsSavingProfile(false)
+    }
+  }
+
+  async function openOrderDetail(order) {
+    if (!ensureOnline('carregar detalhe')) return
+    setOrderDetailModal({ visible: true, order: null, loading: true })
+    try {
+      const detail = await fetchClientOrderDetail({ session, orderId: order.id })
+      setOrderDetailModal({ visible: true, order: detail, loading: false })
+    } catch (error) {
+      setErrorText(error.message)
+      setOrderDetailModal({ visible: false, order: null, loading: false })
     }
   }
 
@@ -900,7 +1108,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
     setCart(nextCart)
   }
 
-  async function addToCart(restaurantProductId, optionIds = []) {
+  async function addToCart(restaurantProductId, optionIds = [], quantity = 1) {
     if (!ensureOnline('adicionar ao carrinho')) {
       return
     }
@@ -910,11 +1118,11 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       const nextCart = await addCartItem({
         session,
         restaurantProductId,
-        quantity: 1,
+        quantity: Math.max(1, quantity),
         optionIds,
       })
       setCart(nextCart)
-      setSuccessText('Item adicionado ao carrinho.')
+      setSuccessText(`${quantity}x adicionado ao carrinho.`)
       setErrorText('')
     } catch (error) {
       setErrorText(error.message)
@@ -951,6 +1159,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       setOptionGroups(groups)
       setOptionSelections(defaults)
       setOptionsTargetProduct(menuItem)
+      setOptionQuantity(1)
       setErrorText('')
     } catch (error) {
       setErrorText(error.message)
@@ -994,12 +1203,14 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
 
     const allOptionIds = Object.values(optionSelections).flat()
     const target = optionsTargetProduct
+    const qty = optionQuantity
     setOptionsTargetProduct(null)
     setOptionGroups([])
     setOptionSelections({})
+    setOptionQuantity(1)
 
     if (target) {
-      await addToCart(target.restaurant_product_id, allOptionIds)
+      await addToCart(target.restaurant_product_id, allOptionIds, qty)
     }
   }
 
@@ -1204,7 +1415,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       {route === 'home' && (
         <HomeScreen
           restaurants={restaurants}
-          loading={loading}
+          loading={loading || restaurantsLoading}
           isOnline={isOnline}
           pushStatus={pushStatus}
           notificationState={notificationState}
@@ -1221,6 +1432,13 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
           inboxUnreadCount={inboxUnreadCount}
           onOpenInbox={openInbox}
           onOpenOrders={openOrdersHistory}
+          filters={restaurantFilters}
+          onChangeFilters={setRestaurantFilters}
+          onApplyFilters={() => applyRestaurantFilters(restaurantFilters)}
+          onResetFilters={() => {
+            setRestaurantFilters({ q: '', city: '', postalCode: '' })
+            applyRestaurantFilters({})
+          }}
         />
       )}
       {route === 'profile' && (
@@ -1234,6 +1452,11 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
           onLogoutRequest={() => setShowLogoutConfirm(true)}
           addresses={addresses}
           onOpenAddresses={() => setShowAddressModal(true)}
+          onOpenReviewsHistory={() => {
+            setShowReviewsHistory(true)
+            refreshReviewsHistory()
+          }}
+          reviewsCount={clientReviews.length}
         />
       )}
       {route === 'orders' && (
@@ -1242,7 +1465,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
           loading={ordersLoading}
           busyOrderId={busyOrderId}
           onBack={back}
-          onRefresh={loadOrdersHistory}
+          onRefresh={() => loadOrdersHistory({ append: false })}
           onCancel={requestCancelOrder}
           onRepeat={handleRepeatOrder}
           onTrack={(order) => {
@@ -1251,6 +1474,9 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
             loadTracking(order.id)
           }}
           onReview={openReviewModal}
+          onOpenDetail={openOrderDetail}
+          onLoadMore={() => loadOrdersHistory({ append: true })}
+          hasMore={hasMoreOrders}
         />
       )}
       {route === 'menu' && (
@@ -1263,6 +1489,8 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
           onBack={back}
           onAdd={handleAddProductWithOptions}
           onOpenCart={() => setRoute('cart')}
+          activeCategory={menuCategory}
+          onChangeCategory={setMenuCategory}
         />
       )}
       {route === 'cart' && (
@@ -1377,6 +1605,179 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       </Modal>
 
       <Modal
+        visible={orderDetailModal.visible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setOrderDetailModal({ visible: false, order: null, loading: false })}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <View>
+                <Text style={styles.inboxTitle}>Detalhe do pedido</Text>
+                <Text style={styles.inboxSubtitle}>
+                  {orderDetailModal.order
+                    ? `#${String(orderDetailModal.order.id).slice(0, 8)}`
+                    : 'A carregar...'}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.inboxClose}
+                onPress={() => setOrderDetailModal({ visible: false, order: null, loading: false })}
+              >
+                <Text style={styles.inboxCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.inboxList} contentContainerStyle={styles.inboxListContent}>
+              {orderDetailModal.loading ? (
+                <Text style={styles.mutedText}>A carregar...</Text>
+              ) : null}
+              {orderDetailModal.order ? (
+                <>
+                  <SummaryLine
+                    label="Estado"
+                    value={statusLabel(orderDetailModal.order.status)}
+                  />
+                  <SummaryLine
+                    label="Restaurante"
+                    value={orderDetailModal.order.restaurant_name_snapshot ?? '-'}
+                  />
+                  <SummaryLine
+                    label="Total"
+                    value={`EUR ${Number(orderDetailModal.order.total ?? 0).toFixed(2)}`}
+                  />
+                  <SummaryLine
+                    label="Pagamento"
+                    value={`${orderDetailModal.order.payment?.method ?? '-'} (${
+                      orderDetailModal.order.payment?.status ?? '-'
+                    })`}
+                  />
+                  <SummaryLine
+                    label="Criado em"
+                    value={
+                      orderDetailModal.order.created_at
+                        ? new Date(orderDetailModal.order.created_at).toLocaleString()
+                        : '-'
+                    }
+                  />
+                  {orderDetailModal.order.address ? (
+                    <SummaryLine
+                      label="Morada"
+                      value={`${orderDetailModal.order.address.street}, ${orderDetailModal.order.address.city}`}
+                    />
+                  ) : null}
+
+                  <Text style={[styles.checkoutSectionTitle, { marginTop: 16 }]}>Itens</Text>
+                  {(orderDetailModal.order.items ?? []).map((item) => (
+                    <View key={item.id} style={styles.checkoutRow}>
+                      <View style={styles.checkoutRowText}>
+                        <Text style={styles.checkoutRowValue}>
+                          {item.quantity}x {item.product_name_snapshot}
+                        </Text>
+                        {(item.options ?? []).map((option) => (
+                          <Text style={styles.checkoutRowLabel} key={option.id}>
+                            + {option.option_name_snapshot}
+                            {Number(option.extra_price) > 0
+                              ? ` (${Number(option.extra_price).toFixed(2)} EUR)`
+                              : ''}
+                          </Text>
+                        ))}
+                      </View>
+                      <Text style={styles.checkoutRowValue}>
+                        {Number(item.total_price ?? 0).toFixed(2)} EUR
+                      </Text>
+                    </View>
+                  ))}
+
+                  {(orderDetailModal.order.discounts ?? []).length > 0 ? (
+                    <>
+                      <Text style={[styles.checkoutSectionTitle, { marginTop: 16 }]}>
+                        Descontos
+                      </Text>
+                      {orderDetailModal.order.discounts.map((discount) => (
+                        <SummaryLine
+                          key={discount.id}
+                          label={discount.name_snapshot}
+                          value={`-${Number(discount.discount_amount ?? 0).toFixed(2)} EUR`}
+                        />
+                      ))}
+                    </>
+                  ) : null}
+
+                  <Text style={[styles.checkoutSectionTitle, { marginTop: 16 }]}>Timeline</Text>
+                  {(orderDetailModal.order.events ?? []).map((event, index) => (
+                    <SummaryLine
+                      key={`${event.event_type}-${index}`}
+                      label={String(event.event_type ?? '').replaceAll('_', ' ')}
+                      value={
+                        event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : '-'
+                      }
+                    />
+                  ))}
+                </>
+              ) : null}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showReviewsHistory}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowReviewsHistory(false)}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <View>
+                <Text style={styles.inboxTitle}>Minhas avaliacoes</Text>
+                <Text style={styles.inboxSubtitle}>
+                  Editar ou apagar avaliacoes anteriores
+                </Text>
+              </View>
+              <Pressable
+                style={styles.inboxClose}
+                onPress={() => setShowReviewsHistory(false)}
+              >
+                <Text style={styles.inboxCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.inboxList} contentContainerStyle={styles.inboxListContent}>
+              {clientReviews.length === 0 ? (
+                <Text style={styles.inboxEmpty}>Sem avaliacoes ainda.</Text>
+              ) : null}
+              {clientReviews.map((review) => (
+                <View key={review.id} style={styles.inboxItem}>
+                  <View style={styles.inboxItemTop}>
+                    <Text style={styles.inboxItemTitle}>
+                      {review.target_type} · {Number(review.rating)}★
+                    </Text>
+                    <Text style={styles.inboxItemTimestamp}>
+                      {review.created_at
+                        ? new Date(review.created_at).toLocaleDateString()
+                        : '-'}
+                    </Text>
+                  </View>
+                  <Text style={styles.inboxItemMessage}>{review.comment || 'Sem comentario.'}</Text>
+                  <View style={styles.inboxItemFooter}>
+                    <Pressable onPress={() => openEditReview(review)}>
+                      <Text style={styles.inboxItemAction}>Editar</Text>
+                    </Pressable>
+                    <Pressable onPress={() => handleDeleteReview(review)}>
+                      <Text style={[styles.inboxItemAction, { color: '#b91c1c' }]}>Apagar</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
         visible={showLogoutConfirm}
         animationType="fade"
         transparent
@@ -1438,6 +1839,14 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
               {chatModalState.messages.length === 0 ? (
                 <Text style={styles.inboxEmpty}>Sem mensagens ainda.</Text>
               ) : null}
+              {chatModalState.messages.length >= 50 ? (
+                <Pressable
+                  style={[styles.addressAddBtn, { marginBottom: 8 }]}
+                  onPress={loadMoreChatMessages}
+                >
+                  <Text style={styles.addressAddBtnText}>Carregar mensagens antigas</Text>
+                </Pressable>
+              ) : null}
               {chatModalState.messages.map((message) => {
                 const isMine = message.sender_participant_id === userId
                 return (
@@ -1453,6 +1862,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
                       {message.timestamp
                         ? new Date(message.timestamp).toLocaleTimeString()
                         : ''}
+                      {isMine && message.read_at ? ' ✓✓' : isMine ? ' ✓' : ''}
                     </Text>
                   </View>
                 )
@@ -1630,6 +2040,25 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
               })}
             </ScrollView>
 
+            <View style={styles.optionQuantityRow}>
+              <Text style={styles.checkoutRowLabel}>Quantidade</Text>
+              <View style={styles.qtyControl}>
+                <Pressable
+                  style={styles.qtyButton}
+                  onPress={() => setOptionQuantity((q) => Math.max(1, q - 1))}
+                >
+                  <Text style={styles.qtyText}>{ICON.minus}</Text>
+                </Pressable>
+                <Text style={styles.qtyValue}>{optionQuantity}</Text>
+                <Pressable
+                  style={styles.qtyButton}
+                  onPress={() => setOptionQuantity((q) => q + 1)}
+                >
+                  <Text style={styles.qtyText}>{ICON.plus}</Text>
+                </Pressable>
+              </View>
+            </View>
+
             <View style={styles.cancelActionsRow}>
               <Pressable
                 style={styles.cancelSecondary}
@@ -1637,6 +2066,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
                   setOptionsTargetProduct(null)
                   setOptionGroups([])
                   setOptionSelections({})
+                  setOptionQuantity(1)
                 }}
                 disabled={loading}
               >
@@ -1648,7 +2078,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
                 disabled={loading}
               >
                 <Text style={styles.cancelDangerText}>
-                  {loading ? 'A adicionar...' : 'Adicionar ao carrinho'}
+                  {loading ? 'A adicionar...' : `Adicionar ${optionQuantity}x ao carrinho`}
                 </Text>
               </Pressable>
             </View>
@@ -1684,18 +2114,20 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
               {addresses.map((address) => {
                 const isSelected = selectedAddressId === address.id
                 return (
-                  <Pressable
+                  <View
                     key={address.id}
                     style={[
                       styles.addressOption,
                       isSelected ? styles.addressOptionSelected : null,
                     ]}
-                    onPress={() => {
-                      setSelectedAddressId(address.id)
-                      setShowAddressModal(false)
-                    }}
                   >
-                    <View style={styles.addressOptionMain}>
+                    <Pressable
+                      style={styles.addressOptionMain}
+                      onPress={() => {
+                        setSelectedAddressId(address.id)
+                        setShowAddressModal(false)
+                      }}
+                    >
                       <Text style={styles.addressOptionLabel}>
                         {address.label || 'Morada'} {address.is_default ? '· default' : ''}
                       </Text>
@@ -1705,16 +2137,30 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
                       <Text style={styles.addressOptionDetail}>
                         {address.postal_code} - {address.country}
                       </Text>
-                    </View>
-                    {!address.is_default ? (
+                    </Pressable>
+                    <View style={styles.addressOptionActions}>
+                      {!address.is_default ? (
+                        <Pressable
+                          style={styles.addressSetDefault}
+                          onPress={() => handleSetDefaultAddress(address.id)}
+                        >
+                          <Text style={styles.addressSetDefaultText}>Default</Text>
+                        </Pressable>
+                      ) : null}
                       <Pressable
                         style={styles.addressSetDefault}
-                        onPress={() => handleSetDefaultAddress(address.id)}
+                        onPress={() => startEditAddress(address)}
                       >
-                        <Text style={styles.addressSetDefaultText}>Default</Text>
+                        <Text style={styles.addressSetDefaultText}>Editar</Text>
                       </Pressable>
-                    ) : null}
-                  </Pressable>
+                      <Pressable
+                        style={[styles.addressSetDefault, styles.addressDeleteBtn]}
+                        onPress={() => setDeleteAddressTarget(address)}
+                      >
+                        <Text style={styles.addressDeleteText}>Apagar</Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 )
               })}
 
@@ -1785,6 +2231,45 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
                 </Pressable>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(deleteAddressTarget)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!isSavingAddress) setDeleteAddressTarget(null)
+        }}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.failModalCardClient}>
+            <Text style={styles.inboxTitle}>Apagar morada</Text>
+            <Text style={styles.inboxSubtitle}>
+              Tem a certeza que quer apagar a morada{' '}
+              {deleteAddressTarget?.label ?? deleteAddressTarget?.street}?
+            </Text>
+            <View style={styles.cancelActionsRow}>
+              <Pressable
+                style={styles.cancelSecondary}
+                onPress={() => {
+                  if (!isSavingAddress) setDeleteAddressTarget(null)
+                }}
+                disabled={isSavingAddress}
+              >
+                <Text style={styles.cancelSecondaryText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={styles.cancelDanger}
+                onPress={confirmDeleteAddress}
+                disabled={isSavingAddress}
+              >
+                <Text style={styles.cancelDangerText}>
+                  {isSavingAddress ? 'A apagar...' : 'Apagar'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2008,6 +2493,18 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
                   </View>
                 ))
               })()}
+
+              {inboxItems.length >= INBOX_MAX_ITEMS ? (
+                <Pressable
+                  style={[styles.addressAddBtn, { marginTop: 8 }]}
+                  onPress={loadMoreInbox}
+                  disabled={inboxLoading}
+                >
+                  <Text style={styles.addressAddBtnText}>
+                    {inboxLoading ? 'A carregar...' : 'Carregar mais notificacoes'}
+                  </Text>
+                </Pressable>
+              ) : null}
             </ScrollView>
           </View>
         </View>
@@ -2030,6 +2527,10 @@ function HomeScreen({
   inboxUnreadCount,
   onOpenInbox,
   onOpenOrders,
+  filters,
+  onChangeFilters,
+  onApplyFilters,
+  onResetFilters,
 }) {
   return (
     <View style={styles.screen}>
@@ -2058,7 +2559,44 @@ function HomeScreen({
 
         <View style={styles.searchField}>
           <Text style={styles.searchIcon}>{ICON.search}</Text>
-          <Text style={styles.searchText}>Restaurantes integrados via backend</Text>
+          <TextInput
+            style={styles.searchInput}
+            value={filters?.q ?? ''}
+            placeholder="Procurar restaurantes..."
+            placeholderTextColor="#dbe7ff"
+            onChangeText={(text) =>
+              onChangeFilters?.((current) => ({ ...current, q: text }))
+            }
+            onSubmitEditing={onApplyFilters}
+            returnKeyType="search"
+          />
+        </View>
+
+        <View style={styles.filterRow}>
+          <TextInput
+            style={styles.filterInput}
+            value={filters?.city ?? ''}
+            placeholder="Cidade"
+            placeholderTextColor="#dbe7ff"
+            onChangeText={(text) =>
+              onChangeFilters?.((current) => ({ ...current, city: text }))
+            }
+          />
+          <TextInput
+            style={styles.filterInput}
+            value={filters?.postalCode ?? ''}
+            placeholder="Cod. postal"
+            placeholderTextColor="#dbe7ff"
+            onChangeText={(text) =>
+              onChangeFilters?.((current) => ({ ...current, postalCode: text }))
+            }
+          />
+          <Pressable style={styles.filterApply} onPress={onApplyFilters}>
+            <Text style={styles.filterApplyText}>Filtrar</Text>
+          </Pressable>
+          <Pressable style={styles.filterReset} onPress={onResetFilters}>
+            <Text style={styles.filterResetText}>Limpar</Text>
+          </Pressable>
         </View>
 
         {pushStatus && pushStatus !== 'idle' ? (
@@ -2080,12 +2618,14 @@ function HomeScreen({
         ) : null}
 
         {notificationPreview ? (
-          <View style={styles.notificationBanner}>
+          <Pressable style={styles.notificationBanner} onPress={onOpenInbox}>
             <Text style={styles.notificationBannerTitle}>
               {ICON.bell} {notificationPreview.title}
             </Text>
-            <Text style={styles.notificationBannerText}>{notificationPreview.message}</Text>
-          </View>
+            <Text style={styles.notificationBannerText}>
+              {notificationPreview.message} · toca para abrir inbox
+            </Text>
+          </Pressable>
         ) : null}
 
         {hasActiveOrder ? (
@@ -2101,7 +2641,17 @@ function HomeScreen({
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={Boolean(loading)}
+            onRefresh={onApplyFilters}
+            tintColor="#3479ed"
+          />
+        }
+      >
         <Text style={styles.sectionTitle}>Restaurantes</Text>
         {loading && restaurants.length === 0 ? <Text style={styles.mutedText}>A carregar...</Text> : null}
         {restaurants.map((item) => (
@@ -2132,7 +2682,31 @@ function HomeScreen({
   )
 }
 
-function MenuScreen({ restaurant, items, itemCount, total, loading, onBack, onAdd, onOpenCart }) {
+function MenuScreen({
+  restaurant,
+  items,
+  itemCount,
+  total,
+  loading,
+  onBack,
+  onAdd,
+  onOpenCart,
+  activeCategory,
+  onChangeCategory,
+}) {
+  const categories = ['Todas', ...Array.from(new Set(items.map((item) => item.category || 'Sem categoria').filter(Boolean)))]
+  const visibleItems =
+    !activeCategory || activeCategory === 'Todas'
+      ? items
+      : items.filter((item) => (item.category || 'Sem categoria') === activeCategory)
+
+  const groupedItems = visibleItems.reduce((acc, item) => {
+    const cat = item.category || 'Sem categoria'
+    if (!acc[cat]) acc[cat] = []
+    acc[cat].push(item)
+    return acc
+  }, {})
+
   return (
     <View style={styles.screen}>
       <View style={styles.menuHeader}>
@@ -2143,30 +2717,67 @@ function MenuScreen({ restaurant, items, itemCount, total, loading, onBack, onAd
       </View>
 
       <ScrollView
+        horizontal
+        style={styles.categoryStrip}
+        contentContainerStyle={styles.categoryStripContent}
+        showsHorizontalScrollIndicator={false}
+      >
+        {categories.map((category) => (
+          <Pressable
+            key={category}
+            style={[
+              styles.categoryChip,
+              (activeCategory || 'Todas') === category ? styles.categoryChipActive : null,
+            ]}
+            onPress={() => onChangeCategory(category === 'Todas' ? '' : category)}
+          >
+            <Text
+              style={[
+                styles.categoryChipText,
+                (activeCategory || 'Todas') === category ? styles.categoryChipTextActive : null,
+              ]}
+            >
+              {category}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      <ScrollView
         contentContainerStyle={[styles.scrollContent, itemCount > 0 ? styles.withCartBar : null]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.sectionTitle}>Menu</Text>
         {loading && items.length === 0 ? <Text style={styles.mutedText}>A carregar...</Text> : null}
-        {items.map((item) => (
-          <View key={item.restaurant_product_id} style={styles.menuCard}>
-            <View style={styles.menuThumb}>
-              <Text style={styles.menuThumbEmoji}>{"\\uD83C\\uDF55"}</Text>
-            </View>
-            <View style={styles.menuInfo}>
-              <Text style={styles.menuName}>{item.name ?? 'Produto'}</Text>
-              <Text style={styles.menuDescription}>{item.description ?? 'Sem descricao'}</Text>
-              <Text style={styles.menuPrice}>{formatCurrency(item.price)}</Text>
-              <Text style={styles.menuRate}>{item.is_available ? 'Disponivel' : 'Indisponivel'}</Text>
-            </View>
+        {!loading && visibleItems.length === 0 ? (
+          <Text style={styles.mutedText}>Sem pratos nesta categoria.</Text>
+        ) : null}
 
-            <Pressable
-              style={styles.addButton}
-              onPress={() => onAdd(item)}
-              disabled={!item.is_available}
-            >
-              <Text style={styles.addButtonText}>{ICON.plus}</Text>
-            </Pressable>
+        {Object.entries(groupedItems).map(([category, group]) => (
+          <View key={category}>
+            <Text style={styles.sectionTitle}>{category}</Text>
+            {group.map((item) => (
+              <View key={item.restaurant_product_id} style={styles.menuCard}>
+                <View style={styles.menuThumb}>
+                  <Text style={styles.menuThumbEmoji}>{"\\uD83C\\uDF55"}</Text>
+                </View>
+                <View style={styles.menuInfo}>
+                  <Text style={styles.menuName}>{item.name ?? 'Produto'}</Text>
+                  <Text style={styles.menuDescription}>{item.description ?? 'Sem descricao'}</Text>
+                  <Text style={styles.menuPrice}>{formatCurrency(item.price)}</Text>
+                  <Text style={styles.menuRate}>
+                    {item.is_available ? 'Disponivel' : 'Indisponivel'}
+                  </Text>
+                </View>
+
+                <Pressable
+                  style={styles.addButton}
+                  onPress={() => onAdd(item)}
+                  disabled={!item.is_available}
+                >
+                  <Text style={styles.addButtonText}>{ICON.plus}</Text>
+                </Pressable>
+              </View>
+            ))}
           </View>
         ))}
       </ScrollView>
@@ -2336,6 +2947,16 @@ function TrackingScreen({
           </View>
         ) : null}
 
+        {checkout?.payment_status === 'COMPLETED' ? (
+          <View style={styles.paymentSuccessBanner}>
+            <Text style={styles.paymentSuccessTitle}>Pagamento confirmado</Text>
+            <Text style={styles.paymentSuccessText}>
+              Total: EUR {Number(checkout.total ?? 0).toFixed(2)} via{' '}
+              {checkout.payment_method ?? 'desconhecido'}
+            </Text>
+          </View>
+        ) : null}
+
         <Pressable style={styles.successBanner} onPress={onRefresh}>
           <Text style={styles.successBannerText}>{ICON.check} Atualizar tracking</Text>
         </Pressable>
@@ -2450,6 +3071,9 @@ function OrdersHistoryScreen({
   onRepeat,
   onTrack,
   onReview,
+  onOpenDetail,
+  onLoadMore,
+  hasMore,
 }) {
   return (
     <View style={styles.screen}>
@@ -2461,7 +3085,13 @@ function OrdersHistoryScreen({
         <Text style={styles.trackSub}>Historico de encomendas</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={Boolean(loading)} onRefresh={onRefresh} tintColor="#3479ed" />
+        }
+      >
         <Pressable style={styles.successBanner} onPress={onRefresh} disabled={loading}>
           <Text style={styles.successBannerText}>
             {loading ? 'A carregar...' : 'Atualizar pedidos'}
@@ -2470,6 +3100,10 @@ function OrdersHistoryScreen({
 
         {!loading && orders.length === 0 ? (
           <Text style={styles.mutedText}>Sem pedidos no historico.</Text>
+        ) : null}
+
+        {orders.length > 0 && hasMore ? null : orders.length > 0 ? (
+          <Text style={styles.mutedText}>Fim do historico.</Text>
         ) : null}
 
         {orders.map((order) => {
@@ -2512,6 +3146,12 @@ function OrdersHistoryScreen({
                   ) : null}
                   <Pressable
                     style={styles.orderActionBtn}
+                    onPress={() => onOpenDetail(order)}
+                  >
+                    <Text style={styles.orderActionBtnText}>Detalhe</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.orderActionBtn}
                     onPress={() => onRepeat(order)}
                     disabled={isBusy}
                   >
@@ -2551,6 +3191,18 @@ function OrdersHistoryScreen({
             </View>
           )
         })}
+
+        {orders.length > 0 && hasMore ? (
+          <Pressable
+            style={[styles.addressAddBtn, { marginTop: 12 }]}
+            onPress={onLoadMore}
+            disabled={loading}
+          >
+            <Text style={styles.addressAddBtnText}>
+              {loading ? 'A carregar...' : 'Carregar mais'}
+            </Text>
+          </Pressable>
+        ) : null}
       </ScrollView>
     </View>
   )
@@ -2566,6 +3218,8 @@ function ProfileScreen({
   onLogoutRequest,
   addresses,
   onOpenAddresses,
+  onOpenReviewsHistory,
+  reviewsCount,
 }) {
   return (
     <View style={styles.screen}>
@@ -2621,6 +3275,21 @@ function ProfileScreen({
           </Text>
           <Pressable style={[styles.addressAddBtn, { marginTop: 12 }]} onPress={onOpenAddresses}>
             <Text style={styles.addressAddBtnText}>Gerir moradas</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.checkoutCard}>
+          <Text style={styles.checkoutSectionTitle}>Minhas avaliacoes</Text>
+          <Text style={styles.checkoutRowValue}>
+            {reviewsCount === 0
+              ? 'Sem avaliacoes ainda.'
+              : `${reviewsCount} avaliacao(oes) submetida(s).`}
+          </Text>
+          <Pressable
+            style={[styles.addressAddBtn, { marginTop: 12 }]}
+            onPress={onOpenReviewsHistory}
+          >
+            <Text style={styles.addressAddBtnText}>Ver avaliacoes</Text>
           </Pressable>
         </View>
 
@@ -2682,6 +3351,53 @@ const styles = StyleSheet.create({
   },
   searchIcon: { color: '#9db8f8', fontSize: 14 },
   searchText: { color: '#dbe7ff', fontSize: 15, fontWeight: '500' },
+  searchInput: {
+    flex: 1,
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '500',
+    padding: 0,
+  },
+  filterRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+  },
+  filterInput: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#ffffff',
+    fontSize: 13,
+  },
+  filterApply: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+  },
+  filterApplyText: {
+    color: '#1d4ed8',
+    fontWeight: '800',
+    fontSize: 12,
+  },
+  filterReset: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  filterResetText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 12,
+  },
   offlineBanner: {
     marginTop: 10,
     borderRadius: 10,
@@ -2780,6 +3496,38 @@ const styles = StyleSheet.create({
   backButton: { alignSelf: 'flex-start', paddingVertical: 2 },
   backArrow: { color: '#ffffff', fontSize: 23, fontWeight: '700' },
   menuHeaderTitle: { color: '#ffffff', fontSize: 32, fontWeight: '900', marginTop: 4 },
+  categoryStrip: {
+    maxHeight: 50,
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  categoryStripContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  categoryChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    marginRight: 6,
+  },
+  categoryChipActive: {
+    backgroundColor: '#ff6900',
+    borderColor: '#ff6900',
+  },
+  categoryChipText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  categoryChipTextActive: {
+    color: '#ffffff',
+  },
   menuCard: {
     borderWidth: 1,
     borderColor: '#dfe4ec',
@@ -2927,6 +3675,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     marginBottom: 10,
+  },
+  paymentSuccessBanner: {
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#16a34a',
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  paymentSuccessTitle: {
+    color: '#14532d',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  paymentSuccessText: {
+    color: '#166534',
+    fontSize: 13,
+    marginTop: 4,
   },
   successBannerText: { color: '#0f8f46', fontSize: 14, fontWeight: '700' },
   successText: {
@@ -3405,16 +4172,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  addressOptionActions: {
+    flexDirection: 'column',
+    gap: 4,
+    marginLeft: 6,
+  },
   addressSetDefault: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: '#cbd5e1',
+    alignItems: 'center',
   },
   addressSetDefaultText: {
     color: '#334155',
-    fontSize: 11,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  addressDeleteBtn: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fff5f5',
+  },
+  addressDeleteText: {
+    color: '#b91c1c',
+    fontSize: 10,
     fontWeight: '800',
   },
   addressAddBtn: {
@@ -3520,6 +4302,15 @@ const styles = StyleSheet.create({
   optionRowPrice: {
     color: '#64748b',
     fontSize: 12,
+  },
+  optionQuantityRow: {
+    marginTop: 10,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   paymentCountdown: {
     marginTop: 14,

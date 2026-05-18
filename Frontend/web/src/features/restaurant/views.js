@@ -4,8 +4,10 @@ import { RestaurantMenuCatalogScreen } from './screens/RestaurantMenuCatalogScre
 import { RestaurantChatScreen } from './screens/RestaurantChatScreen'
 import { RestaurantNotificationsScreen } from './screens/RestaurantNotificationsScreen'
 import { RestaurantOrderDetailScreen } from './screens/RestaurantOrderDetailScreen'
+import { RestaurantOrdersHistoryScreen } from './screens/RestaurantOrdersHistoryScreen'
 import { RestaurantReviewsScreen } from './screens/RestaurantReviewsScreen'
 import { RestaurantCampaignsScreen } from './screens/RestaurantCampaignsScreen'
+import { RestaurantStatsScreen } from './screens/RestaurantStatsScreen'
 
 export const RESTAURANT_VIEWS = [
   {
@@ -19,6 +21,18 @@ export const RESTAURANT_VIEWS = [
     label: 'Cozinha virtual',
     icon: 'KV',
     Component: RestaurantVirtualKitchenScreen,
+  },
+  {
+    id: 'history',
+    label: 'Historico',
+    icon: 'HS',
+    Component: RestaurantOrdersHistoryScreen,
+  },
+  {
+    id: 'stats',
+    label: 'Estatisticas',
+    icon: 'ST',
+    Component: RestaurantStatsScreen,
   },
   {
     id: 'order-detail',

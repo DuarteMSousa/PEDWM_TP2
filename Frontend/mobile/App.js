@@ -5,10 +5,19 @@ import { MobileLoginScreen } from './src/screens/MobileLoginScreen';
 import { CustomerAppScreen } from './src/screens/CustomerAppScreen';
 import { CourierAppScreen } from './src/screens/CourierAppScreen';
 import { registerDevicePushToken } from './src/services/pushNotificationService';
+import { ErrorBoundary } from './src/components/common/ErrorBoundary';
 
 const SESSION_STORAGE_KEY = 'fastbite_mobile_session';
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
+  );
+}
+
+function AppInner() {
   const [session, setSession] = useState(null);
   const [isHydrating, setIsHydrating] = useState(true);
   const [pushStatus, setPushStatus] = useState('idle');

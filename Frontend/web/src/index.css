@@ -16,6 +16,23 @@
   --red-soft: #fee2e2;
 }
 
+body.rb-dark {
+  --bg: #0f172a;
+  --panel: #1e293b;
+  --line: #334155;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+}
+
+body.rb-dark .rb-table,
+body.rb-dark .rb-stat-card,
+body.rb-dark .rb-table-card,
+body.rb-dark .rb-search-wrap,
+body.rb-dark .rb-detail-row,
+body.rb-dark .rb-toast {
+  color: var(--text);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1572,4 +1589,203 @@ body {
   margin: 4px 0;
   color: #334155;
   font-size: 14px;
+}
+
+.rb-pending-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin: 16px 0;
+  background: #fef3c7;
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  animation: rb-pulse 1.4s ease-in-out infinite;
+}
+
+.rb-pending-alert strong {
+  color: #92400e;
+  font-size: 16px;
+}
+
+.rb-pending-alert span {
+  color: #92400e;
+  font-size: 13px;
+}
+
+.rb-pending-alert button {
+  margin-left: auto;
+}
+
+.rb-hourly-bars {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap: 2px;
+  height: 160px;
+  padding: 8px 4px;
+}
+
+.rb-hourly-bar-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+}
+
+.rb-hourly-bar {
+  width: 100%;
+  background: linear-gradient(180deg, var(--accent), #ffaf6a);
+  border-radius: 4px 4px 0 0;
+  min-height: 2px;
+  transition: height 0.3s ease;
+}
+
+.rb-hourly-bar-label {
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.rb-toast-stack {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+}
+
+.rb-toast {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  gap: 8px;
+  animation: rb-toast-in 0.18s ease;
+}
+
+@keyframes rb-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rb-toast-info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.rb-toast-success {
+  border-color: #86efac;
+  background: #f0fdf4;
+}
+
+.rb-toast-error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.rb-toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  font-size: 13px;
+}
+
+.rb-toast-body strong {
+  color: var(--text);
+}
+
+.rb-toast-body span {
+  color: var(--muted);
+}
+
+.rb-toast-dismiss {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.rb-error-boundary {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: var(--bg);
+}
+
+.rb-error-card {
+  max-width: 480px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px;
+  text-align: center;
+  border: 1px solid var(--line);
+}
+
+.rb-error-card h2 {
+  margin: 0 0 12px;
+  color: var(--text);
+}
+
+.rb-error-card p {
+  margin: 0 0 20px;
+  color: var(--muted);
+}
+
+.rb-skeleton-shimmer {
+  background: linear-gradient(90deg, #e5e7eb 0%, #f3f4f6 50%, #e5e7eb 100%);
+  background-size: 200% 100%;
+  animation: rb-shimmer 1.4s infinite linear;
+}
+
+@keyframes rb-shimmer {
+  0% {
+    background-position: -100% 0;
+  }
+  100% {
+    background-position: 100% 0;
+  }
+}
+
+@media print {
+  .rb-sidebar,
+  .rb-page-head-row > div:last-child,
+  .rb-detail-actions,
+  .rb-toast-stack {
+    display: none !important;
+  }
+
+  .rb-main {
+    width: 100% !important;
+  }
+
+  body {
+    background: #fff !important;
+  }
+}
+
+@keyframes rb-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(245, 158, 11, 0);
+  }
 }

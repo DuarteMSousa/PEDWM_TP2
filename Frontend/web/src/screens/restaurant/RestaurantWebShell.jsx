@@ -3,6 +3,7 @@ import { PageContainer } from '../../components/layout/PageContainer'
 import { RESTAURANT_VIEWS } from '../../features/restaurant/views'
 import { RestaurantSideNav } from '../../features/restaurant/components/RestaurantSideNav'
 import { RestaurantLoginScreen } from '../../features/restaurant/screens/RestaurantLoginScreen'
+import { ConfirmDialog } from '../../components/common/ConfirmDialog'
 
 const SESSION_STORAGE_KEY = 'fastbite_restaurant_session'
 
@@ -19,6 +20,7 @@ export function RestaurantWebShell() {
   const [activeViewId, setActiveViewId] = useState('dashboard')
   const [session, setSession] = useState(loadStoredSession)
   const [selectedOrderId, setSelectedOrderId] = useState('')
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
 
   const activeView = useMemo(
     () => RESTAURANT_VIEWS.find((view) => view.id === activeViewId) ?? RESTAURANT_VIEWS[0],
@@ -42,8 +44,13 @@ export function RestaurantWebShell() {
   }
 
   function handleLogout() {
+    setLogoutConfirmOpen(true)
+  }
+
+  function confirmLogout() {
     setSession(null)
     setSelectedOrderId('')
+    setLogoutConfirmOpen(false)
   }
 
   if (!session) {
@@ -73,6 +80,16 @@ export function RestaurantWebShell() {
           />
         </section>
       </div>
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        title="Terminar sessao?"
+        description="Vais sair da conta. Tera de fazer login outra vez."
+        confirmLabel="Sair"
+        destructive
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={confirmLogout}
+      />
     </PageContainer>
   )
 }

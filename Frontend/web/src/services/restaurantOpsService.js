@@ -32,6 +32,8 @@ function mapOrder(order) {
     delivery_id: order.delivery?.id ?? null,
     delivery_status: order.delivery?.status ?? null,
     courier_id: order.delivery?.courier_id ?? null,
+    payment_method: order.payment?.method ?? null,
+    payment_status: order.payment?.status ?? null,
     events: (order.events ?? []).map((event) => ({
       event_type: event.event_type,
       timestamp: event.timestamp,
@@ -148,6 +150,24 @@ const RESTAURANT_ORDER_DETAIL_QUERY = `
         discount_type
         discount_target
       }
+    }
+  }
+`
+
+const RESTAURANT_ORDERS_HISTORY_QUERY = `
+  query RestaurantOrdersHistory($restaurantId: ID!, $statuses: [OrderStatus!], $page: Int, $perPage: Int) {
+    restaurantOrders(restaurant_id: $restaurantId, statuses: $statuses, page: $page, per_page: $perPage) {
+      id
+      user_id
+      status
+      total
+      restaurant_name_snapshot
+      created_at
+      updated_at
+      user { id name }
+      address { street city }
+      payment { method status }
+      delivery { id status }
     }
   }
 `
@@ -299,6 +319,34 @@ const CREATE_PROMOTION_MUTATION = `
   }
 `
 
+const UPDATE_PROMOTION_MUTATION = `
+  mutation UpdatePromotion($actorUserId: ID!, $id: ID!, $input: UpdatePromotionInput!) {
+    updatePromotion(actor_user_id: $actorUserId, id: $id, input: $input) {
+      id
+      name
+    }
+  }
+`
+
+const UPDATE_COUPON_MUTATION = `
+  mutation UpdateCoupon($id: ID!, $input: UpdateCouponInput!) {
+    updateCoupon(id: $id, input: $input) {
+      id
+      code
+    }
+  }
+`
+
+const CHAIN_PRODUCTS_QUERY = `
+  query ChainProducts($chainId: ID!) {
+    chainCategories(chain_id: $chainId) {
+      id
+      name
+      products { id name }
+    }
+  }
+`
+
 const DELETE_PROMOTION_MUTATION = `
   mutation DeletePromotion($actorUserId: ID!, $id: ID!) {
     deletePromotion(actor_user_id: $actorUserId, id: $id)
@@ -365,6 +413,23 @@ const UPDATE_CATEGORY_MUTATION = `
 const DELETE_CATEGORY_MUTATION = `
   mutation DeleteCategory($id: ID!) {
     deleteCategory(id: $id)
+  }
+`
+
+const PRODUCT_OPTION_GROUPS_QUERY_ADMIN = `
+  query ProductOptionGroupsAdmin($productId: ID!) {
+    productOptionGroups(product_id: $productId) {
+      id
+      name
+      min_options
+      max_options
+      options {
+        id
+        name
+        extra_price
+        default_option
+      }
+    }
   }
 `
 
@@ -602,6 +667,25 @@ export async function fetchRestaurantOrderDetail({ session, orderId }) {
     ...requestOptions(session),
   })
   return data.restaurantOrder ?? null
+}
+
+export async function fetchRestaurantOrdersHistory({
+  session,
+  statuses = null,
+  page = 1,
+  perPage = 30,
+}) {
+  const data = await graphqlRequest({
+    query: RESTAURANT_ORDERS_HISTORY_QUERY,
+    variables: {
+      restaurantId: session.restaurantId,
+      statuses,
+      page,
+      perPage,
+    },
+    ...requestOptions(session),
+  })
+  return (data.restaurantOrders ?? []).map(mapOrder)
 }
 
 export async function fetchRestaurantActiveOrders(session) {
@@ -939,6 +1023,71 @@ export async function createChainPromotion({ session, input }) {
   return data.createPromotion
 }
 
+export async function updateChainPromotion({ session, promotionId, input }) {
+  const data = await graphqlRequest({
+    query: UPDATE_PROMOTION_MUTATION,
+    variables: {
+      actorUserId: actorUserId(session),
+      id: promotionId,
+      input: {
+        name: input.name,
+        description: input.description ?? null,
+        type: input.type,
+        target: input.target,
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        items: input.items ?? [],
+      },
+    },
+    ...requestOptions(session),
+  })
+  return data.updatePromotion
+}
+
+export async function updateChainCoupon({ session, couponId, input }) {
+  const data = await graphqlRequest({
+    query: UPDATE_COUPON_MUTATION,
+    variables: {
+      id: couponId,
+      input: {
+        code: input.code,
+        description: input.description ?? null,
+        type: input.type,
+        target: input.target,
+        discount: Number(input.discount),
+        product_id: input.product_id ?? null,
+        category_id: input.category_id ?? null,
+        min_order_total: input.min_order_total ? Number(input.min_order_total) : null,
+        max_discount_amount: input.max_discount_amount
+          ? Number(input.max_discount_amount)
+          : null,
+        max_uses: input.max_uses ? Number(input.max_uses) : null,
+        expiry_date: input.expiry_date ?? null,
+      },
+    },
+    ...requestOptions(session),
+  })
+  return data.updateCoupon
+}
+
+export async function fetchChainProductsAndCategories({ session, chainId }) {
+  const data = await graphqlRequest({
+    query: CHAIN_PRODUCTS_QUERY,
+    variables: { chainId: chainId ?? session.chainId },
+    ...requestOptions(session),
+  })
+  const categories = (data.chainCategories ?? []).map((cat) => ({ id: cat.id, name: cat.name }))
+  const products = (data.chainCategories ?? []).flatMap((cat) =>
+    (cat.products ?? []).map((product) => ({
+      id: product.id,
+      name: product.name,
+      category_id: cat.id,
+      category_name: cat.name,
+    })),
+  )
+  return { categories, products }
+}
+
 export async function deleteChainPromotion({ session, promotionId }) {
   const data = await graphqlRequest({
     query: DELETE_PROMOTION_MUTATION,
@@ -959,6 +1108,8 @@ export async function createChainCoupon({ session, input }) {
         type: input.type,
         target: input.target,
         discount: Number(input.discount),
+        product_id: input.product_id ?? null,
+        category_id: input.category_id ?? null,
         min_order_total: input.min_order_total
           ? Number(input.min_order_total)
           : null,
@@ -1044,7 +1195,20 @@ export async function updateRestaurantMenuProductWithOptions({
   const input = {}
   if (name !== undefined) input.name = name
   if (description !== undefined) input.description = description
-  if (optionGroups !== undefined) input.option_groups = optionGroups
+  if (optionGroups !== undefined) {
+    input.option_groups = optionGroups.map((group) => ({
+      id: group.id ?? null,
+      name: group.name,
+      min_options: Number(group.min_options ?? 0),
+      max_options: Number(group.max_options ?? 1),
+      options: (group.options ?? []).map((option) => ({
+        id: option.id ?? null,
+        name: option.name,
+        extra_price: Number(option.extra_price ?? 0),
+        default_option: Boolean(option.default_option),
+      })),
+    }))
+  }
 
   const data = await graphqlRequest({
     query: UPDATE_PRODUCT_MUTATION,
@@ -1056,6 +1220,26 @@ export async function updateRestaurantMenuProductWithOptions({
     ...requestOptions(session),
   })
   return data.updateProduct
+}
+
+export async function fetchProductOptionGroupsAdmin({ session, productId }) {
+  const data = await graphqlRequest({
+    query: PRODUCT_OPTION_GROUPS_QUERY_ADMIN,
+    variables: { productId },
+    ...requestOptions(session),
+  })
+  return (data.productOptionGroups ?? []).map((group) => ({
+    id: group.id,
+    name: group.name,
+    min_options: Number(group.min_options ?? 0),
+    max_options: Number(group.max_options ?? 1),
+    options: (group.options ?? []).map((option) => ({
+      id: option.id,
+      name: option.name,
+      extra_price: Number(option.extra_price ?? 0),
+      default_option: Boolean(option.default_option),
+    })),
+  }))
 }
 
 export async function fetchOperatorNotifications({

@@ -5,9 +5,11 @@ import {
   deleteChainCategory,
   deleteRestaurantMenuProduct,
   fetchChainCategories,
+  fetchProductOptionGroupsAdmin,
   fetchRestaurantMenuProducts,
   updateChainCategory,
   updateRestaurantMenuProduct,
+  updateRestaurantMenuProductWithOptions,
 } from '../../../services/restaurantOpsService'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 
@@ -26,7 +28,15 @@ export function RestaurantMenuCatalogScreen({ session }) {
   const [searchText, setSearchText] = useState('')
   const [activeCategory, setActiveCategory] = useState('Todas')
   const [editingProductId, setEditingProductId] = useState('')
-  const [editDraft, setEditDraft] = useState({ price: '', prep: '', isAvailable: true })
+  const [editDraft, setEditDraft] = useState({
+    name: '',
+    description: '',
+    price: '',
+    prep: '',
+    isAvailable: true,
+  })
+  const [editOptionGroups, setEditOptionGroups] = useState([])
+  const [showOptionsEditor, setShowOptionsEditor] = useState(false)
   const [newProduct, setNewProduct] = useState({
     category: 'Pizzas',
     name: '',
@@ -85,23 +95,50 @@ export function RestaurantMenuCatalogScreen({ session }) {
     })
   }, [activeCategory, products, searchText])
 
-  function startEdit(product) {
+  async function startEdit(product) {
     setEditingProductId(product.restaurant_product_id)
     setEditDraft({
+      name: product.name ?? '',
+      description: product.description ?? '',
       price: String(Number(product.price ?? 0).toFixed(2)),
       prep: product.estimated_preparation_time_min ? String(product.estimated_preparation_time_min) : '',
       isAvailable: Boolean(product.is_available),
     })
+    setShowOptionsEditor(false)
+    try {
+      const groups = await fetchProductOptionGroupsAdmin({ session, productId: product.product_id })
+      setEditOptionGroups(groups)
+    } catch {
+      setEditOptionGroups([])
+    }
   }
 
   function cancelEdit() {
     setEditingProductId('')
-    setEditDraft({ price: '', prep: '', isAvailable: true })
+    setEditDraft({ name: '', description: '', price: '', prep: '', isAvailable: true })
+    setEditOptionGroups([])
+    setShowOptionsEditor(false)
   }
 
-  async function saveEdit(productId) {
+  async function saveEdit(product) {
+    const productId = product.restaurant_product_id
     try {
       setSaving(true)
+
+      const nameChanged = editDraft.name.trim() !== (product.name ?? '')
+      const descriptionChanged = editDraft.description !== (product.description ?? '')
+      const optionsChanged = showOptionsEditor
+
+      if (nameChanged || descriptionChanged || optionsChanged) {
+        await updateRestaurantMenuProductWithOptions({
+          session,
+          productId: product.product_id,
+          name: nameChanged ? editDraft.name.trim() : undefined,
+          description: descriptionChanged ? editDraft.description.trim() : undefined,
+          optionGroups: optionsChanged ? editOptionGroups : undefined,
+        })
+      }
+
       await updateRestaurantMenuProduct({
         session,
         input: {
@@ -114,13 +151,65 @@ export function RestaurantMenuCatalogScreen({ session }) {
       })
 
       setInfoText('Produto atualizado com sucesso.')
-      setEditingProductId('')
+      cancelEdit()
       await loadProducts()
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setSaving(false)
     }
+  }
+
+  function editAddOptionGroup() {
+    setEditOptionGroups((current) => [
+      ...current,
+      { name: '', min_options: 0, max_options: 1, options: [] },
+    ])
+  }
+
+  function editUpdateOptionGroup(index, patch) {
+    setEditOptionGroups((current) =>
+      current.map((group, idx) => (idx === index ? { ...group, ...patch } : group)),
+    )
+  }
+
+  function editRemoveOptionGroup(index) {
+    setEditOptionGroups((current) => current.filter((_, idx) => idx !== index))
+  }
+
+  function editAddOption(groupIndex) {
+    setEditOptionGroups((current) =>
+      current.map((group, idx) =>
+        idx === groupIndex
+          ? { ...group, options: [...group.options, { name: '', extra_price: 0, default_option: false }] }
+          : group,
+      ),
+    )
+  }
+
+  function editUpdateOption(groupIndex, optionIndex, patch) {
+    setEditOptionGroups((current) =>
+      current.map((group, gIdx) =>
+        gIdx === groupIndex
+          ? {
+              ...group,
+              options: group.options.map((option, oIdx) =>
+                oIdx === optionIndex ? { ...option, ...patch } : option,
+              ),
+            }
+          : group,
+      ),
+    )
+  }
+
+  function editRemoveOption(groupIndex, optionIndex) {
+    setEditOptionGroups((current) =>
+      current.map((group, gIdx) =>
+        gIdx === groupIndex
+          ? { ...group, options: group.options.filter((_, oIdx) => oIdx !== optionIndex) }
+          : group,
+      ),
+    )
   }
 
   async function toggleAvailability(product) {
@@ -591,6 +680,26 @@ export function RestaurantMenuCatalogScreen({ session }) {
                 {isEditing ? (
                   <div className="rb-login-form">
                     <label>
+                      Nome do prato
+                      <input
+                        type="text"
+                        value={editDraft.name}
+                        onChange={(event) =>
+                          setEditDraft((state) => ({ ...state, name: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label>
+                      Descricao
+                      <input
+                        type="text"
+                        value={editDraft.description}
+                        onChange={(event) =>
+                          setEditDraft((state) => ({ ...state, description: event.target.value }))
+                        }
+                      />
+                    </label>
+                    <label>
                       Preco (EUR)
                       <input
                         type="number"
@@ -621,11 +730,124 @@ export function RestaurantMenuCatalogScreen({ session }) {
                       />
                       {' '}Disponivel
                     </label>
+
+                    <button
+                      type="button"
+                      className="rb-btn-outline"
+                      onClick={() => setShowOptionsEditor((state) => !state)}
+                    >
+                      {showOptionsEditor ? 'Esconder option groups' : 'Editar option groups'}
+                    </button>
+
+                    {showOptionsEditor ? (
+                      <div className="rb-option-editor">
+                        <div className="rb-option-editor-head">
+                          <strong>Grupos de opcoes</strong>
+                          <button type="button" className="rb-btn-outline" onClick={editAddOptionGroup}>
+                            + Adicionar grupo
+                          </button>
+                        </div>
+                        {editOptionGroups.length === 0 ? <small>Sem grupos.</small> : null}
+                        {editOptionGroups.map((group, gIdx) => (
+                          <div className="rb-option-group" key={`edit-group-${gIdx}`}>
+                            <div className="rb-option-group-head">
+                              <input
+                                placeholder="Nome do grupo"
+                                value={group.name}
+                                onChange={(event) =>
+                                  editUpdateOptionGroup(gIdx, { name: event.target.value })
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="rb-icon-mini danger"
+                                onClick={() => editRemoveOptionGroup(gIdx)}
+                              >
+                                Remover
+                              </button>
+                            </div>
+                            <div className="rb-option-group-rules">
+                              <label>
+                                Min
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={group.min_options}
+                                  onChange={(event) =>
+                                    editUpdateOptionGroup(gIdx, { min_options: Number(event.target.value) })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Max
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={group.max_options}
+                                  onChange={(event) =>
+                                    editUpdateOptionGroup(gIdx, { max_options: Number(event.target.value) })
+                                  }
+                                />
+                              </label>
+                            </div>
+                            {group.options.map((option, oIdx) => (
+                              <div className="rb-option-row" key={`edit-opt-${gIdx}-${oIdx}`}>
+                                <input
+                                  placeholder="Nome opcao"
+                                  value={option.name}
+                                  onChange={(event) =>
+                                    editUpdateOption(gIdx, oIdx, { name: event.target.value })
+                                  }
+                                />
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="Extra"
+                                  value={option.extra_price}
+                                  onChange={(event) =>
+                                    editUpdateOption(gIdx, oIdx, {
+                                      extra_price: Number(event.target.value),
+                                    })
+                                  }
+                                />
+                                <label className="rb-option-default">
+                                  <input
+                                    type="checkbox"
+                                    checked={option.default_option}
+                                    onChange={(event) =>
+                                      editUpdateOption(gIdx, oIdx, {
+                                        default_option: event.target.checked,
+                                      })
+                                    }
+                                  />
+                                  default
+                                </label>
+                                <button
+                                  type="button"
+                                  className="rb-icon-mini danger"
+                                  onClick={() => editRemoveOption(gIdx, oIdx)}
+                                >
+                                  x
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              className="rb-btn-outline"
+                              onClick={() => editAddOption(gIdx)}
+                            >
+                              + Adicionar opcao
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
                     <div className="rb-card-actions">
                       <button
                         type="button"
                         className="rb-icon-mini"
-                        onClick={() => saveEdit(product.restaurant_product_id)}
+                        onClick={() => saveEdit(product)}
                         disabled={saving}
                       >
                         Guardar

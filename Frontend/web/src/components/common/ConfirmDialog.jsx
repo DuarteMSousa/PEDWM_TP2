@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 export function ConfirmDialog({
   open,
@@ -12,6 +12,8 @@ export function ConfirmDialog({
   onCancel,
   children,
 }) {
+  const confirmButtonRef = useRef(null)
+
   useEffect(() => {
     if (!open) return undefined
     function onKey(event) {
@@ -20,6 +22,10 @@ export function ConfirmDialog({
       }
     }
     window.addEventListener('keydown', onKey)
+    // Auto-focus confirm button for accessibility
+    if (confirmButtonRef.current) {
+      confirmButtonRef.current.focus()
+    }
     return () => window.removeEventListener('keydown', onKey)
   }, [open, loading, onCancel])
 
@@ -28,10 +34,15 @@ export function ConfirmDialog({
   }
 
   return (
-    <div className="rb-dialog-backdrop" role="dialog" aria-modal="true">
+    <div
+      className="rb-dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="rb-dialog-title"
+    >
       <div className="rb-dialog-card">
         <header className="rb-dialog-head">
-          <h3>{title}</h3>
+          <h3 id="rb-dialog-title">{title}</h3>
           <button
             type="button"
             className="rb-dialog-close"
@@ -57,6 +68,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </button>
           <button
+            ref={confirmButtonRef}
             type="button"
             className={destructive ? 'rb-btn-danger' : 'rb-btn-accept'}
             onClick={onConfirm}

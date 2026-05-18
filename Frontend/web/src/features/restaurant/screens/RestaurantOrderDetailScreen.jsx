@@ -9,6 +9,7 @@ import {
   updateOrderItemStatus,
 } from '../../../services/restaurantOpsService'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
+import { subscribeToOrderTrackingTopic } from '../../../services/realtime/topicsRealtime'
 
 function statusLabel(status) {
   if (status === 'PENDING') return 'Pendente'
@@ -50,6 +51,7 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
   const [rejectReason, setRejectReason] = useState('')
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [courierPosition, setCourierPosition] = useState(null)
 
   const loadDetail = useCallback(async () => {
     if (!selectedOrderId) {
@@ -71,6 +73,35 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
   useEffect(() => {
     queueMicrotask(() => loadDetail())
   }, [loadDetail])
+
+  useEffect(() => {
+    if (!selectedOrderId) return undefined
+    let unsubscribe = null
+    try {
+      unsubscribe = subscribeToOrderTrackingTopic({
+        orderId: selectedOrderId,
+        authToken: session.token,
+        devUserId: session.devUserId,
+        onPositionUpdated: (payload) => {
+          setCourierPosition({
+            lat: Number(payload?.lat),
+            lng: Number(payload?.lng),
+            recorded_at: payload?.recordedAt ?? new Date().toISOString(),
+          })
+        },
+        onError: () => {},
+      })
+    } catch {
+      // ignore
+    }
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [selectedOrderId, session?.token, session?.devUserId])
+
+  useEffect(() => {
+    setCourierPosition(null)
+  }, [selectedOrderId])
 
   async function withBusy(action, message) {
     try {
@@ -247,6 +278,25 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
                   <strong>{formatTime(order.delivery.delivery_time)}</strong>
                 </div>
               ) : null}
+              {courierPosition ? (
+                <div className="rb-detail-row">
+                  <span>Posicao courier (live)</span>
+                  <a
+                    href={`https://www.google.com/maps?q=${courierPosition.lat},${courierPosition.lng}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ color: 'var(--blue)' }}
+                  >
+                    {courierPosition.lat.toFixed(5)}, {courierPosition.lng.toFixed(5)}
+                  </a>
+                </div>
+              ) : null}
+              {courierPosition?.recorded_at ? (
+                <div className="rb-detail-row">
+                  <span>Atualizado em</span>
+                  <strong>{formatTime(courierPosition.recorded_at)}</strong>
+                </div>
+              ) : null}
             </>
           ) : null}
         </article>
@@ -345,6 +395,9 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
         ) : null}
         <button type="button" className="rb-btn-outline" onClick={handleOpenChat}>
           Abrir chat
+        </button>
+        <button type="button" className="rb-btn-outline" onClick={() => window.print()}>
+          Imprimir
         </button>
       </div>
 

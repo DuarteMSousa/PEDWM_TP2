@@ -5,19 +5,27 @@ import NetInfo from '@react-native-community/netinfo'
 import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
 import {
   acceptDeliveryJob,
+  createOrderChat,
   fetchCourierAvailableDeliveries,
   fetchCourierDeliveriesHistory,
+  fetchOrderChats,
   fetchOrderTracking,
   markDeliveryFailed,
   rejectDeliveryJob,
+  sendChatMessage,
   toggleCourierAvailability,
   updateCourierLocation,
   updateDeliveryStatus,
 } from '../services/commerceService'
 import {
+  subscribeToChatTopic,
   subscribeToCourierJobsTopic,
   subscribeToOrderTrackingTopic,
 } from '../services/realtime/topicsRealtime'
+import {
+  startBackgroundLocation,
+  stopBackgroundLocation,
+} from '../services/backgroundLocationTask'
 
 const OFFER_EXPIRY_FALLBACK_SECONDS = 30
 
@@ -70,6 +78,16 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
   const [history, setHistory] = useState([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [showDeliverConfirm, setShowDeliverConfirm] = useState(false)
+  const [readyBanner, setReadyBanner] = useState(false)
+  const [chatModalState, setChatModalState] = useState({
+    visible: false,
+    chat: null,
+    messages: [],
+    type: null,
+  })
+  const [chatDraft, setChatDraft] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatSending, setChatSending] = useState(false)
   const lastSentRef = useRef({ lat: null, lng: null, timestamp: 0 })
   const courierId = session?.userId || session?.devUserId
 
@@ -201,6 +219,38 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
   }, [activeDelivery, isCompleted])
 
   useEffect(() => {
+    if (!chatModalState.visible || !chatModalState.chat?.id) return undefined
+    let unsubscribe = null
+    try {
+      unsubscribe = subscribeToChatTopic({
+        chatId: chatModalState.chat.id,
+        authToken: session?.token,
+        devUserId: session?.devUserId,
+        onMessage: (payload) => {
+          setChatModalState((current) => {
+            if (!current.visible) return current
+            const incoming = {
+              id: payload?.eventId ?? `${Date.now()}-${Math.random()}`,
+              content: payload?.content ?? '',
+              sender_participant_id: payload?.senderUserId ?? 'desconhecido',
+              timestamp: payload?.timestamp ?? new Date().toISOString(),
+              source: 'socket',
+            }
+            if (current.messages.some((message) => message.id === incoming.id)) return current
+            return { ...current, messages: [incoming, ...current.messages].slice(0, 80) }
+          })
+        },
+        onError: () => {},
+      })
+    } catch {
+      // ignore
+    }
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [chatModalState.visible, chatModalState.chat?.id, session?.token, session?.devUserId])
+
+  useEffect(() => {
     if (!activeDelivery?.order_id || isCompleted || !isOnline) {
       return undefined
     }
@@ -225,6 +275,7 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
           }
           if (eventName === 'ORDER_READY') {
             setToast('Pedido pronto para recolha.')
+            setReadyBanner(true)
           }
         },
         onError: () => {
@@ -243,7 +294,17 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
   useEffect(() => {
     const phaseAllowsTracking = ['pickup', 'collected', 'in_transit'].includes(phase)
     if (!activeDelivery?.delivery_id || !phaseAllowsTracking) {
+      stopBackgroundLocation().catch(() => {})
       return undefined
+    }
+
+    if (backgroundLocationPermission === 'granted') {
+      startBackgroundLocation({
+        session,
+        deliveryId: activeDelivery.delivery_id,
+      }).catch((err) => {
+        setToast(`Background tracking falhou: ${err.message ?? err}`)
+      })
     }
 
     let subscription = null
@@ -457,6 +518,23 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
     }
   }
 
+  async function handleSetCourierStatus(nextStatus) {
+    if (!ensureOnline('alterar estado')) return
+    if (courierStatus === nextStatus) return
+
+    try {
+      setLoading(true)
+      const payload = await toggleCourierAvailability({ session, status: nextStatus })
+      setCourierStatus(payload.status)
+      setToast(`Estado: ${payload.status}.`)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleAcceptOffer(offer) {
     if (!ensureOnline('aceitar oferta')) {
       return
@@ -576,9 +654,14 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
 
       setPhase(nextPhase)
       setToast(`Estado atualizado para ${payload.delivery_status}.`)
+      if (nextStatus === 'PICKED_UP') {
+        setReadyBanner(false)
+      }
 
       if (nextStatus === 'DELIVERED') {
         setCourierStatus('AVAILABLE')
+        setReadyBanner(false)
+        stopBackgroundLocation().catch(() => {})
       }
 
       await loadTracking(payload.order_id)
@@ -715,12 +798,80 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
       setTracking(null)
       setLivePosition(null)
       setCourierStatus('AVAILABLE')
+      stopBackgroundLocation().catch(() => {})
       lastSentRef.current = { lat: null, lng: null, timestamp: 0 }
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setIsFailingDelivery(false)
     }
+  }
+
+  async function openChatForActiveDelivery(targetType) {
+    if (!activeDelivery?.order_id) {
+      setErrorText('Sem entrega ativa para abrir chat.')
+      return
+    }
+    if (!ensureOnline('abrir chat')) return
+
+    try {
+      setChatLoading(true)
+      const existing = await fetchOrderChats({
+        session,
+        orderId: activeDelivery.order_id,
+      })
+      let target = existing.find((chat) => chat.type === targetType) ?? null
+      if (!target) {
+        const participantIds = [courierId]
+        if (tracking?.order?.user_id) participantIds.push(tracking.order.user_id)
+        target = await createOrderChat({
+          session,
+          orderId: activeDelivery.order_id,
+          type: targetType,
+          participantUserIds: participantIds,
+        })
+      }
+      setChatModalState({
+        visible: true,
+        chat: target,
+        messages: target.messages ?? [],
+        type: targetType,
+      })
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  async function handleSendChatMessage() {
+    const draft = chatDraft.trim()
+    if (!draft || !chatModalState.chat?.id) return
+    if (!ensureOnline('enviar mensagem')) return
+    setChatDraft('')
+    try {
+      setChatSending(true)
+      const sent = await sendChatMessage({
+        session,
+        chatId: chatModalState.chat.id,
+        content: draft,
+      })
+      setChatModalState((current) => ({
+        ...current,
+        messages: [{ ...sent, source: 'mutation' }, ...current.messages].slice(0, 80),
+      }))
+    } catch (error) {
+      setErrorText(error.message)
+      setChatDraft(draft)
+    } finally {
+      setChatSending(false)
+    }
+  }
+
+  function closeChatModal() {
+    setChatModalState({ visible: false, chat: null, messages: [], type: null })
+    setChatDraft('')
   }
 
   function resetFlow() {
@@ -732,6 +883,7 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
     setDismissedOfferIds(new Set())
     setRejectReason('')
     lastSentRef.current = { lat: null, lng: null, timestamp: 0 }
+    stopBackgroundLocation().catch(() => {})
     setToast('Pronto para nova entrega.')
     if (courierStatus === 'AVAILABLE') {
       loadAvailableOffers()
@@ -807,6 +959,28 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
             </Text>
           </View>
 
+          <View style={styles.statusToggleRow}>
+            {['AVAILABLE', 'BUSY', 'OFFLINE'].map((option) => (
+              <Pressable
+                key={option}
+                style={[
+                  styles.statusToggle,
+                  courierStatus === option ? styles.statusToggleActive : null,
+                ]}
+                onPress={() => handleSetCourierStatus(option)}
+              >
+                <Text
+                  style={[
+                    styles.statusToggleText,
+                    courierStatus === option ? styles.statusToggleTextActive : null,
+                  ]}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
           <Pressable style={styles.historyLink} onPress={openHistoryModal}>
             <Text style={styles.historyLinkText}>Ver historico & ganhos</Text>
           </Pressable>
@@ -817,6 +991,15 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.sectionTitle}>Fluxo de entrega</Text>
+
+          {readyBanner ? (
+            <Pressable style={styles.readyBanner} onPress={() => setReadyBanner(false)}>
+              <Text style={styles.readyBannerTitle}>Pedido pronto para recolha</Text>
+              <Text style={styles.readyBannerText}>
+                A cozinha marcou o pedido como pronto. Dirige-te ao restaurante.
+              </Text>
+            </Pressable>
+          ) : null}
 
           {!isOnline ? (
             <View style={styles.warningBox}>
@@ -950,6 +1133,27 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
               routePoints={tracking?.route_points ?? []}
               positions={tracking?.positions ?? []}
             />
+          ) : null}
+
+          {activeDelivery && !isCompleted ? (
+            <View style={styles.chatButtonsRow}>
+              <Pressable
+                style={styles.chatBtn}
+                onPress={() => openChatForActiveDelivery('CUSTOMER_COURIER')}
+                disabled={chatLoading}
+              >
+                <Text style={styles.chatBtnText}>
+                  {chatLoading ? 'A abrir...' : 'Chat com cliente'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.chatBtn}
+                onPress={() => openChatForActiveDelivery('CUSTOMER_RESTAURANT')}
+                disabled={chatLoading}
+              >
+                <Text style={styles.chatBtnText}>Chat com restaurante</Text>
+              </Pressable>
+            </View>
           ) : null}
 
           {tracking?.events?.length ? (
@@ -1309,6 +1513,77 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
                 </View>
               ))}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={chatModalState.visible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeChatModal}
+      >
+        <View style={styles.offerModalBackdrop}>
+          <View style={styles.historyModalCard}>
+            <View style={styles.offerModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.offerModalTitle}>
+                  Chat com {chatModalState.type === 'CUSTOMER_RESTAURANT' ? 'restaurante' : 'cliente'}
+                </Text>
+                <Text style={styles.offerMeta}>
+                  {chatModalState.chat?.id
+                    ? `Chat #${String(chatModalState.chat.id).slice(0, 8)}`
+                    : 'A carregar'}
+                </Text>
+              </View>
+              <Pressable style={styles.offerModalClose} onPress={closeChatModal}>
+                <Text style={styles.offerModalCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.courierChatList} contentContainerStyle={{ paddingBottom: 8 }}>
+              {chatModalState.messages.length === 0 ? (
+                <Text style={styles.offerMeta}>Sem mensagens ainda.</Text>
+              ) : null}
+              {chatModalState.messages.map((message) => {
+                const isMine = message.sender_participant_id === courierId
+                return (
+                  <View
+                    key={message.id}
+                    style={[
+                      styles.courierBubble,
+                      isMine ? styles.courierBubbleMine : styles.courierBubbleOther,
+                    ]}
+                  >
+                    <Text style={styles.courierBubbleText}>{message.content}</Text>
+                    <Text style={styles.courierBubbleTime}>
+                      {message.timestamp ? new Date(message.timestamp).toLocaleTimeString() : ''}
+                    </Text>
+                  </View>
+                )
+              })}
+            </ScrollView>
+
+            <View style={styles.chatComposeRow}>
+              <TextInput
+                style={styles.chatInputCourier}
+                value={chatDraft}
+                onChangeText={setChatDraft}
+                placeholder="Mensagem..."
+                placeholderTextColor="#94a3b8"
+                editable={!chatSending}
+                multiline
+              />
+              <Pressable
+                style={styles.acceptBtn}
+                onPress={handleSendChatMessage}
+                disabled={chatSending || chatDraft.trim() === ''}
+              >
+                <Text style={styles.acceptBtnText}>
+                  {chatSending ? '...' : 'Enviar'}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1711,6 +1986,50 @@ const styles = StyleSheet.create({
     color: '#64748b',
     fontSize: 13,
   },
+  readyBanner: {
+    marginBottom: 12,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  readyBannerTitle: {
+    color: '#92400e',
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  readyBannerText: {
+    marginTop: 4,
+    color: '#92400e',
+    fontSize: 13,
+  },
+  statusToggleRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  statusToggle: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    alignItems: 'center',
+  },
+  statusToggleActive: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ffffff',
+  },
+  statusToggleText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  statusToggleTextActive: {
+    color: '#0b9b3f',
+  },
   historyLink: {
     marginTop: 10,
     alignSelf: 'flex-start',
@@ -1822,5 +2141,71 @@ const styles = StyleSheet.create({
     color: '#0b9b3f',
     fontSize: 12,
     fontWeight: '800',
+  },
+  chatButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginVertical: 10,
+  },
+  chatBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+  },
+  chatBtnText: {
+    color: '#1d4ed8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  courierChatList: {
+    marginTop: 12,
+    maxHeight: 400,
+  },
+  courierBubble: {
+    maxWidth: '78%',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  courierBubbleMine: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#07bf4f',
+  },
+  courierBubbleOther: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f1f5f9',
+  },
+  courierBubbleText: {
+    color: '#0f172a',
+    fontSize: 14,
+  },
+  courierBubbleTime: {
+    color: '#475569',
+    fontSize: 10,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  chatComposeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 10,
+  },
+  chatInputCourier: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d5dce7',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#0f172a',
+    fontSize: 14,
+    minHeight: 44,
+    maxHeight: 100,
   },
 })

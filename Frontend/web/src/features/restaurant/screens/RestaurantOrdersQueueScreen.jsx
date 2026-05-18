@@ -60,6 +60,22 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
   const [dialogLoading, setDialogLoading] = useState(false)
   const [realtimeState, setRealtimeState] = useState('offline')
   const beepRef = useRef(null)
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem('fastbite_sound_enabled')
+      return stored === null ? true : stored === 'true'
+    } catch {
+      return true
+    }
+  })
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('fastbite_sound_enabled', String(soundEnabled))
+    } catch {
+      // ignore
+    }
+  }, [soundEnabled])
 
   const loadOrders = useCallback(async () => {
     try {
@@ -97,7 +113,9 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
         onEvent: (eventName) => {
           setRealtimeState('live')
           if (eventName === 'ORDER_CREATED') {
-            playBeep(beepRef)
+            if (soundEnabled) {
+              playBeep(beepRef)
+            }
             setInfoText('Novo pedido recebido.')
           }
           loadOrders()
@@ -213,17 +231,27 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
           <h2>Dashboard</h2>
           <p>Encomendas ativas em tempo real</p>
         </div>
-        <span
-          className={`badge ${realtimeState === 'live' ? 'ok' : realtimeState === 'error' ? 'danger' : 'warn'}`}
-        >
-          {realtimeState === 'live'
-            ? 'Realtime ativo'
-            : realtimeState === 'connecting'
-              ? 'A ligar'
-              : realtimeState === 'error'
-                ? 'Realtime erro'
-                : 'Offline'}
-        </span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(event) => setSoundEnabled(event.target.checked)}
+            />
+            Som
+          </label>
+          <span
+            className={`badge ${realtimeState === 'live' ? 'ok' : realtimeState === 'error' ? 'danger' : 'warn'}`}
+          >
+            {realtimeState === 'live'
+              ? 'Realtime ativo'
+              : realtimeState === 'connecting'
+                ? 'A ligar'
+                : realtimeState === 'error'
+                  ? 'Realtime erro'
+                  : 'Offline'}
+          </span>
+        </div>
       </header>
 
       <div className="rb-stat-grid">
