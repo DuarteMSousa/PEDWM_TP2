@@ -1,23 +1,11 @@
-import { getEchoClient } from './echoClient'
+import { subscribeToOrderTrackingTopic } from './topicsRealtime'
 
 export function subscribeToOrderTracking({ orderId, authToken, devUserId, onPositionUpdated, onError }) {
-  const echo = getEchoClient({ authToken, devUserId })
-  const channelName = `order.${orderId}.tracking`
-  const channel = echo.private(channelName)
-
-  channel.listen('.COURIER_POSITION_UPDATED', (payload) => {
-    if (onPositionUpdated) {
-      onPositionUpdated(payload)
-    }
+  return subscribeToOrderTrackingTopic({
+    orderId,
+    authToken,
+    devUserId,
+    onPositionUpdated,
+    onError,
   })
-
-  channel.error((error) => {
-    if (onError) {
-      onError(error)
-    }
-  })
-
-  return () => {
-    echo.leave(channelName)
-  }
 }

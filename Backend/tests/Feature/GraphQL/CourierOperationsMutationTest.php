@@ -21,7 +21,7 @@ class CourierOperationsMutationTest extends TestCase
             'name' => 'Estafeta Toggle',
             'email' => 'courier_toggle@example.com',
             'password' => 'password123',
-            'user_type' => 'courier',
+            'user_type' => 'COURIER',
         ]);
 
         Courier::query()->create([
@@ -64,14 +64,14 @@ GRAPHQL;
             'name' => 'Cliente Delivery Job',
             'email' => 'customer_delivery_job@example.com',
             'password' => 'password123',
-            'user_type' => 'customer',
+            'user_type' => 'CUSTOMER',
         ]);
 
         $courierUser = User::query()->create([
             'name' => 'Estafeta Job',
             'email' => 'courier_job@example.com',
             'password' => 'password123',
-            'user_type' => 'courier',
+            'user_type' => 'COURIER',
         ]);
 
         Courier::query()->create([
@@ -147,3 +147,4 @@ GRAPHQL;
         ]);
     }
 }
+

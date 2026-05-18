@@ -472,8 +472,8 @@ body {
 .rb-kitchen-actions {
   padding: 14px;
   border-top: 1px solid var(--line);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -484,6 +484,11 @@ body {
   font-weight: 700;
   padding: 12px;
   cursor: pointer;
+}
+
+.rb-kitchen-actions > button,
+.rb-prep-actions > button {
+  flex: 1 1 180px;
 }
 
 .rb-btn-outline {
@@ -576,8 +581,8 @@ body {
 .rb-prep-actions {
   padding: 14px;
   border-top: 1px solid var(--line);
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -805,6 +810,13 @@ body {
 }
 
 .rb-chat-config input {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.rb-chat-config select {
   border: 1px solid #d1d5db;
   border-radius: 10px;
   padding: 10px 12px;

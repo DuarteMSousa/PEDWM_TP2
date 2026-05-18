@@ -8,15 +8,21 @@ import { registerDevicePushToken } from './src/services/pushNotificationService'
 
 export default function App() {
   const [session, setSession] = useState(null);
+  const [pushStatus, setPushStatus] = useState('idle');
 
   useEffect(() => {
     if (!session) {
+      setPushStatus('idle');
       return;
     }
 
-    registerDevicePushToken(session).catch(() => {
-      // Push is opportunistic; realtime in-app updates still work without it.
-    });
+    registerDevicePushToken(session)
+      .then((result) => {
+        setPushStatus(result ? 'registered' : 'permission_denied');
+      })
+      .catch(() => {
+        setPushStatus('error');
+      });
   }, [session]);
 
   if (!session) {
@@ -32,9 +38,9 @@ export default function App() {
     <>
       <StatusBar style="dark" />
       {session.role === 'customer' ? (
-        <CustomerAppScreen session={session} onLogout={() => setSession(null)} />
+        <CustomerAppScreen session={session} pushStatus={pushStatus} onLogout={() => setSession(null)} />
       ) : session.role === 'courier' ? (
-        <CourierAppScreen session={session} onLogout={() => setSession(null)} />
+        <CourierAppScreen session={session} pushStatus={pushStatus} onLogout={() => setSession(null)} />
       ) : (
         <MobileHubScreen
           initialRole={session.role}

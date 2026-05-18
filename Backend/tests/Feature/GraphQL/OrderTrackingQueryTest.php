@@ -23,14 +23,14 @@ class OrderTrackingQueryTest extends TestCase
             'name' => 'Cliente Demo',
             'email' => 'cliente_tracking@example.com',
             'password' => 'password123',
-            'user_type' => 'customer',
+            'user_type' => 'CUSTOMER',
         ]);
 
         $courierUser = User::query()->create([
             'name' => 'Estafeta Demo',
             'email' => 'estafeta_tracking@example.com',
             'password' => 'password123',
-            'user_type' => 'courier',
+            'user_type' => 'COURIER',
         ]);
 
         Courier::query()->create([
@@ -135,21 +135,21 @@ GRAPHQL;
             'name' => 'Cliente Owner',
             'email' => 'owner_tracking@example.com',
             'password' => 'password123',
-            'user_type' => 'customer',
+            'user_type' => 'CUSTOMER',
         ]);
 
         $otherCustomer = User::query()->create([
             'name' => 'Cliente Outro',
             'email' => 'other_tracking@example.com',
             'password' => 'password123',
-            'user_type' => 'customer',
+            'user_type' => 'CUSTOMER',
         ]);
 
         $courierUser = User::query()->create([
             'name' => 'Estafeta Demo',
             'email' => 'courier_tracking_other@example.com',
             'password' => 'password123',
-            'user_type' => 'courier',
+            'user_type' => 'COURIER',
         ]);
 
         Courier::query()->create([
@@ -206,3 +206,4 @@ GRAPHQL;
         );
     }
 }
+

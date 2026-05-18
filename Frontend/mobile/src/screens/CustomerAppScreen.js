@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native'
+import NetInfo from '@react-native-community/netinfo'
 import { RealtimeTopicsCard } from '../components/realtime/RealtimeTopicsCard'
 import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
 import {
@@ -14,6 +15,7 @@ import {
   updateCartItem,
 } from '../services/commerceService'
 import { subscribeToOrderTracking } from '../services/realtime/trackingRealtime'
+import { subscribeToUserNotificationsTopic } from '../services/realtime/topicsRealtime'
 
 const ICON = {
   user: '\u{1F464}',
@@ -27,6 +29,7 @@ const ICON = {
   minus: '\u2212',
   close: '\u00D7',
   check: '\u2714',
+  bell: '\u{1F514}',
   prep: '\u{1F551}',
 }
 
@@ -45,7 +48,7 @@ function statusLabel(status) {
   return status ?? '-'
 }
 
-export function CustomerAppScreen({ session, onLogout }) {
+export function CustomerAppScreen({ session, pushStatus, onLogout }) {
   const [route, setRoute] = useState('home')
   const [restaurants, setRestaurants] = useState([])
   const [restaurantId, setRestaurantId] = useState('')
@@ -55,9 +58,15 @@ export function CustomerAppScreen({ session, onLogout }) {
   const [activeOrderId, setActiveOrderId] = useState('')
   const [lastCheckout, setLastCheckout] = useState(null)
   const [realtimeState, setRealtimeState] = useState('offline')
+  const [isOnline, setIsOnline] = useState(true)
+  const [notificationState, setNotificationState] = useState('offline')
+  const [notificationPreview, setNotificationPreview] = useState(null)
+  const [trackingRetryTick, setTrackingRetryTick] = useState(0)
   const [loading, setLoading] = useState(false)
   const [errorText, setErrorText] = useState('')
   const [successText, setSuccessText] = useState('')
+
+  const userId = session?.userId || session?.devUserId
 
   const restaurant = useMemo(
     () => restaurants.find((item) => item.id === restaurantId) ?? restaurants[0],
@@ -70,8 +79,30 @@ export function CustomerAppScreen({ session, onLogout }) {
   const deliveryFee = 0
   const total = subtotal + deliveryFee
 
+  function ensureOnline(actionLabel) {
+    if (isOnline) {
+      return true
+    }
+
+    setErrorText(`Sem internet. Nao foi possivel ${actionLabel}.`)
+    return false
+  }
+
   useEffect(() => {
     bootstrap()
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const nextOnline = Boolean(state.isConnected && state.isInternetReachable !== false)
+      setIsOnline(nextOnline)
+      if (!nextOnline) {
+        setRealtimeState('offline')
+        setNotificationState('offline')
+      }
+    })
+
+    return () => unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -85,6 +116,53 @@ export function CustomerAppScreen({ session, onLogout }) {
 
     return () => clearInterval(timer)
   }, [route, activeOrderId])
+
+  useEffect(() => {
+    if (!userId || !isOnline) {
+      setNotificationState('offline')
+      return undefined
+    }
+
+    let unsubscribe = null
+    let retryTimer = null
+    let cancelled = false
+
+    const connect = () => {
+      if (cancelled) return
+      setNotificationState('connecting')
+
+      try {
+        unsubscribe = subscribeToUserNotificationsTopic({
+          userId,
+          authToken: session?.token,
+          devUserId: session?.devUserId,
+          onNotification: (payload) => {
+            setNotificationState('live')
+            setNotificationPreview({
+              title: payload?.title ?? payload?.type ?? 'Notificacao',
+              message: payload?.message ?? 'Nova atualizacao recebida.',
+            })
+            setSuccessText(`${ICON.bell} ${payload?.title ?? 'Nova notificacao'}`)
+          },
+          onError: () => {
+            setNotificationState('error')
+            retryTimer = setTimeout(connect, 6000)
+          },
+        })
+      } catch {
+        setNotificationState('error')
+        retryTimer = setTimeout(connect, 6000)
+      }
+    }
+
+    connect()
+
+    return () => {
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+      if (unsubscribe) unsubscribe()
+    }
+  }, [isOnline, session?.devUserId, session?.token, userId])
 
   useEffect(() => {
     if (route !== 'tracking' || !activeOrderId) {
@@ -124,10 +202,16 @@ export function CustomerAppScreen({ session, onLogout }) {
         },
         onError: () => {
           setRealtimeState('error')
+          setTimeout(() => {
+            setTrackingRetryTick((value) => value + 1)
+          }, 5000)
         },
       })
     } catch {
       setRealtimeState('error')
+      setTimeout(() => {
+        setTrackingRetryTick((value) => value + 1)
+      }, 5000)
     }
 
     return () => {
@@ -135,9 +219,13 @@ export function CustomerAppScreen({ session, onLogout }) {
         unsubscribe()
       }
     }
-  }, [route, activeOrderId, session?.token, session?.devUserId])
+  }, [route, activeOrderId, session?.token, session?.devUserId, trackingRetryTick, isOnline])
 
   async function bootstrap() {
+    if (!ensureOnline('carregar dados iniciais')) {
+      return
+    }
+
     try {
       setLoading(true)
       const [nextRestaurants, nextCart, activeOrders] = await Promise.all([
@@ -166,6 +254,10 @@ export function CustomerAppScreen({ session, onLogout }) {
   }
 
   async function openRestaurant(id) {
+    if (!ensureOnline('abrir restaurante')) {
+      return
+    }
+
     try {
       setLoading(true)
       setRestaurantId(id)
@@ -181,11 +273,19 @@ export function CustomerAppScreen({ session, onLogout }) {
   }
 
   async function refreshCart() {
+    if (!ensureOnline('atualizar carrinho')) {
+      return
+    }
+
     const nextCart = await fetchMyCart(session)
     setCart(nextCart)
   }
 
   async function addToCart(restaurantProductId) {
+    if (!ensureOnline('adicionar ao carrinho')) {
+      return
+    }
+
     try {
       setLoading(true)
       const nextCart = await addCartItem({
@@ -204,6 +304,10 @@ export function CustomerAppScreen({ session, onLogout }) {
   }
 
   async function decrease(cartItemId, quantity) {
+    if (!ensureOnline('atualizar carrinho')) {
+      return
+    }
+
     try {
       setLoading(true)
       if (quantity <= 1) {
@@ -226,6 +330,10 @@ export function CustomerAppScreen({ session, onLogout }) {
   }
 
   async function increase(cartItemId, quantity) {
+    if (!ensureOnline('atualizar carrinho')) {
+      return
+    }
+
     try {
       setLoading(true)
       const nextCart = await updateCartItem({
@@ -243,6 +351,10 @@ export function CustomerAppScreen({ session, onLogout }) {
   }
 
   async function remove(cartItemId) {
+    if (!ensureOnline('remover item do carrinho')) {
+      return
+    }
+
     try {
       setLoading(true)
       const nextCart = await removeCartItem({ session, cartItemId })
@@ -256,6 +368,10 @@ export function CustomerAppScreen({ session, onLogout }) {
   }
 
   async function placeOrder() {
+    if (!ensureOnline('finalizar checkout')) {
+      return
+    }
+
     try {
       setLoading(true)
       const result = await checkoutCart(session)
@@ -274,6 +390,10 @@ export function CustomerAppScreen({ session, onLogout }) {
   }
 
   async function loadTracking(orderId) {
+    if (!ensureOnline('carregar tracking')) {
+      return
+    }
+
     try {
       const nextTracking = await fetchOrderTracking({
         session,
@@ -310,6 +430,10 @@ export function CustomerAppScreen({ session, onLogout }) {
         <HomeScreen
           restaurants={restaurants}
           loading={loading}
+          isOnline={isOnline}
+          pushStatus={pushStatus}
+          notificationState={notificationState}
+          notificationPreview={notificationPreview}
           onOpenRestaurant={openRestaurant}
           onOpenTracking={() => {
             if (activeOrderId) {
@@ -351,6 +475,7 @@ export function CustomerAppScreen({ session, onLogout }) {
           tracking={tracking}
           checkout={lastCheckout}
           realtimeState={realtimeState}
+          isOnline={isOnline}
           onBack={back}
           onRefresh={() => activeOrderId && loadTracking(activeOrderId)}
         />
@@ -362,7 +487,18 @@ export function CustomerAppScreen({ session, onLogout }) {
   )
 }
 
-function HomeScreen({ restaurants, loading, onOpenRestaurant, onOpenTracking, hasActiveOrder, onLogout }) {
+function HomeScreen({
+  restaurants,
+  loading,
+  isOnline,
+  pushStatus,
+  notificationState,
+  notificationPreview,
+  onOpenRestaurant,
+  onOpenTracking,
+  hasActiveOrder,
+  onLogout,
+}) {
   return (
     <View style={styles.screen}>
       <View style={styles.homeHeader}>
@@ -381,9 +517,38 @@ function HomeScreen({ restaurants, loading, onOpenRestaurant, onOpenTracking, ha
           <Text style={styles.searchText}>Restaurantes integrados via backend</Text>
         </View>
 
+        {pushStatus && pushStatus !== 'idle' ? (
+          <View style={styles.pushBanner}>
+            <Text style={styles.pushBannerText}>
+              Push: {pushStatus === 'registered'
+                ? 'ativo'
+                : pushStatus === 'permission_denied'
+                  ? 'permissao negada'
+                  : 'indisponivel'}
+            </Text>
+          </View>
+        ) : null}
+
+        {!isOnline ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>Sem internet. A app entrou em modo offline.</Text>
+          </View>
+        ) : null}
+
+        {notificationPreview ? (
+          <View style={styles.notificationBanner}>
+            <Text style={styles.notificationBannerTitle}>
+              {ICON.bell} {notificationPreview.title}
+            </Text>
+            <Text style={styles.notificationBannerText}>{notificationPreview.message}</Text>
+          </View>
+        ) : null}
+
         {hasActiveOrder ? (
           <Pressable style={styles.activeOrderBtn} onPress={onOpenTracking}>
-            <Text style={styles.activeOrderBtnText}>Ver pedido ativo</Text>
+            <Text style={styles.activeOrderBtnText}>
+              Ver pedido ativo ({notificationState === 'live' ? 'notif live' : notificationState})
+            </Text>
           </Pressable>
         ) : null}
       </View>
@@ -529,7 +694,7 @@ function CartScreen({
   )
 }
 
-function TrackingScreen({ tracking, checkout, realtimeState, onBack, onRefresh }) {
+function TrackingScreen({ tracking, checkout, realtimeState, isOnline, onBack, onRefresh }) {
   const events = tracking?.events ?? []
   const realtimeLabel =
     realtimeState === 'live'
@@ -552,6 +717,14 @@ function TrackingScreen({ tracking, checkout, realtimeState, onBack, onRefresh }
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {!isOnline ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              Sem internet. O tracking sera atualizado automaticamente quando a ligacao voltar.
+            </Text>
+          </View>
+        ) : null}
+
         <Pressable style={styles.successBanner} onPress={onRefresh}>
           <Text style={styles.successBannerText}>{ICON.check} Atualizar tracking</Text>
         </Pressable>
@@ -669,6 +842,53 @@ const styles = StyleSheet.create({
   },
   searchIcon: { color: '#9db8f8', fontSize: 14 },
   searchText: { color: '#dbe7ff', fontSize: 15, fontWeight: '500' },
+  offlineBanner: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#facc15',
+    backgroundColor: '#fef9c3',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  offlineBannerText: {
+    color: '#854d0e',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  notificationBanner: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  notificationBannerTitle: {
+    color: '#1d4ed8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  notificationBannerText: {
+    color: '#1e40af',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  pushBanner: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  pushBannerText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   activeOrderBtn: {
     marginTop: 10,
     borderRadius: 10,

@@ -13,6 +13,10 @@ function actorUserId(session) {
   return session?.userId || session?.devUserId || 'system'
 }
 
+function normalizeCategoryName(value) {
+  return String(value ?? '').trim().toLowerCase()
+}
+
 function mapOrder(order) {
   return {
     order_id: order.id,
@@ -53,6 +57,38 @@ function mapRestaurantProduct(item, categories = []) {
   }
 }
 
+function mapNotification(notification) {
+  return {
+    id: notification.id,
+    type: notification.type,
+    title: notification.title,
+    message: notification.message,
+    timestamp: notification.sent_at,
+    read: Boolean(notification.read_at),
+    read_at: notification.read_at,
+  }
+}
+
+const USER_QUERY = `
+  query User($id: ID!) {
+    user(id: $id) {
+      id
+      name
+      user_type
+    }
+  }
+`
+
+const LOCAL_MANAGER_RESTAURANT_QUERY = `
+  query LocalManagerRestaurant($userId: ID!) {
+    localManagerRestaurant(user_id: $userId) {
+      id
+      name
+      chain_id
+    }
+  }
+`
+
 const RESTAURANT_ACTIVE_ORDERS_QUERY = `
   query RestaurantActiveOrders($restaurantId: ID!) {
     restaurantActiveOrders(restaurant_id: $restaurantId) {
@@ -62,7 +98,7 @@ const RESTAURANT_ACTIVE_ORDERS_QUERY = `
       status
       total
       created_at
-      user { name }
+      user { id name }
       address { street city }
       delivery { id courier_id status }
       items {
@@ -88,6 +124,24 @@ const ACCEPT_RESTAURANT_ORDER_MUTATION = `
 const REJECT_RESTAURANT_ORDER_MUTATION = `
   mutation RejectRestaurantOrder($input: RestaurantOrderDecisionInput!) {
     rejectRestaurantOrder(input: $input) {
+      id
+      status
+    }
+  }
+`
+
+const START_PREPARING_ORDER_MUTATION = `
+  mutation StartPreparingOrder($input: RestaurantOrderDecisionInput!) {
+    startPreparingOrder(input: $input) {
+      id
+      status
+    }
+  }
+`
+
+const MARK_ORDER_READY_MUTATION = `
+  mutation MarkOrderReady($input: RestaurantOrderDecisionInput!) {
+    markOrderReady(input: $input) {
       id
       status
     }
@@ -134,7 +188,17 @@ const RESTAURANT_QUERY = `
   query Restaurant($id: ID!) {
     restaurant(id: $id) {
       id
+      name
       chain_id
+    }
+  }
+`
+
+const CHAIN_CATEGORIES_QUERY = `
+  query ChainCategories($chainId: ID!) {
+    chainCategories(chain_id: $chainId) {
+      id
+      name
     }
   }
 `
@@ -193,6 +257,109 @@ const SET_RESTAURANT_PRODUCT_AVAILABILITY_MUTATION = `
   }
 `
 
+const CLIENT_NOTIFICATIONS_QUERY = `
+  query ClientNotifications($userId: ID!, $unreadOnly: Boolean!, $limit: Int!) {
+    clientNotifications(user_id: $userId, unread_only: $unreadOnly, limit: $limit) {
+      id
+      type
+      title
+      message
+      sent_at
+      read_at
+    }
+  }
+`
+
+const MARK_NOTIFICATION_READ_MUTATION = `
+  mutation MarkNotificationRead($userId: ID!, $notificationId: ID!) {
+    markNotificationRead(user_id: $userId, notification_id: $notificationId) {
+      ok
+      notification_id
+      read_at
+    }
+  }
+`
+
+const MARK_ALL_NOTIFICATIONS_READ_MUTATION = `
+  mutation MarkAllClientNotificationsRead($userId: ID!) {
+    markAllClientNotificationsRead(user_id: $userId) {
+      ok
+      affected_count
+    }
+  }
+`
+
+export async function bootstrapRestaurantSession({
+  email,
+  restaurant,
+  devUserId,
+  restaurantId,
+  token,
+}) {
+  const trimmedDevUserId = devUserId.trim()
+  const trimmedRestaurantId = restaurantId.trim()
+  const trimmedToken = token.trim()
+
+  if (!trimmedDevUserId) {
+    throw new Error('Define Dev User ID para associar a sessao ao operador real.')
+  }
+
+  const requestSession = {
+    devUserId: trimmedDevUserId,
+    token: trimmedToken,
+  }
+
+  const userData = await graphqlRequest({
+    query: USER_QUERY,
+    variables: { id: trimmedDevUserId },
+    ...requestOptions(requestSession),
+  })
+
+  if (!userData.user) {
+    throw new Error('Operador nao encontrado para o Dev User ID indicado.')
+  }
+
+  const operatorName = userData.user.name || email.split('@')[0] || 'manager'
+  const userType = userData.user.user_type
+
+  if (userType !== 'LOCAL_MANAGER' && userType !== 'CHAIN_MANAGER') {
+    throw new Error(`Utilizador ${operatorName} nao tem perfil de restaurante.`)
+  }
+
+  let resolvedRestaurant = null
+
+  if (trimmedRestaurantId) {
+    const restaurantData = await graphqlRequest({
+      query: RESTAURANT_QUERY,
+      variables: { id: trimmedRestaurantId },
+      ...requestOptions(requestSession),
+    })
+    resolvedRestaurant = restaurantData.restaurant
+  } else if (userType === 'LOCAL_MANAGER') {
+    const managerRestaurantData = await graphqlRequest({
+      query: LOCAL_MANAGER_RESTAURANT_QUERY,
+      variables: { userId: trimmedDevUserId },
+      ...requestOptions(requestSession),
+    })
+    resolvedRestaurant = managerRestaurantData.localManagerRestaurant
+  }
+
+  if (!resolvedRestaurant?.id) {
+    throw new Error('Nao foi possivel resolver o restaurante do operador.')
+  }
+
+  return {
+    operatorName,
+    restaurant: resolvedRestaurant.name || restaurant || 'Unidade',
+    restaurantId: resolvedRestaurant.id,
+    chainId: resolvedRestaurant.chain_id ?? null,
+    userId: userData.user.id,
+    devUserId: trimmedDevUserId,
+    token: trimmedToken,
+    userType,
+  }
+}
+
 export async function fetchRestaurantActiveOrders(session) {
   const data = await graphqlRequest({
     query: RESTAURANT_ACTIVE_ORDERS_QUERY,
@@ -241,6 +408,44 @@ export async function rejectRestaurantOrder({ session, orderId, reason = null })
     ok: true,
     order_id: data.rejectRestaurantOrder.id,
     status: data.rejectRestaurantOrder.status,
+  }
+}
+
+export async function startPreparingRestaurantOrder({ session, orderId }) {
+  const data = await graphqlRequest({
+    query: START_PREPARING_ORDER_MUTATION,
+    variables: {
+      input: {
+        actor_user_id: actorUserId(session),
+        order_id: orderId,
+      },
+    },
+    ...requestOptions(session),
+  })
+
+  return {
+    ok: true,
+    order_id: data.startPreparingOrder.id,
+    status: data.startPreparingOrder.status,
+  }
+}
+
+export async function markRestaurantOrderReady({ session, orderId }) {
+  const data = await graphqlRequest({
+    query: MARK_ORDER_READY_MUTATION,
+    variables: {
+      input: {
+        actor_user_id: actorUserId(session),
+        order_id: orderId,
+      },
+    },
+    ...requestOptions(session),
+  })
+
+  return {
+    ok: true,
+    order_id: data.markOrderReady.id,
+    status: data.markOrderReady.status,
   }
 }
 
@@ -297,21 +502,45 @@ async function fetchRestaurantChainId(session) {
   return data.restaurant?.chain_id
 }
 
+async function resolveCategoryId({ session, chainId, categoryName }) {
+  const categoryData = await graphqlRequest({
+    query: CHAIN_CATEGORIES_QUERY,
+    variables: { chainId },
+    ...requestOptions(session),
+  })
+
+  const existingCategory = (categoryData.chainCategories ?? []).find(
+    (category) => normalizeCategoryName(category.name) === normalizeCategoryName(categoryName),
+  )
+
+  if (existingCategory) {
+    return existingCategory.id
+  }
+
+  const createdCategory = await graphqlRequest({
+    query: CREATE_CATEGORY_MUTATION,
+    variables: {
+      input: {
+        chain_id: chainId,
+        name: categoryName.trim(),
+      },
+    },
+    ...requestOptions(session),
+  })
+
+  return createdCategory.createCategory.id
+}
+
 export async function createRestaurantMenuProduct({ session, input }) {
   const chainId = await fetchRestaurantChainId(session)
   if (!chainId) {
     throw new Error('Nao foi possivel descobrir a cadeia do restaurante.')
   }
 
-  const categoryData = await graphqlRequest({
-    query: CREATE_CATEGORY_MUTATION,
-    variables: {
-      input: {
-        chain_id: chainId,
-        name: input.category,
-      },
-    },
-    ...requestOptions(session),
+  const categoryId = await resolveCategoryId({
+    session,
+    chainId,
+    categoryName: input.category,
   })
 
   const productData = await graphqlRequest({
@@ -319,7 +548,7 @@ export async function createRestaurantMenuProduct({ session, input }) {
     variables: {
       actorUserId: actorUserId(session),
       input: {
-        category_id: categoryData.createCategory.id,
+        category_id: categoryId,
         name: input.name,
         price: Number(input.price),
         description: input.description,
@@ -394,4 +623,47 @@ export async function deleteRestaurantMenuProduct({ session, restaurantProductId
     restaurant_product_id: restaurantProductId,
     message: 'Produto desativado.',
   }
+}
+
+export async function fetchOperatorNotifications({
+  session,
+  unreadOnly = false,
+  limit = 50,
+}) {
+  const data = await graphqlRequest({
+    query: CLIENT_NOTIFICATIONS_QUERY,
+    variables: {
+      userId: actorUserId(session),
+      unreadOnly,
+      limit,
+    },
+    ...requestOptions(session),
+  })
+
+  return (data.clientNotifications ?? []).map(mapNotification)
+}
+
+export async function markOperatorNotificationRead({ session, notificationId }) {
+  const data = await graphqlRequest({
+    query: MARK_NOTIFICATION_READ_MUTATION,
+    variables: {
+      userId: actorUserId(session),
+      notificationId,
+    },
+    ...requestOptions(session),
+  })
+
+  return data.markNotificationRead
+}
+
+export async function markAllOperatorNotificationsRead({ session }) {
+  const data = await graphqlRequest({
+    query: MARK_ALL_NOTIFICATIONS_READ_MUTATION,
+    variables: {
+      userId: actorUserId(session),
+    },
+    ...requestOptions(session),
+  })
+
+  return data.markAllClientNotificationsRead
 }

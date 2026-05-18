@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   acceptRestaurantOrder,
   fetchRestaurantActiveOrders,
+  markRestaurantOrderReady,
   rejectRestaurantOrder,
+  startPreparingRestaurantOrder,
   updateOrderItemStatus,
 } from '../../../services/restaurantOpsService'
 
@@ -34,7 +36,7 @@ function formatTime(value) {
   return new Date(value).toLocaleTimeString()
 }
 
-export function RestaurantVirtualKitchenScreen({ session }) {
+export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavigate }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [busyOrderId, setBusyOrderId] = useState('')
@@ -113,32 +115,35 @@ export function RestaurantVirtualKitchenScreen({ session }) {
     }
   }
 
-  async function handleMarkOrderReady(order) {
-    const preparingItems = order.items.filter((item) => item.status === 'PREPARING')
-
-    if (preparingItems.length === 0) {
-      setInfoText('Sem itens em preparacao para marcar como prontos.')
-      return
-    }
-
+  async function handleStartPreparing(orderId) {
     try {
-      setBusyOrderId(order.order_id)
-
-      for (const item of preparingItems) {
-        await updateOrderItemStatus({
-          session,
-          orderItemId: item.order_item_id,
-          status: 'READY',
-        })
-      }
-
-      setInfoText('Itens em preparacao marcados como prontos.')
+      setBusyOrderId(orderId)
+      await startPreparingRestaurantOrder({ session, orderId })
+      setInfoText('Encomenda passada para preparacao.')
       await loadOrders()
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setBusyOrderId('')
     }
+  }
+
+  async function handleMarkOrderReady(order) {
+    try {
+      setBusyOrderId(order.order_id)
+      await markRestaurantOrderReady({ session, orderId: order.order_id })
+      setInfoText('Encomenda marcada como pronta para entrega.')
+      await loadOrders()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setBusyOrderId('')
+    }
+  }
+
+  function handleOpenChat(orderId) {
+    if (onSelectOrder) onSelectOrder(orderId)
+    if (onNavigate) onNavigate('chat')
   }
 
   return (
@@ -204,6 +209,14 @@ export function RestaurantVirtualKitchenScreen({ session }) {
                 onClick={() => handleAccept(order.order_id)}
               >
                 Aceitar
+              </button>
+              <button
+                type="button"
+                className="rb-btn-outline"
+                disabled={busyOrderId === order.order_id}
+                onClick={() => handleOpenChat(order.order_id)}
+              >
+                Chat
               </button>
             </div>
           </article>
@@ -288,13 +301,31 @@ export function RestaurantVirtualKitchenScreen({ session }) {
             >
               Atualizar
             </button>
+            {order.order_status === 'CONFIRMED' ? (
+              <button
+                type="button"
+                className="rb-btn-accept"
+                onClick={() => handleStartPreparing(order.order_id)}
+                disabled={busyOrderId === order.order_id}
+              >
+                Iniciar preparo
+              </button>
+            ) : null}
             <button
               type="button"
               className="rb-btn-accept"
               onClick={() => handleMarkOrderReady(order)}
+              disabled={busyOrderId === order.order_id || order.order_status !== 'PREPARING'}
+            >
+              Marcar encomenda pronta
+            </button>
+            <button
+              type="button"
+              className="rb-btn-outline"
+              onClick={() => handleOpenChat(order.order_id)}
               disabled={busyOrderId === order.order_id}
             >
-              Marcar em preparo como pronto
+              Abrir chat
             </button>
           </footer>
         </article>

@@ -5,7 +5,7 @@ const REVERB_APP_KEY = import.meta.env.VITE_REVERB_APP_KEY ?? ''
 const REVERB_HOST = import.meta.env.VITE_REVERB_HOST ?? '127.0.0.1'
 const REVERB_PORT = Number(import.meta.env.VITE_REVERB_PORT ?? 8080)
 const REVERB_SCHEME = import.meta.env.VITE_REVERB_SCHEME ?? 'http'
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1'
 const DEV_BROADCAST_USER_ID = import.meta.env.VITE_DEV_BROADCAST_USER_ID ?? ''
 
 let echoInstance = null

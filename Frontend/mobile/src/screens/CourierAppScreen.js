@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native'
 import * as Location from 'expo-location'
+import NetInfo from '@react-native-community/netinfo'
 import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
 import {
   acceptDeliveryJob,
@@ -10,6 +11,7 @@ import {
   updateCourierLocation,
   updateDeliveryStatus,
 } from '../services/commerceService'
+import { subscribeToCourierJobsTopic } from '../services/realtime/topicsRealtime'
 
 function statusText(status) {
   if (status === 'AVAILABLE') return 'Online'
@@ -33,7 +35,7 @@ function distanceMeters(a, b) {
   return earthRadius * (2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value)))
 }
 
-export function CourierAppScreen({ session, onLogout }) {
+export function CourierAppScreen({ session, pushStatus, onLogout }) {
   const [courierStatus, setCourierStatus] = useState('OFFLINE')
   const [phase, setPhase] = useState('offer')
   const [availableOffers, setAvailableOffers] = useState([])
@@ -42,8 +44,14 @@ export function CourierAppScreen({ session, onLogout }) {
   const [livePosition, setLivePosition] = useState(null)
   const [toast, setToast] = useState('')
   const [errorText, setErrorText] = useState('')
+  const [isOnline, setIsOnline] = useState(true)
+  const [jobsRealtimeState, setJobsRealtimeState] = useState('offline')
+  const [locationPermission, setLocationPermission] = useState('unknown')
+  const [backgroundLocationPermission, setBackgroundLocationPermission] = useState('unknown')
+  const [jobsRetryTick, setJobsRetryTick] = useState(0)
   const [loading, setLoading] = useState(false)
   const lastSentRef = useRef({ lat: null, lng: null, timestamp: 0 })
+  const courierId = session?.userId || session?.devUserId
 
   const isOffer = phase === 'offer'
   const isPickup = phase === 'pickup'
@@ -58,6 +66,90 @@ export function CourierAppScreen({ session, onLogout }) {
     if (isCompleted) return { label: 'Nova entrega', nextStatus: null, nextPhase: 'offer' }
     return null
   }, [isPickup, isCollected, isTransit, isCompleted])
+
+  function ensureOnline(actionLabel) {
+    if (isOnline) {
+      return true
+    }
+
+    setErrorText(`Sem internet. Nao foi possivel ${actionLabel}.`)
+    return false
+  }
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const nextOnline = Boolean(state.isConnected && state.isInternetReachable !== false)
+      setIsOnline(nextOnline)
+      if (!nextOnline) {
+        setJobsRealtimeState('offline')
+      }
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!courierId || !isOnline) {
+      setJobsRealtimeState('offline')
+      return undefined
+    }
+
+    let unsubscribe = null
+    let retryTimer = null
+    let cancelled = false
+
+    const connect = () => {
+      if (cancelled) return
+
+      setJobsRealtimeState('connecting')
+      try {
+        unsubscribe = subscribeToCourierJobsTopic({
+          courierId,
+          authToken: session?.token,
+          devUserId: session?.devUserId,
+          onEvent: (eventName, payload) => {
+            setJobsRealtimeState('live')
+            setToast(`Evento realtime: ${eventName}`)
+
+            if (eventName === 'JOB_OFFERED' && courierStatus === 'AVAILABLE' && phase === 'offer') {
+              loadAvailableOffers()
+            }
+
+            if (eventName === 'DELIVERY_FAILED') {
+              setErrorText(payload?.data?.reason ?? 'Entrega marcada como falhada.')
+            }
+          },
+          onError: () => {
+            setJobsRealtimeState('error')
+            retryTimer = setTimeout(() => {
+              setJobsRetryTick((value) => value + 1)
+            }, 5000)
+          },
+        })
+      } catch {
+        setJobsRealtimeState('error')
+        retryTimer = setTimeout(() => {
+          setJobsRetryTick((value) => value + 1)
+        }, 5000)
+      }
+    }
+
+    connect()
+
+    return () => {
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
+      if (unsubscribe) unsubscribe()
+    }
+  }, [
+    courierId,
+    courierStatus,
+    phase,
+    isOnline,
+    session?.token,
+    session?.devUserId,
+    jobsRetryTick,
+  ])
 
   useEffect(() => {
     if (!activeDelivery?.order_id || isCompleted) {
@@ -83,10 +175,18 @@ export function CourierAppScreen({ session, onLogout }) {
     async function startWatcher() {
       try {
         const permission = await Location.requestForegroundPermissionsAsync()
+        setLocationPermission(permission.status)
 
         if (permission.status !== 'granted') {
-          setToast('Permissao de localizacao negada. Sem GPS em tempo real.')
+          setToast('Permissao de localizacao em primeiro plano negada.')
           return
+        }
+
+        const backgroundPermission = await Location.requestBackgroundPermissionsAsync()
+        setBackgroundLocationPermission(backgroundPermission.status)
+
+        if (backgroundPermission.status !== 'granted') {
+          setToast('Permissao de localizacao em background negada. Tracking ativo apenas com app aberta.')
         }
 
         subscription = await Location.watchPositionAsync(
@@ -199,6 +299,10 @@ export function CourierAppScreen({ session, onLogout }) {
   }, [courierStatus, phase])
 
   async function handleToggleOnline() {
+    if (!ensureOnline('alterar disponibilidade')) {
+      return
+    }
+
     try {
       setLoading(true)
       const nextStatus = courierStatus === 'OFFLINE' ? 'AVAILABLE' : 'OFFLINE'
@@ -217,6 +321,10 @@ export function CourierAppScreen({ session, onLogout }) {
   }
 
   async function handleAcceptOffer(offer) {
+    if (!ensureOnline('aceitar oferta')) {
+      return
+    }
+
     try {
       setLoading(true)
       const payload = await acceptDeliveryJob({
@@ -241,6 +349,10 @@ export function CourierAppScreen({ session, onLogout }) {
   }
 
   async function loadAvailableOffers() {
+    if (!isOnline) {
+      return
+    }
+
     try {
       const offers = await fetchCourierAvailableDeliveries(session, { limit: 20 })
       setAvailableOffers(offers)
@@ -251,6 +363,10 @@ export function CourierAppScreen({ session, onLogout }) {
   }
 
   async function handleProgress() {
+    if (!ensureOnline('atualizar estado da entrega')) {
+      return
+    }
+
     if (!mainButton) {
       return
     }
@@ -288,6 +404,10 @@ export function CourierAppScreen({ session, onLogout }) {
   }
 
   async function loadTracking(orderId) {
+    if (!isOnline) {
+      return
+    }
+
     try {
       const payload = await fetchOrderTracking({ session, orderId })
       setTracking(payload)
@@ -345,6 +465,44 @@ export function CourierAppScreen({ session, onLogout }) {
               </Text>
             </Pressable>
           </View>
+
+          <View style={styles.statusRow}>
+            <Text style={[styles.statusChip, isOnline ? styles.statusChipOk : styles.statusChipWarn]}>
+              Net: {isOnline ? 'online' : 'offline'}
+            </Text>
+            <Text
+              style={[
+                styles.statusChip,
+                jobsRealtimeState === 'live' ? styles.statusChipOk : styles.statusChipWarn,
+              ]}
+            >
+              Jobs: {jobsRealtimeState}
+            </Text>
+            <Text
+              style={[
+                styles.statusChip,
+                locationPermission === 'granted' ? styles.statusChipOk : styles.statusChipWarn,
+              ]}
+            >
+              GPS: {locationPermission}
+            </Text>
+            <Text
+              style={[
+                styles.statusChip,
+                backgroundLocationPermission === 'granted' ? styles.statusChipOk : styles.statusChipWarn,
+              ]}
+            >
+              BG: {backgroundLocationPermission}
+            </Text>
+            <Text
+              style={[
+                styles.statusChip,
+                pushStatus === 'registered' ? styles.statusChipOk : styles.statusChipWarn,
+              ]}
+            >
+              Push: {pushStatus === 'registered' ? 'ok' : pushStatus === 'permission_denied' ? 'off' : pushStatus}
+            </Text>
+          </View>
         </View>
 
         <ScrollView
@@ -352,6 +510,14 @@ export function CourierAppScreen({ session, onLogout }) {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.sectionTitle}>Fluxo de entrega</Text>
+
+          {!isOnline ? (
+            <View style={styles.warningBox}>
+              <Text style={styles.warningText}>
+                Sem internet. Operacoes remotas e realtime estao temporariamente indisponiveis.
+              </Text>
+            </View>
+          ) : null}
 
           {isOffer ? (
             <View style={styles.card}>
@@ -599,6 +765,28 @@ const styles = StyleSheet.create({
   onlineBtnTextOff: {
     color: '#fff',
   },
+  statusRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  statusChip: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: '700',
+    overflow: 'hidden',
+  },
+  statusChipOk: {
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+  },
+  statusChipWarn: {
+    backgroundColor: '#fef9c3',
+    color: '#854d0e',
+  },
   content: {
     paddingHorizontal: 14,
     paddingTop: 12,
@@ -612,6 +800,20 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0f172a',
     marginBottom: 12,
+  },
+  warningBox: {
+    borderWidth: 1,
+    borderColor: '#facc15',
+    backgroundColor: '#fef9c3',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 10,
+  },
+  warningText: {
+    color: '#854d0e',
+    fontSize: 13,
+    fontWeight: '700',
   },
   card: {
     borderWidth: 1,

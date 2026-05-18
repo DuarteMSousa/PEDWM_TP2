@@ -1,41 +1,110 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createOrderChat, fetchOrderChats, sendChatMessage } from '../../../services/chatService'
+import { fetchRestaurantActiveOrders } from '../../../services/restaurantOpsService'
 import { subscribeToChatTopic } from '../../../services/realtime/topicsRealtime'
 import { disconnectEchoClient } from '../../../services/realtime/echoClient'
-import { sendChatMessage } from '../../../services/chatService'
 
-const DEFAULT_CHAT_ID = import.meta.env.VITE_REALTIME_CHAT_ID ?? ''
-const DEFAULT_USER_ID = import.meta.env.VITE_REALTIME_USER_ID ?? ''
-const MAX_ITEMS = 30
+const MAX_ITEMS = 50
 
 function normalizeEventMessage(payload) {
   return {
     id: payload?.eventId ?? `${Date.now()}-${Math.random()}`,
     content: payload?.content ?? 'Mensagem recebida',
-    sender: payload?.senderUserId ?? 'desconhecido',
+    sender_user_id: payload?.senderUserId ?? 'desconhecido',
     timestamp: payload?.timestamp ?? new Date().toISOString(),
     source: 'socket',
   }
 }
 
-export function RestaurantChatScreen() {
-  const [chatId, setChatId] = useState(DEFAULT_CHAT_ID)
-  const [userId, setUserId] = useState(DEFAULT_USER_ID)
+function orderLabel(order) {
+  const shortId = String(order.order_id).slice(0, 8)
+  return `#${shortId} - ${order.customer_name ?? order.customer_id}`
+}
+
+export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }) {
+  const [orders, setOrders] = useState([])
+  const [orderId, setOrderId] = useState(selectedOrderId ?? '')
+  const [chat, setChat] = useState(null)
   const [status, setStatus] = useState('offline')
   const [isListening, setIsListening] = useState(false)
   const [messageText, setMessageText] = useState('')
   const [messages, setMessages] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [errorText, setErrorText] = useState('')
+  const effectiveOrderId = selectedOrderId || orderId
 
-  const canConnect = useMemo(() => chatId.trim() && userId.trim(), [chatId, userId])
-  const canSend = useMemo(() => chatId.trim() && messageText.trim(), [chatId, messageText])
+  const selectedOrder = useMemo(
+    () => orders.find((order) => order.order_id === effectiveOrderId) ?? null,
+    [effectiveOrderId, orders],
+  )
+
+  const canSend = useMemo(() => Boolean(chat?.id && messageText.trim()), [chat?.id, messageText])
+
+  const loadOrders = useCallback(async () => {
+    try {
+      const nextOrders = await fetchRestaurantActiveOrders(session)
+      setOrders(nextOrders)
+      setErrorText('')
+      if (!effectiveOrderId && nextOrders.length > 0) {
+        const fallbackOrderId = nextOrders[0].order_id
+        setOrderId(fallbackOrderId)
+        if (onSelectOrder) onSelectOrder(fallbackOrderId)
+      }
+    } catch (error) {
+      setErrorText(error.message)
+    }
+  }, [effectiveOrderId, onSelectOrder, session])
+
+  const loadOrderChat = useCallback(
+    async (targetOrderId) => {
+      if (!targetOrderId) {
+        setChat(null)
+        setMessages([])
+        return
+      }
+
+      try {
+        setLoading(true)
+        const chats = await fetchOrderChats({ session, orderId: targetOrderId })
+        const activeChat = chats[0] ?? null
+        setChat(activeChat)
+        setMessages((activeChat?.messages ?? []).slice(-MAX_ITEMS))
+        setErrorText('')
+      } catch (error) {
+        setErrorText(error.message)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [session],
+  )
 
   useEffect(() => {
-    if (!isListening) {
+    queueMicrotask(() => {
+      loadOrders()
+    })
+  }, [loadOrders])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadOrderChat(effectiveOrderId)
+    }, 0)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [effectiveOrderId, loadOrderChat])
+
+  useEffect(() => {
+    if (!isListening || !chat?.id) {
       return undefined
     }
 
     const unsubscribe = subscribeToChatTopic({
-      chatId: chatId.trim(),
+      chatId: chat.id,
+      authToken: session.token,
+      devUserId: session.devUserId,
       onMessage: (payload) => {
         setStatus('live')
         setErrorText('')
@@ -51,7 +120,32 @@ export function RestaurantChatScreen() {
       unsubscribe()
       disconnectEchoClient()
     }
-  }, [chatId, isListening])
+  }, [chat?.id, isListening, session.devUserId, session.token])
+
+  async function handleCreateChat() {
+    if (!selectedOrder) {
+      setErrorText('Seleciona uma encomenda para abrir chat.')
+      return
+    }
+
+    const participantUserIds = [session.userId, selectedOrder.customer_id, selectedOrder.courier_id].filter(Boolean)
+
+    try {
+      setSaving(true)
+      const createdChat = await createOrderChat({
+        session,
+        orderId: selectedOrder.order_id,
+        participantUserIds,
+      })
+      setChat(createdChat)
+      setMessages((createdChat.messages ?? []).slice(-MAX_ITEMS))
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   function handleToggleConnection() {
     if (isListening) {
@@ -60,9 +154,9 @@ export function RestaurantChatScreen() {
       return
     }
 
-    if (!canConnect) {
+    if (!chat?.id) {
       setStatus('missing-config')
-      setErrorText('Preenche Chat ID e User ID para abrir o canal.')
+      setErrorText('Cria ou seleciona chat para abrir o canal realtime.')
       return
     }
 
@@ -83,24 +177,13 @@ export function RestaurantChatScreen() {
 
     try {
       const response = await sendChatMessage({
-        chatId: chatId.trim(),
+        session,
+        chatId: chat.id,
         content,
       })
 
       setErrorText('')
-
-      setMessages((current) =>
-        [
-          {
-            id: response?.message_id ?? `${Date.now()}-${Math.random()}`,
-            content,
-            sender: userId || 'eu',
-            timestamp: response?.sent_at ?? new Date().toISOString(),
-            source: 'mutation',
-          },
-          ...current,
-        ].slice(0, MAX_ITEMS),
-      )
+      setMessages((current) => [{ ...response, source: 'mutation' }, ...current].slice(0, MAX_ITEMS))
     } catch (error) {
       setErrorText(error.message)
       setMessageText(content)
@@ -113,7 +196,7 @@ export function RestaurantChatScreen() {
       : status === 'connecting'
         ? 'A ligar'
         : status === 'missing-config'
-          ? 'Faltam IDs'
+          ? 'Sem chat'
           : status === 'error'
             ? 'Erro'
             : 'Offline'
@@ -124,7 +207,7 @@ export function RestaurantChatScreen() {
     <section className="workspace">
       <header className="workspace-header">
         <h2>Chat Operacional</h2>
-        <p>Sala dedicada para mensagens em tempo real entre participantes de um pedido.</p>
+        <p>Canal por encomenda entre restaurante, cliente e estafeta.</p>
       </header>
 
       <div className="uc-row">
@@ -138,37 +221,69 @@ export function RestaurantChatScreen() {
       <section className="rb-chat">
         <div className="rb-chat-head">
           <div>
-            <h3>Canal `chat.{chatId}`</h3>
-            <p>Subscreve o topico e envia mensagem pelo backend GraphQL.</p>
+            <h3>Chat da encomenda</h3>
+            <p>{selectedOrder ? orderLabel(selectedOrder) : 'Seleciona uma encomenda ativa.'}</p>
           </div>
           <span className={`badge ${statusClass}`}>{statusLabel}</span>
         </div>
 
         <div className="rb-chat-config">
           <label>
-            Chat ID
-            <input value={chatId} onChange={(event) => setChatId(event.target.value)} />
+            Encomenda
+            <select
+              value={effectiveOrderId}
+              onChange={(event) => {
+                setOrderId(event.target.value)
+                if (onSelectOrder) onSelectOrder(event.target.value)
+              }}
+            >
+              <option value="">Selecionar encomenda</option>
+              {orders.map((order) => (
+                <option value={order.order_id} key={order.order_id}>
+                  {orderLabel(order)}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
-            User ID
-            <input value={userId} onChange={(event) => setUserId(event.target.value)} />
+            Chat ID
+            <input value={chat?.id ?? ''} disabled placeholder="Sem chat criado" />
           </label>
           <button type="button" className="rb-primary" onClick={handleToggleConnection}>
             {isListening ? 'Desligar canal' : 'Ligar canal'}
           </button>
         </div>
 
+        <div className="rb-notif-actions">
+          <button
+            type="button"
+            className="rb-notif-filter"
+            onClick={() => loadOrderChat(effectiveOrderId)}
+            disabled={loading}
+          >
+            {loading ? 'A carregar...' : 'Atualizar mensagens'}
+          </button>
+          <button
+            type="button"
+            className="rb-notif-filter"
+            onClick={handleCreateChat}
+            disabled={saving || !effectiveOrderId}
+          >
+            {saving ? 'A criar...' : 'Criar chat da encomenda'}
+          </button>
+        </div>
+
         <article className="rb-chat-stream">
-          <h4>Mensagens recebidas</h4>
+          <h4>Mensagens</h4>
           {messages.length === 0 ? (
-            <p className="rb-chat-empty">Sem mensagens ainda. Liga o canal e envia uma mensagem.</p>
+            <p className="rb-chat-empty">Sem mensagens ainda para esta encomenda.</p>
           ) : (
             messages.map((message) => (
               <div className="rb-chat-item" key={message.id}>
                 <strong>{message.content}</strong>
-                <span>sender: {message.sender}</span>
+                <span>sender: {message.sender_user_id ?? 'desconhecido'}</span>
                 <small>
-                  {message.timestamp} - via {message.source}
+                  {message.timestamp} - via {message.source ?? 'graphql'}
                 </small>
               </div>
             ))
@@ -195,4 +310,3 @@ export function RestaurantChatScreen() {
     </section>
   )
 }
-

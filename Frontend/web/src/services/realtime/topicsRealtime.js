@@ -1,7 +1,7 @@
 import { getEchoClient } from './echoClient'
 
-export function subscribeToChatTopic({ chatId, authToken, onMessage, onError }) {
-  const echo = getEchoClient({ authToken })
+export function subscribeToChatTopic({ chatId, authToken, devUserId, onMessage, onError }) {
+  const echo = getEchoClient({ authToken, devUserId })
   const channelName = `chat.${chatId}`
   const channel = echo.private(channelName)
 
@@ -16,8 +16,14 @@ export function subscribeToChatTopic({ chatId, authToken, onMessage, onError }) 
   return () => echo.leave(channelName)
 }
 
-export function subscribeToUserNotificationsTopic({ userId, authToken, onNotification, onError }) {
-  const echo = getEchoClient({ authToken })
+export function subscribeToUserNotificationsTopic({
+  userId,
+  authToken,
+  devUserId,
+  onNotification,
+  onError,
+}) {
+  const echo = getEchoClient({ authToken, devUserId })
   const channelName = `user.${userId}.notifications`
   const channel = echo.private(channelName)
 

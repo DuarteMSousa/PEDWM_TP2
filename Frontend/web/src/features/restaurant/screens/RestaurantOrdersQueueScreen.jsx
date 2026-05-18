@@ -21,7 +21,7 @@ function statusTone(status) {
   return 'off'
 }
 
-export function RestaurantOrdersQueueScreen({ session }) {
+export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [errorText, setErrorText] = useState('')
@@ -70,6 +70,11 @@ export function RestaurantOrdersQueueScreen({ session }) {
     } finally {
       setBusyOrderId('')
     }
+  }
+
+  function handleOpenChat(orderId) {
+    if (onSelectOrder) onSelectOrder(orderId)
+    if (onNavigate) onNavigate('chat')
   }
 
   const stats = useMemo(() => {
@@ -136,7 +141,7 @@ export function RestaurantOrdersQueueScreen({ session }) {
               orders.map((order) => (
                 <tr key={order.order_id}>
                   <td>{String(order.order_id).slice(0, 8)}</td>
-                  <td>{String(order.customer_id).slice(0, 8)}</td>
+                  <td>{order.customer_name ?? String(order.customer_id).slice(0, 8)}</td>
                   <td>{Number(order.total).toFixed(2)} EUR</td>
                   <td>
                     <span className={`rb-chip ${statusTone(order.order_status)}`}>
@@ -163,9 +168,22 @@ export function RestaurantOrdersQueueScreen({ session }) {
                         >
                           Aceitar
                         </button>
+                        <button
+                          type="button"
+                          className="rb-btn-outline"
+                          onClick={() => handleOpenChat(order.order_id)}
+                        >
+                          Chat
+                        </button>
                       </div>
                     ) : (
-                      <small>-</small>
+                      <button
+                        type="button"
+                        className="rb-btn-outline"
+                        onClick={() => handleOpenChat(order.order_id)}
+                      >
+                        Abrir chat
+                      </button>
                     )}
                   </td>
                 </tr>

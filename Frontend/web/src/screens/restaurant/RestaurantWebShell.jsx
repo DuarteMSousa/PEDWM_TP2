@@ -7,6 +7,7 @@ import { RestaurantLoginScreen } from '../../features/restaurant/screens/Restaur
 export function RestaurantWebShell() {
   const [activeViewId, setActiveViewId] = useState('dashboard')
   const [session, setSession] = useState(null)
+  const [selectedOrderId, setSelectedOrderId] = useState('')
 
   const activeView = useMemo(
     () => RESTAURANT_VIEWS.find((view) => view.id === activeViewId) ?? RESTAURANT_VIEWS[0],
@@ -16,11 +17,13 @@ export function RestaurantWebShell() {
 
   function handleLogin(nextSession) {
     setSession(nextSession)
+    setSelectedOrderId('')
     setActiveViewId('dashboard')
   }
 
   function handleLogout() {
     setSession(null)
+    setSelectedOrderId('')
   }
 
   if (!session) {
@@ -42,7 +45,12 @@ export function RestaurantWebShell() {
           onLogout={handleLogout}
         />
         <section className="rb-main">
-          <ActiveScreen session={session} />
+          <ActiveScreen
+            session={session}
+            selectedOrderId={selectedOrderId}
+            onSelectOrder={setSelectedOrderId}
+            onNavigate={setActiveViewId}
+          />
         </section>
       </div>
     </PageContainer>

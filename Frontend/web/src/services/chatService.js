@@ -1,60 +1,163 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
-const DEV_BROADCAST_USER_ID = import.meta.env.VITE_DEV_BROADCAST_USER_ID ?? ''
-const AUTH_TOKEN = import.meta.env.VITE_AUTH_BEARER_TOKEN ?? ''
+import { buildAuthHeaders, graphqlRequest } from './apiClient'
 
-function buildHeaders() {
-  const headers = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  }
-
-  if (AUTH_TOKEN) {
-    headers.Authorization = `Bearer ${AUTH_TOKEN}`
-  }
-
-  if (DEV_BROADCAST_USER_ID) {
-    headers['X-Dev-User-Id'] = DEV_BROADCAST_USER_ID
-  }
-
-  return headers
-}
-
-export async function sendChatMessage({ chatId, content }) {
-  const mutation = `
-    mutation SendChatMessage($input: SendChatMessageInput!) {
-      sendChatMessage(input: $input) {
-        ok
+const ORDER_CHATS_QUERY = `
+  query OrderChats($orderId: ID!) {
+    orderChats(order_id: $orderId) {
+      id
+      order_id
+      type
+      closed_at
+      participants {
+        id
+        user_id
+        user_type
+      }
+      messages {
+        id
         chat_id
-        message_id
-        sent_at
+        sender_participant_id
+        content
+        timestamp
       }
     }
-  `
+  }
+`
 
-  const response = await fetch(`${API_BASE_URL}/graphql`, {
-    method: 'POST',
-    headers: buildHeaders(),
-    body: JSON.stringify({
-      query: mutation,
-      variables: {
-        input: {
-          chat_id: chatId,
-          content,
-        },
-      },
-    }),
+const CREATE_ORDER_CHAT_MUTATION = `
+  mutation CreateOrderChat($input: CreateOrderChatInput!) {
+    createOrderChat(input: $input) {
+      id
+      order_id
+      type
+      closed_at
+      participants {
+        id
+        user_id
+        user_type
+      }
+      messages {
+        id
+        chat_id
+        sender_participant_id
+        content
+        timestamp
+      }
+    }
+  }
+`
+
+const SEND_MESSAGE_MUTATION = `
+  mutation SendMessage($input: SendMessageInput!) {
+    sendMessage(input: $input) {
+      id
+      chat_id
+      sender_participant_id
+      content
+      timestamp
+    }
+  }
+`
+
+function requestHeaders(session) {
+  return buildAuthHeaders({
+    token: session?.token,
+    devUserId: session?.devUserId,
   })
-
-  if (!response.ok) {
-    throw new Error(`Falha HTTP ${response.status} ao enviar mensagem.`)
-  }
-
-  const payload = await response.json()
-
-  if (payload.errors?.length) {
-    throw new Error(payload.errors[0]?.message ?? 'Erro GraphQL ao enviar mensagem.')
-  }
-
-  return payload.data?.sendChatMessage
 }
 
+function mapChat(chat) {
+  const participantsById = new Map(
+    (chat.participants ?? []).map((participant) => [participant.id, participant]),
+  )
+
+  const messages = (chat.messages ?? [])
+    .map((message) => {
+      const senderParticipant = participantsById.get(message.sender_participant_id)
+      return {
+        id: message.id,
+        chat_id: message.chat_id,
+        content: message.content,
+        sender_participant_id: message.sender_participant_id,
+        sender_user_id: senderParticipant?.user_id ?? 'desconhecido',
+        timestamp: message.timestamp,
+      }
+    })
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+
+  return {
+    id: chat.id,
+    order_id: chat.order_id,
+    type: chat.type,
+    closed_at: chat.closed_at,
+    participants: chat.participants ?? [],
+    messages,
+  }
+}
+
+export async function fetchOrderChats({ session, orderId }) {
+  const data = await graphqlRequest({
+    query: ORDER_CHATS_QUERY,
+    variables: { orderId },
+    headers: requestHeaders(session),
+  })
+
+  return (data.orderChats ?? []).map(mapChat)
+}
+
+export async function createOrderChat({
+  session,
+  orderId,
+  participantUserIds,
+  type = 'CUSTOMER_RESTAURANT',
+}) {
+  const uniqueParticipantUserIds = Array.from(
+    new Set((participantUserIds ?? []).filter(Boolean)),
+  )
+
+  if (uniqueParticipantUserIds.length < 2) {
+    throw new Error('O chat precisa de pelo menos dois participantes.')
+  }
+
+  const data = await graphqlRequest({
+    query: CREATE_ORDER_CHAT_MUTATION,
+    variables: {
+      input: {
+        order_id: orderId,
+        type,
+        participant_user_ids: uniqueParticipantUserIds,
+      },
+    },
+    headers: requestHeaders(session),
+  })
+
+  return mapChat(data.createOrderChat)
+}
+
+export async function sendChatMessage({ session, chatId, content }) {
+  const senderUserId = session?.userId || session?.devUserId
+
+  if (!senderUserId) {
+    throw new Error('Define User ID para enviar mensagem.')
+  }
+
+  const data = await graphqlRequest({
+    query: SEND_MESSAGE_MUTATION,
+    variables: {
+      input: {
+        chat_id: chatId,
+        sender_user_id: senderUserId,
+        content,
+      },
+    },
+    headers: requestHeaders(session),
+  })
+
+  return {
+    id: data.sendMessage.id,
+    chat_id: data.sendMessage.chat_id,
+    content: data.sendMessage.content,
+    sender_participant_id: data.sendMessage.sender_participant_id,
+    sender_user_id: senderUserId,
+    timestamp: data.sendMessage.timestamp,
+  }
+}

@@ -20,14 +20,14 @@ class RestaurantOperationsGraphQLTest extends TestCase
             'name' => 'Cliente Query',
             'email' => 'customer_query_active@example.com',
             'password' => 'password123',
-            'user_type' => 'customer',
+            'user_type' => 'CUSTOMER',
         ]);
 
         $manager = User::query()->create([
             'name' => 'Manager Local',
             'email' => 'manager_query_active@example.com',
             'password' => 'password123',
-            'user_type' => 'local_manager',
+            'user_type' => 'LOCAL_MANAGER',
         ]);
 
         $chain = RestaurantChain::query()->create(['name' => 'FastBite Chain']);
@@ -87,14 +87,14 @@ GRAPHQL;
             'name' => 'Cliente Manage',
             'email' => 'customer_manage_orders@example.com',
             'password' => 'password123',
-            'user_type' => 'customer',
+            'user_type' => 'CUSTOMER',
         ]);
 
         $manager = User::query()->create([
             'name' => 'Manager Local',
             'email' => 'manager_manage_orders@example.com',
             'password' => 'password123',
-            'user_type' => 'local_manager',
+            'user_type' => 'LOCAL_MANAGER',
         ]);
 
         $chain = RestaurantChain::query()->create(['name' => 'FastBite Chain']);
@@ -192,3 +192,4 @@ GRAPHQL;
         ]);
     }
 }
+

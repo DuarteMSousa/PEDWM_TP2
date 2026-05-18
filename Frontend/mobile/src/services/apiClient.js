@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000'
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1'
 const AUTH_TOKEN = process.env.EXPO_PUBLIC_AUTH_BEARER_TOKEN ?? ''
 
 function buildBaseHeaders(headers = {}) {

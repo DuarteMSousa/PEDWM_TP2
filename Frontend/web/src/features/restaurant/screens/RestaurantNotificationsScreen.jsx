@@ -1,30 +1,35 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  fetchOperatorNotifications,
+  markAllOperatorNotificationsRead,
+  markOperatorNotificationRead,
+} from '../../../services/restaurantOpsService'
 import { subscribeToUserNotificationsTopic } from '../../../services/realtime/topicsRealtime'
 import { disconnectEchoClient } from '../../../services/realtime/echoClient'
 
-const DEFAULT_USER_ID = import.meta.env.VITE_REALTIME_USER_ID ?? ''
 const MAX_ITEMS = 40
 
 function normalizeNotification(payload) {
   return {
-    id: payload?.eventId ?? payload?.notificationId ?? `${Date.now()}-${Math.random()}`,
+    id: payload?.notificationId ?? payload?.eventId ?? `${Date.now()}-${Math.random()}`,
     type: payload?.type ?? 'INFO',
     title: payload?.title ?? 'Nova notificacao',
     message: payload?.message ?? 'Sem descricao',
     timestamp: payload?.sentAt ?? new Date().toISOString(),
     read: false,
+    read_at: null,
   }
 }
 
-export function RestaurantNotificationsScreen() {
-  const [userId, setUserId] = useState(DEFAULT_USER_ID)
+export function RestaurantNotificationsScreen({ session }) {
   const [status, setStatus] = useState('offline')
   const [isListening, setIsListening] = useState(false)
   const [showUnreadOnly, setShowUnreadOnly] = useState(false)
   const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [errorText, setErrorText] = useState('')
 
-  const canConnect = useMemo(() => Boolean(userId.trim()), [userId])
   const unreadCount = useMemo(() => items.filter((item) => !item.read).length, [items])
 
   const visibleItems = useMemo(
@@ -32,17 +37,46 @@ export function RestaurantNotificationsScreen() {
     [items, showUnreadOnly],
   )
 
+  const loadNotifications = useCallback(async () => {
+    try {
+      setLoading(true)
+      const data = await fetchOperatorNotifications({
+        session,
+        unreadOnly: false,
+        limit: MAX_ITEMS,
+      })
+      setItems(data)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [session])
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      loadNotifications()
+    })
+  }, [loadNotifications])
+
   useEffect(() => {
     if (!isListening) {
       return undefined
     }
 
     const unsubscribe = subscribeToUserNotificationsTopic({
-      userId: userId.trim(),
+      userId: session.userId,
+      authToken: session.token,
+      devUserId: session.devUserId,
       onNotification: (payload) => {
         setStatus('live')
         setErrorText('')
-        setItems((current) => [normalizeNotification(payload), ...current].slice(0, MAX_ITEMS))
+        setItems((current) => {
+          const next = [normalizeNotification(payload), ...current]
+          const uniqueById = Array.from(new Map(next.map((item) => [item.id, item])).values())
+          return uniqueById.slice(0, MAX_ITEMS)
+        })
       },
       onError: () => {
         setStatus('error')
@@ -54,7 +88,7 @@ export function RestaurantNotificationsScreen() {
       unsubscribe()
       disconnectEchoClient()
     }
-  }, [isListening, userId])
+  }, [isListening, session.devUserId, session.token, session.userId])
 
   function handleToggleConnection() {
     if (isListening) {
@@ -63,23 +97,38 @@ export function RestaurantNotificationsScreen() {
       return
     }
 
-    if (!canConnect) {
-      setStatus('missing-config')
-      setErrorText('Preenche User ID para abrir o canal de notificacoes.')
-      return
-    }
-
     setStatus('connecting')
     setErrorText('')
     setIsListening(true)
   }
 
-  function handleMarkOneRead(id) {
-    setItems((current) => current.map((item) => (item.id === id ? { ...item, read: true } : item)))
+  async function handleMarkOneRead(id) {
+    try {
+      setSaving(true)
+      await markOperatorNotificationRead({ session, notificationId: id })
+      setItems((current) =>
+        current.map((item) =>
+          item.id === id ? { ...item, read: true, read_at: new Date().toISOString() } : item,
+        ),
+      )
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function handleMarkAllRead() {
-    setItems((current) => current.map((item) => ({ ...item, read: true })))
+  async function handleMarkAllRead() {
+    try {
+      setSaving(true)
+      await markAllOperatorNotificationsRead({ session })
+      const nowIso = new Date().toISOString()
+      setItems((current) => current.map((item) => ({ ...item, read: true, read_at: item.read_at ?? nowIso })))
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const statusLabel =
@@ -87,19 +136,17 @@ export function RestaurantNotificationsScreen() {
       ? 'Ao vivo'
       : status === 'connecting'
         ? 'A ligar'
-        : status === 'missing-config'
-          ? 'Falta user ID'
-          : status === 'error'
-            ? 'Erro'
-            : 'Offline'
+        : status === 'error'
+          ? 'Erro'
+          : 'Offline'
 
   const statusClass = status === 'live' ? 'ok' : status === 'error' ? 'danger' : 'warn'
 
   return (
     <section className="workspace">
       <header className="workspace-header">
-        <h2>Notificacoes do Utilizador</h2>
-        <p>Inbox dedicada ao topico `user.{`{userId}`}.notifications` com triagem de leitura.</p>
+        <h2>Notificacoes do Operador</h2>
+        <p>Inbox persistida com leitura/sincronizacao via backend e canal realtime.</p>
       </header>
 
       <div className="uc-row">
@@ -124,7 +171,7 @@ export function RestaurantNotificationsScreen() {
         <div className="rb-notif-config">
           <label>
             User ID
-            <input value={userId} onChange={(event) => setUserId(event.target.value)} />
+            <input value={session.userId} disabled />
           </label>
           <button type="button" className="rb-primary" onClick={handleToggleConnection}>
             {isListening ? 'Desligar canal' : 'Ligar canal'}
@@ -139,35 +186,42 @@ export function RestaurantNotificationsScreen() {
           >
             {showUnreadOnly ? 'Mostrar todas' : 'Mostrar nao lidas'}
           </button>
-          <button type="button" className="rb-notif-filter" onClick={handleMarkAllRead}>
+          <button type="button" className="rb-notif-filter" onClick={loadNotifications} disabled={loading}>
+            {loading ? 'A carregar...' : 'Atualizar'}
+          </button>
+          <button type="button" className="rb-notif-filter" onClick={handleMarkAllRead} disabled={saving}>
             Marcar tudo como lida
           </button>
         </div>
 
         <article className="rb-notif-list">
-          {visibleItems.length === 0 ? (
+          {!loading && visibleItems.length === 0 ? (
             <p className="rb-notif-empty">Sem notificacoes para mostrar.</p>
-          ) : (
-            visibleItems.map((item) => (
-              <div className={`rb-notif-item ${item.read ? 'read' : 'unread'}`} key={item.id}>
-                <div className="rb-notif-item-top">
-                  <strong>{item.title}</strong>
-                  <span className={`rb-chip ${item.read ? 'off' : 'pending'}`}>{item.type}</span>
-                </div>
-                <p>{item.message}</p>
-                <div className="rb-notif-item-foot">
-                  <small>{item.timestamp}</small>
-                  {!item.read ? (
-                    <button type="button" className="rb-link-btn" onClick={() => handleMarkOneRead(item.id)}>
-                      Marcar lida
-                    </button>
-                  ) : (
-                    <small>Lida</small>
-                  )}
-                </div>
+          ) : null}
+          {visibleItems.map((item) => (
+            <div className={`rb-notif-item ${item.read ? 'read' : 'unread'}`} key={item.id}>
+              <div className="rb-notif-item-top">
+                <strong>{item.title}</strong>
+                <span className={`rb-chip ${item.read ? 'off' : 'pending'}`}>{item.type}</span>
               </div>
-            ))
-          )}
+              <p>{item.message}</p>
+              <div className="rb-notif-item-foot">
+                <small>{item.timestamp}</small>
+                {!item.read ? (
+                  <button
+                    type="button"
+                    className="rb-link-btn"
+                    onClick={() => handleMarkOneRead(item.id)}
+                    disabled={saving}
+                  >
+                    Marcar lida
+                  </button>
+                ) : (
+                  <small>Lida</small>
+                )}
+              </div>
+            </div>
+          ))}
         </article>
 
         {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
@@ -175,4 +229,3 @@ export function RestaurantNotificationsScreen() {
     </section>
   )
 }
-

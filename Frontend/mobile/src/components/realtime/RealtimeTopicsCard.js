@@ -9,6 +9,7 @@ import { disconnectEchoClient } from '../../services/realtime/echoClient'
 const DEFAULT_CHAT_ID = process.env.EXPO_PUBLIC_REALTIME_CHAT_ID ?? ''
 const DEFAULT_USER_ID = process.env.EXPO_PUBLIC_REALTIME_USER_ID ?? ''
 const AUTH_TOKEN = process.env.EXPO_PUBLIC_AUTH_BEARER_TOKEN ?? ''
+const DEV_USER_ID = process.env.EXPO_PUBLIC_DEV_BROADCAST_USER_ID ?? ''
 const MAX_ITEMS = 5
 
 function prependLimited(items, nextItem) {
@@ -47,6 +48,7 @@ export function RealtimeTopicsCard() {
       const unsubscribeChat = subscribeToChatTopic({
         chatId: chatId.trim(),
         authToken: AUTH_TOKEN,
+        devUserId: DEV_USER_ID,
         onMessage: (payload) => {
           setStatus('live')
           setChatEvents((current) =>
@@ -64,6 +66,7 @@ export function RealtimeTopicsCard() {
       const unsubscribeNotifications = subscribeToUserNotificationsTopic({
         userId: userId.trim(),
         authToken: AUTH_TOKEN,
+        devUserId: DEV_USER_ID,
         onNotification: (payload) => {
           setStatus('live')
           setNotificationEvents((current) =>

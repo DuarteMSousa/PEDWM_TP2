@@ -1,5 +1,15 @@
-import { apiFetch } from './apiClient'
+import { graphqlRequest } from './apiClient'
+
+const API_HEALTH_QUERY = `
+  query ApiHealth {
+    __typename
+  }
+`
 
 export async function getApiHealth() {
-  return apiFetch('/health')
+  const data = await graphqlRequest({ query: API_HEALTH_QUERY })
+  return {
+    ok: data?.__typename === 'Query',
+    transport: 'graphql',
+  }
 }

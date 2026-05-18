@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { bootstrapRestaurantSession } from '../../../services/restaurantOpsService'
 
 const DEFAULT_DEV_USER_ID = import.meta.env.VITE_DEV_RESTAURANT_USER_ID ?? ''
 const DEFAULT_TOKEN = import.meta.env.VITE_AUTH_BEARER_TOKEN ?? ''
@@ -7,22 +8,27 @@ const DEFAULT_RESTAURANT_ID = import.meta.env.VITE_DEV_RESTAURANT_ID ?? ''
 export function RestaurantLoginScreen({ onLogin }) {
   const [email, setEmail] = useState('manager@fastbite.pt')
   const [password, setPassword] = useState('********')
-  const [restaurant, setRestaurant] = useState('Centro')
-  const [devUserId, setDevUserId] = useState(DEFAULT_DEV_USER_ID)
-  const [restaurantId, setRestaurantId] = useState(DEFAULT_RESTAURANT_ID)
-  const [token, setToken] = useState(DEFAULT_TOKEN)
+  const [loading, setLoading] = useState(false)
+  const [errorText, setErrorText] = useState('')
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    const operatorName = email.split('@')[0] || 'manager'
-
-    onLogin({
-      operatorName,
-      restaurant,
-      devUserId: devUserId.trim(),
-      restaurantId: restaurantId.trim(),
-      token: token.trim(),
-    })
+    try {
+      setLoading(true)
+      const session = await bootstrapRestaurantSession({
+        email,
+        restaurant: '',
+        devUserId: DEFAULT_DEV_USER_ID,
+        restaurantId: DEFAULT_RESTAURANT_ID,
+        token: DEFAULT_TOKEN,
+      })
+      setErrorText('')
+      onLogin(session)
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -44,43 +50,11 @@ export function RestaurantLoginScreen({ onLogin }) {
               type="password"
             />
           </label>
-          <label>
-            Unidade
-            <select value={restaurant} onChange={(event) => setRestaurant(event.target.value)}>
-              <option value="Centro">Pizzaria do Centro</option>
-              <option value="Norte">Pizzaria Norte</option>
-              <option value="Sul">Pizzaria Sul</option>
-            </select>
-          </label>
-          <label>
-            Dev User ID (opcional)
-            <input
-              value={devUserId}
-              onChange={(event) => setDevUserId(event.target.value)}
-              placeholder="uuid do manager"
-            />
-          </label>
-          <label>
-            Restaurant ID (opcional)
-            <input
-              value={restaurantId}
-              onChange={(event) => setRestaurantId(event.target.value)}
-              placeholder="uuid do restaurante"
-            />
-          </label>
-          <label>
-            Bearer token (opcional)
-            <input
-              value={token}
-              onChange={(event) => setToken(event.target.value)}
-              placeholder="jwt"
-            />
-          </label>
-
-          <button type="submit" className="rb-primary">
-            Entrar
+          <button type="submit" className="rb-primary" disabled={loading}>
+            {loading ? 'A entrar...' : 'Entrar'}
           </button>
         </form>
+        {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
       </div>
     </section>
   )
