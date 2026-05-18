@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm Frontend/web/src/screens/customer/CustomerTrackingWebShell.jsx Frontend/web/src/services/trackingService.js Frontend/web/src/components/maps/LeafletTrackingMap.jsx Frontend/web/src/components/maps/DeliveryMapPanel.jsx)",
+      "Bash(rmdir Frontend/web/src/screens/customer Frontend/web/src/components/maps)",
+      "Bash(node --check App.js)",
+      "Bash(node --check src/screens/CustomerAppScreen.js)",
+      "Bash(node --check src/screens/CourierAppScreen.js)",
+      "Bash(node --check src/services/commerceService.js)",
+      "Bash(npx --no-install vite build)"
+    ]
+  }
+}

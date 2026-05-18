@@ -53,7 +53,7 @@ export function RestaurantLoginScreen({ onLogin }) {
     <section className="rb-login-wrap">
       <div className="rb-login-card">
         <h2>Entrar no painel do restaurante</h2>
-        <p>Utiliza as credenciais da loja para aceder ao dashboard operacional.</p>
+        <p>Utiliza email e password. O restaurante e resolvido automaticamente.</p>
 
         <form className="rb-login-form" onSubmit={handleSubmit}>
           <label>

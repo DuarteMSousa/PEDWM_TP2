@@ -27,6 +27,8 @@ class UserMutations
             email: $input['email'],
             password: $input['password'],
             user_type: $input['user_type'] ?? UserType::CUSTOMER->value,
+            chain_id: $input['chain_id'] ?? null,
+            restaurant_id: $input['restaurant_id'] ?? null,
         ));
     }
 

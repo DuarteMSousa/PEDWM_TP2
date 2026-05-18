@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import * as Location from 'expo-location'
 import NetInfo from '@react-native-community/netinfo'
 import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
 import {
   acceptDeliveryJob,
   fetchCourierAvailableDeliveries,
+  fetchCourierDeliveriesHistory,
   fetchOrderTracking,
+  markDeliveryFailed,
+  rejectDeliveryJob,
   toggleCourierAvailability,
   updateCourierLocation,
   updateDeliveryStatus,
 } from '../services/commerceService'
-import { subscribeToCourierJobsTopic } from '../services/realtime/topicsRealtime'
+import {
+  subscribeToCourierJobsTopic,
+  subscribeToOrderTrackingTopic,
+} from '../services/realtime/topicsRealtime'
+
+const OFFER_EXPIRY_FALLBACK_SECONDS = 30
 
 function statusText(status) {
   if (status === 'AVAILABLE') return 'Online'
@@ -50,8 +58,25 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
   const [backgroundLocationPermission, setBackgroundLocationPermission] = useState('unknown')
   const [jobsRetryTick, setJobsRetryTick] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [activeOfferId, setActiveOfferId] = useState(null)
+  const [dismissedOfferIds, setDismissedOfferIds] = useState(() => new Set())
+  const [offerRemainingSeconds, setOfferRemainingSeconds] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectingOfferId, setRejectingOfferId] = useState('')
+  const [showFailModal, setShowFailModal] = useState(false)
+  const [failReason, setFailReason] = useState('')
+  const [isFailingDelivery, setIsFailingDelivery] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [history, setHistory] = useState([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [showDeliverConfirm, setShowDeliverConfirm] = useState(false)
   const lastSentRef = useRef({ lat: null, lng: null, timestamp: 0 })
   const courierId = session?.userId || session?.devUserId
+
+  const activeOffer = useMemo(
+    () => availableOffers.find((offer) => offer.offer_token === activeOfferId) ?? null,
+    [activeOfferId, availableOffers],
+  )
 
   const isOffer = phase === 'offer'
   const isPickup = phase === 'pickup'
@@ -115,6 +140,18 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
               loadAvailableOffers()
             }
 
+            if (eventName === 'JOB_EXPIRED' || eventName === 'JOB_REJECTED') {
+              const expiredOfferId = payload?.data?.offer_id ?? payload?.offerId ?? null
+              if (expiredOfferId) {
+                setDismissedOfferIds((current) => {
+                  const updated = new Set(current)
+                  updated.add(String(expiredOfferId))
+                  return updated
+                })
+              }
+              loadAvailableOffers()
+            }
+
             if (eventName === 'DELIVERY_FAILED') {
               setErrorText(payload?.data?.reason ?? 'Entrega marcada como falhada.')
             }
@@ -164,6 +201,46 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
   }, [activeDelivery, isCompleted])
 
   useEffect(() => {
+    if (!activeDelivery?.order_id || isCompleted || !isOnline) {
+      return undefined
+    }
+
+    let unsubscribe = null
+    try {
+      unsubscribe = subscribeToOrderTrackingTopic({
+        orderId: activeDelivery.order_id,
+        authToken: session?.token,
+        devUserId: session?.devUserId,
+        onEvent: (eventName, payload) => {
+          if (eventName === 'ORDER_CANCELLED') {
+            setErrorText('Pedido cancelado pelo cliente ou restaurante.')
+            setActiveDelivery(null)
+            setTracking(null)
+            setPhase('offer')
+            setCourierStatus('AVAILABLE')
+            return
+          }
+          if (eventName === 'ORDER_DELIVERED' || eventName === 'DELIVERY_DELIVERED') {
+            loadTracking(activeDelivery.order_id)
+          }
+          if (eventName === 'ORDER_READY') {
+            setToast('Pedido pronto para recolha.')
+          }
+        },
+        onError: () => {
+          // silent
+        },
+      })
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [activeDelivery?.order_id, isCompleted, isOnline, session?.token, session?.devUserId])
+
+  useEffect(() => {
     const phaseAllowsTracking = ['pickup', 'collected', 'in_transit'].includes(phase)
     if (!activeDelivery?.delivery_id || !phaseAllowsTracking) {
       return undefined
@@ -191,7 +268,7 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
 
         subscription = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.Balanced,
+            accuracy: Location.Accuracy.High,
             timeInterval: 8000,
             distanceInterval: 15,
           },
@@ -298,6 +375,66 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
     return () => clearInterval(timer)
   }, [courierStatus, phase])
 
+  useEffect(() => {
+    if (phase !== 'offer' || courierStatus !== 'AVAILABLE') {
+      if (activeOfferId !== null) {
+        setActiveOfferId(null)
+      }
+      return
+    }
+
+    const nextOffer = availableOffers.find(
+      (offer) => offer.offer_token && !dismissedOfferIds.has(offer.offer_token),
+    )
+
+    if (!nextOffer) {
+      if (activeOfferId !== null) {
+        setActiveOfferId(null)
+      }
+      return
+    }
+
+    if (activeOfferId !== nextOffer.offer_token) {
+      setActiveOfferId(nextOffer.offer_token)
+      setRejectReason('')
+    }
+  }, [availableOffers, courierStatus, phase, dismissedOfferIds, activeOfferId])
+
+  useEffect(() => {
+    if (!activeOffer) {
+      setOfferRemainingSeconds(null)
+      return undefined
+    }
+
+    function computeRemaining() {
+      if (!activeOffer.offer_expires_at) {
+        return OFFER_EXPIRY_FALLBACK_SECONDS
+      }
+      const expiresAtMs = Date.parse(activeOffer.offer_expires_at)
+      if (Number.isNaN(expiresAtMs)) {
+        return OFFER_EXPIRY_FALLBACK_SECONDS
+      }
+      const diffSec = Math.ceil((expiresAtMs - Date.now()) / 1000)
+      return diffSec > 0 ? diffSec : 0
+    }
+
+    setOfferRemainingSeconds(computeRemaining())
+    const timer = setInterval(() => {
+      const next = computeRemaining()
+      setOfferRemainingSeconds(next)
+      if (next <= 0) {
+        setDismissedOfferIds((current) => {
+          const updated = new Set(current)
+          updated.add(activeOffer.offer_token)
+          return updated
+        })
+        loadAvailableOffers()
+      }
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [activeOffer])
+
   async function handleToggleOnline() {
     if (!ensureOnline('alterar disponibilidade')) {
       return
@@ -338,6 +475,9 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
       setPhase('pickup')
       setLivePosition(null)
       lastSentRef.current = { lat: null, lng: null, timestamp: 0 }
+      setActiveOfferId(null)
+      setDismissedOfferIds(new Set())
+      setRejectReason('')
       setToast('Entrega aceite com sucesso.')
       setErrorText('')
       await loadTracking(payload.order_id)
@@ -346,6 +486,43 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleRejectOffer(offer, reason = null) {
+    if (!ensureOnline('rejeitar oferta')) {
+      return
+    }
+
+    try {
+      setRejectingOfferId(offer.offer_token)
+      await rejectDeliveryJob({
+        session,
+        offerToken: offer.offer_token,
+        reason: reason && reason.trim() !== '' ? reason.trim() : null,
+      })
+      setDismissedOfferIds((current) => {
+        const updated = new Set(current)
+        updated.add(offer.offer_token)
+        return updated
+      })
+      setRejectReason('')
+      setToast('Oferta rejeitada.')
+      setErrorText('')
+      await loadAvailableOffers()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setRejectingOfferId('')
+    }
+  }
+
+  function dismissActiveOfferModal() {
+    if (!activeOffer) return
+    setDismissedOfferIds((current) => {
+      const updated = new Set(current)
+      updated.add(activeOffer.offer_token)
+      return updated
+    })
   }
 
   async function loadAvailableOffers() {
@@ -379,18 +556,28 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
       return
     }
 
+    if (mainButton.nextStatus === 'DELIVERED') {
+      setErrorText('')
+      setShowDeliverConfirm(true)
+      return
+    }
+
+    await progressDelivery(mainButton.nextStatus, mainButton.nextPhase)
+  }
+
+  async function progressDelivery(nextStatus, nextPhase) {
     try {
       setLoading(true)
       const payload = await updateDeliveryStatus({
         session,
         deliveryId: activeDelivery.delivery_id,
-        status: mainButton.nextStatus,
+        status: nextStatus,
       })
 
-      setPhase(mainButton.nextPhase)
+      setPhase(nextPhase)
       setToast(`Estado atualizado para ${payload.delivery_status}.`)
 
-      if (mainButton.nextStatus === 'DELIVERED') {
+      if (nextStatus === 'DELIVERED') {
         setCourierStatus('AVAILABLE')
       }
 
@@ -401,6 +588,16 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function confirmDeliverDelivery() {
+    if (!activeDelivery?.delivery_id) {
+      setShowDeliverConfirm(false)
+      return
+    }
+
+    await progressDelivery('DELIVERED', 'completed')
+    setShowDeliverConfirm(false)
   }
 
   async function loadTracking(orderId) {
@@ -423,11 +620,117 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
     }
   }
 
+  async function loadHistory() {
+    if (!ensureOnline('carregar historico')) {
+      return
+    }
+
+    try {
+      setIsLoadingHistory(true)
+      const data = await fetchCourierDeliveriesHistory({ session })
+      setHistory(data)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  function openHistoryModal() {
+    setShowHistoryModal(true)
+    loadHistory()
+  }
+
+  const historyStats = useMemo(() => {
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todayStartMs = todayStart.getTime()
+
+    let todayCount = 0
+    let todayEarnings = 0
+    let totalCount = 0
+    let totalEarnings = 0
+    let failedCount = 0
+
+    history.forEach((delivery) => {
+      totalCount += 1
+      if (delivery.delivery_status === 'FAILED') {
+        failedCount += 1
+        return
+      }
+      if (delivery.delivery_status !== 'DELIVERED') {
+        return
+      }
+      const fee = Number(delivery.delivery_fee ?? 0)
+      totalEarnings += fee
+
+      const completedAt = delivery.delivery_time
+        ? Date.parse(delivery.delivery_time)
+        : null
+      if (completedAt !== null && !Number.isNaN(completedAt) && completedAt >= todayStartMs) {
+        todayCount += 1
+        todayEarnings += fee
+      }
+    })
+
+    return {
+      todayCount,
+      todayEarnings,
+      totalCount,
+      totalEarnings,
+      failedCount,
+    }
+  }, [history])
+
+  async function handleFailDelivery() {
+    if (!activeDelivery?.delivery_id) {
+      setShowFailModal(false)
+      return
+    }
+
+    if (!ensureOnline('marcar entrega como falhada')) {
+      return
+    }
+
+    const trimmedReason = failReason.trim()
+    if (!trimmedReason) {
+      setErrorText('Motivo da falha e obrigatorio.')
+      return
+    }
+
+    try {
+      setIsFailingDelivery(true)
+      await markDeliveryFailed({
+        session,
+        deliveryId: activeDelivery.delivery_id,
+        reason: trimmedReason,
+      })
+      setToast('Entrega marcada como falhada.')
+      setErrorText('')
+      setShowFailModal(false)
+      setFailReason('')
+      setPhase('offer')
+      setActiveDelivery(null)
+      setTracking(null)
+      setLivePosition(null)
+      setCourierStatus('AVAILABLE')
+      lastSentRef.current = { lat: null, lng: null, timestamp: 0 }
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsFailingDelivery(false)
+    }
+  }
+
   function resetFlow() {
     setPhase('offer')
     setActiveDelivery(null)
     setTracking(null)
     setLivePosition(null)
+    setActiveOfferId(null)
+    setDismissedOfferIds(new Set())
+    setRejectReason('')
     lastSentRef.current = { lat: null, lng: null, timestamp: 0 }
     setToast('Pronto para nova entrega.')
     if (courierStatus === 'AVAILABLE') {
@@ -503,6 +806,10 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
               Push: {pushStatus === 'registered' ? 'ok' : pushStatus === 'permission_denied' ? 'off' : pushStatus}
             </Text>
           </View>
+
+          <Pressable style={styles.historyLink} onPress={openHistoryModal}>
+            <Text style={styles.historyLinkText}>Ver historico & ganhos</Text>
+          </Pressable>
         </View>
 
         <ScrollView
@@ -562,6 +869,15 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
                         <SummaryRow label="Pickup" value={offer.pickup_address ?? '-'} />
                         <SummaryRow label="Entrega" value={offer.dropoff_address ?? '-'} />
                         <View style={styles.actionsRow}>
+                          <Pressable
+                            style={styles.rejectBtn}
+                            onPress={() => handleRejectOffer(offer)}
+                            disabled={rejectingOfferId === offer.offer_token}
+                          >
+                            <Text style={styles.rejectBtnText}>
+                              {rejectingOfferId === offer.offer_token ? 'A rejeitar...' : 'Rejeitar'}
+                            </Text>
+                          </Pressable>
                           <Pressable
                             style={styles.acceptBtn}
                             onPress={() => handleAcceptOffer(offer)}
@@ -649,6 +965,20 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
             </View>
           ) : null}
 
+          {activeDelivery && (isPickup || isCollected || isTransit) ? (
+            <Pressable
+              style={styles.dangerBtn}
+              onPress={() => {
+                setFailReason('')
+                setErrorText('')
+                setShowFailModal(true)
+              }}
+              disabled={loading || isFailingDelivery}
+            >
+              <Text style={styles.dangerBtnText}>Marcar entrega como falhada</Text>
+            </Pressable>
+          ) : null}
+
           {isCompleted ? (
             <Pressable style={styles.secondaryBtn} onPress={resetFlow}>
               <Text style={styles.secondaryBtnText}>Limpar entrega atual</Text>
@@ -670,6 +1000,318 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
           ) : null}
         </View>
       </View>
+
+      <Modal
+        visible={Boolean(activeOffer) && phase === 'offer' && courierStatus === 'AVAILABLE'}
+        animationType="slide"
+        transparent
+        onRequestClose={dismissActiveOfferModal}
+      >
+        <View style={styles.offerModalBackdrop}>
+          <View style={styles.offerModalCard}>
+            <View style={styles.offerModalHeader}>
+              <Text style={styles.offerModalTitle}>Nova oferta de entrega</Text>
+              <Pressable style={styles.offerModalClose} onPress={dismissActiveOfferModal}>
+                <Text style={styles.offerModalCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.offerCountdown}>
+              <Text style={styles.offerCountdownLabel}>Tempo restante</Text>
+              <Text
+                style={[
+                  styles.offerCountdownValue,
+                  offerRemainingSeconds !== null && offerRemainingSeconds <= 10
+                    ? styles.offerCountdownDanger
+                    : null,
+                ]}
+              >
+                {offerRemainingSeconds === null
+                  ? '--'
+                  : `${String(Math.max(0, offerRemainingSeconds)).padStart(2, '0')}s`}
+              </Text>
+            </View>
+
+            {activeOffer ? (
+              <View style={styles.offerModalBody}>
+                <SummaryRow label="Restaurante" value={activeOffer.restaurant_name ?? '-'} />
+                <SummaryRow
+                  label="Total"
+                  value={`EUR ${Number(activeOffer.order_total ?? 0).toFixed(2)}`}
+                />
+                <SummaryRow label="Pickup" value={activeOffer.pickup_address ?? '-'} />
+                <SummaryRow label="Entrega" value={activeOffer.dropoff_address ?? '-'} />
+                {activeOffer.estimated_pickup_distance_km !== null &&
+                activeOffer.estimated_pickup_distance_km !== undefined ? (
+                  <SummaryRow
+                    label="Distancia pickup"
+                    value={`${Number(activeOffer.estimated_pickup_distance_km).toFixed(2)} km`}
+                  />
+                ) : null}
+                {activeOffer.estimated_pickup_time_min !== null &&
+                activeOffer.estimated_pickup_time_min !== undefined ? (
+                  <SummaryRow
+                    label="Tempo estimado pickup"
+                    value={`${activeOffer.estimated_pickup_time_min} min`}
+                  />
+                ) : null}
+
+                <Text style={styles.offerReasonLabel}>Motivo da rejeicao (opcional)</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ex: longe demais"
+                  placeholderTextColor="#94a3b8"
+                  value={rejectReason}
+                  onChangeText={setRejectReason}
+                  editable={rejectingOfferId !== activeOffer.offer_token && !loading}
+                />
+
+                <View style={styles.actionsRow}>
+                  <Pressable
+                    style={styles.rejectBtn}
+                    onPress={() => handleRejectOffer(activeOffer, rejectReason)}
+                    disabled={rejectingOfferId === activeOffer.offer_token || loading}
+                  >
+                    <Text style={styles.rejectBtnText}>
+                      {rejectingOfferId === activeOffer.offer_token ? 'A rejeitar...' : 'Rejeitar'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.acceptBtn}
+                    onPress={() => handleAcceptOffer(activeOffer)}
+                    disabled={loading || rejectingOfferId === activeOffer.offer_token}
+                  >
+                    <Text style={styles.acceptBtnText}>
+                      {loading ? 'A aceitar...' : 'Aceitar entrega'}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showFailModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!isFailingDelivery) {
+            setShowFailModal(false)
+          }
+        }}
+      >
+        <View style={styles.offerModalBackdrop}>
+          <View style={styles.failModalCard}>
+            <Text style={styles.offerModalTitle}>Marcar entrega como falhada</Text>
+            <Text style={styles.failModalSubtitle}>
+              Esta acao e irreversivel. O motivo fica registado no historico da entrega.
+            </Text>
+
+            <Text style={styles.offerReasonLabel}>Motivo *</Text>
+            <TextInput
+              style={[styles.input, styles.failReasonInput]}
+              placeholder="Ex: cliente indisponivel, morada incorreta"
+              placeholderTextColor="#94a3b8"
+              value={failReason}
+              onChangeText={setFailReason}
+              editable={!isFailingDelivery}
+              multiline
+            />
+
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={styles.secondaryBtn}
+                onPress={() => {
+                  if (!isFailingDelivery) {
+                    setShowFailModal(false)
+                  }
+                }}
+                disabled={isFailingDelivery}
+              >
+                <Text style={styles.secondaryBtnText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.dangerBtn, styles.dangerBtnFill]}
+                onPress={handleFailDelivery}
+                disabled={isFailingDelivery || failReason.trim() === ''}
+              >
+                <Text style={[styles.dangerBtnText, styles.dangerBtnTextFill]}>
+                  {isFailingDelivery ? 'A confirmar...' : 'Confirmar falha'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showDeliverConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!loading) {
+            setShowDeliverConfirm(false)
+          }
+        }}
+      >
+        <View style={styles.offerModalBackdrop}>
+          <View style={styles.failModalCard}>
+            <Text style={styles.offerModalTitle}>Confirmar entrega</Text>
+            <Text style={styles.failModalSubtitle}>
+              Apos confirmar, a encomenda fica marcada como DELIVERED e o turno volta a estado AVAILABLE.
+            </Text>
+
+            <View style={styles.confirmSummary}>
+              <SummaryRow
+                label="Restaurante"
+                value={tracking?.restaurant_name ?? activeDelivery?.restaurant_name ?? '-'}
+              />
+              <SummaryRow
+                label="Encomenda"
+                value={`#${String(activeDelivery?.order_id ?? '').slice(0, 8)}`}
+              />
+              {tracking?.total !== undefined && tracking?.total !== null ? (
+                <SummaryRow label="Total" value={`EUR ${Number(tracking.total).toFixed(2)}`} />
+              ) : null}
+            </View>
+
+            <View style={styles.actionsRow}>
+              <Pressable
+                style={styles.secondaryBtn}
+                onPress={() => {
+                  if (!loading) {
+                    setShowDeliverConfirm(false)
+                  }
+                }}
+                disabled={loading}
+              >
+                <Text style={styles.secondaryBtnText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={styles.acceptBtn}
+                onPress={confirmDeliverDelivery}
+                disabled={loading}
+              >
+                <Text style={styles.acceptBtnText}>
+                  {loading ? 'A confirmar...' : 'Sim, entregue'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showHistoryModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowHistoryModal(false)}
+      >
+        <View style={styles.offerModalBackdrop}>
+          <View style={styles.historyModalCard}>
+            <View style={styles.offerModalHeader}>
+              <Text style={styles.offerModalTitle}>Historico & ganhos</Text>
+              <Pressable
+                style={styles.offerModalClose}
+                onPress={() => setShowHistoryModal(false)}
+              >
+                <Text style={styles.offerModalCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.historyStatsRow}>
+              <View style={styles.historyStatCard}>
+                <Text style={styles.historyStatLabel}>Entregues hoje</Text>
+                <Text style={styles.historyStatValue}>{historyStats.todayCount}</Text>
+              </View>
+              <View style={styles.historyStatCard}>
+                <Text style={styles.historyStatLabel}>Ganho hoje</Text>
+                <Text style={styles.historyStatValue}>
+                  EUR {historyStats.todayEarnings.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.historyStatsRow}>
+              <View style={styles.historyStatCard}>
+                <Text style={styles.historyStatLabel}>Total entregas</Text>
+                <Text style={styles.historyStatValue}>{historyStats.totalCount}</Text>
+              </View>
+              <View style={styles.historyStatCard}>
+                <Text style={styles.historyStatLabel}>Ganho total</Text>
+                <Text style={styles.historyStatValue}>
+                  EUR {historyStats.totalEarnings.toFixed(2)}
+                </Text>
+              </View>
+            </View>
+
+            {historyStats.failedCount > 0 ? (
+              <Text style={styles.historyFailedNote}>
+                {historyStats.failedCount} entrega(s) falhada(s) no historico.
+              </Text>
+            ) : null}
+
+            <View style={styles.historyListHeader}>
+              <Text style={styles.summaryTitle}>Entregas recentes</Text>
+              <Pressable
+                style={styles.secondaryBtn}
+                onPress={loadHistory}
+                disabled={isLoadingHistory}
+              >
+                <Text style={styles.secondaryBtnText}>
+                  {isLoadingHistory ? 'A carregar...' : 'Atualizar'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.historyList} contentContainerStyle={styles.historyListContent}>
+              {!isLoadingHistory && history.length === 0 ? (
+                <Text style={styles.offerMeta}>Sem entregas no historico ainda.</Text>
+              ) : null}
+
+              {history.map((delivery) => (
+                <View
+                  key={delivery.delivery_id}
+                  style={[
+                    styles.historyItemCard,
+                    delivery.delivery_status === 'FAILED' ? styles.historyItemCardFailed : null,
+                  ]}
+                >
+                  <View style={styles.historyItemTop}>
+                    <Text style={styles.historyItemRestaurant}>{delivery.restaurant_name}</Text>
+                    <Text
+                      style={[
+                        styles.statusChip,
+                        delivery.delivery_status === 'DELIVERED'
+                          ? styles.statusChipOk
+                          : styles.statusChipWarn,
+                      ]}
+                    >
+                      {delivery.delivery_status}
+                    </Text>
+                  </View>
+                  <Text style={styles.historyItemAddress}>{delivery.dropoff_address}</Text>
+                  <View style={styles.historyItemMetaRow}>
+                    <Text style={styles.historyItemMeta}>
+                      Total: EUR {Number(delivery.order_total).toFixed(2)}
+                    </Text>
+                    <Text style={styles.historyItemFee}>
+                      Taxa: EUR {Number(delivery.delivery_fee).toFixed(2)}
+                    </Text>
+                  </View>
+                  {delivery.delivery_time ? (
+                    <Text style={styles.historyItemMeta}>
+                      Concluida: {new Date(delivery.delivery_time).toLocaleString()}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -943,5 +1585,242 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 16,
     fontWeight: '700',
+  },
+  offerModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  offerModalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 22,
+  },
+  offerModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  offerModalTitle: {
+    color: '#0f172a',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  offerModalClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offerModalCloseText: {
+    color: '#475569',
+    fontSize: 22,
+    lineHeight: 22,
+  },
+  offerCountdown: {
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  offerCountdownLabel: {
+    color: '#065f46',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  offerCountdownValue: {
+    color: '#065f46',
+    fontSize: 32,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  offerCountdownDanger: {
+    color: '#b91c1c',
+  },
+  offerModalBody: {
+    marginTop: 12,
+  },
+  offerReasonLabel: {
+    marginTop: 14,
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dangerBtn: {
+    marginTop: 12,
+    borderRadius: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fff5f5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  dangerBtnFill: {
+    flex: 1,
+    marginTop: 0,
+    backgroundColor: '#dc2626',
+    borderColor: '#dc2626',
+  },
+  dangerBtnText: {
+    color: '#b91c1c',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  dangerBtnTextFill: {
+    color: '#fff',
+  },
+  failModalCard: {
+    margin: 16,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 18,
+  },
+  failModalSubtitle: {
+    color: '#64748b',
+    fontSize: 13,
+    marginTop: 6,
+  },
+  failReasonInput: {
+    minHeight: 72,
+    textAlignVertical: 'top',
+  },
+  confirmSummary: {
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  offerMeta: {
+    marginTop: 10,
+    color: '#64748b',
+    fontSize: 13,
+  },
+  historyLink: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  historyLinkText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  historyModalCard: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 18,
+    maxHeight: '92%',
+  },
+  historyStatsRow: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  historyStatCard: {
+    flex: 1,
+    borderRadius: 12,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  historyStatLabel: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  historyStatValue: {
+    marginTop: 4,
+    color: '#0f172a',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  historyFailedNote: {
+    marginTop: 10,
+    color: '#b91c1c',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  historyListHeader: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 10,
+  },
+  historyList: {
+    marginTop: 10,
+    maxHeight: 360,
+  },
+  historyListContent: {
+    paddingBottom: 12,
+  },
+  historyItemCard: {
+    borderWidth: 1,
+    borderColor: '#e4e7ec',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+  },
+  historyItemCardFailed: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  historyItemTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  historyItemRestaurant: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '800',
+    flex: 1,
+    paddingRight: 8,
+  },
+  historyItemAddress: {
+    marginTop: 4,
+    color: '#475569',
+    fontSize: 12,
+  },
+  historyItemMetaRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  historyItemMeta: {
+    color: '#475569',
+    fontSize: 12,
+  },
+  historyItemFee: {
+    color: '#0b9b3f',
+    fontSize: 12,
+    fontWeight: '800',
   },
 })

@@ -104,6 +104,52 @@ export function subscribeToOrderTrackingTopic({
   }
 }
 
+export function subscribeToCustomerOrdersTopic({
+  customerId,
+  authToken,
+  devUserId,
+  onEvent,
+  onError,
+}) {
+  const echo = getEchoClient({ authToken, devUserId })
+  const channelName = `customer.${customerId}.orders`
+  const channel = echo.private(channelName)
+
+  listenMany(
+    channel,
+    [
+      'ORDER_CREATED',
+      'ORDER_CONFIRMED',
+      'ORDER_REJECTED',
+      'ORDER_PREPARING',
+      'ORDER_READY',
+      'ORDER_OUT_FOR_DELIVERY',
+      'ORDER_DELIVERED',
+      'ORDER_CANCELLED',
+      'ORDER_COURIER_ASSIGNED',
+      'PAYMENT_CREATED',
+      'PAYMENT_COMPLETED',
+      'PAYMENT_FAILED',
+      'PAYMENT_EXPIRED',
+    ],
+    (eventName, payload) => {
+      if (onEvent) {
+        onEvent(eventName, payload)
+      }
+    },
+  )
+
+  channel.error((error) => {
+    if (onError) {
+      onError(error)
+    }
+  })
+
+  return () => {
+    echo.leave(channelName)
+  }
+}
+
 export function subscribeToCourierJobsTopic({
   courierId,
   authToken,

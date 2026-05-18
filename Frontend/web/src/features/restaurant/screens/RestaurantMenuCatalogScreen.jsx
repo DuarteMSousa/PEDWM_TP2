@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  createChainCategory,
   createRestaurantMenuProduct,
+  deleteChainCategory,
   deleteRestaurantMenuProduct,
+  fetchChainCategories,
   fetchRestaurantMenuProducts,
+  updateChainCategory,
   updateRestaurantMenuProduct,
 } from '../../../services/restaurantOpsService'
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 
 function categoryLabel(value) {
   return value?.trim() || 'Sem categoria'
@@ -33,6 +38,13 @@ export function RestaurantMenuCatalogScreen({ session }) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [errorText, setErrorText] = useState('')
   const [infoText, setInfoText] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [showCategoriesModal, setShowCategoriesModal] = useState(false)
+  const [chainCategories, setChainCategories] = useState([])
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [categoryDraft, setCategoryDraft] = useState({ id: '', name: '' })
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null)
+  const [productOptionGroups, setProductOptionGroups] = useState([])
 
   const loadProducts = useCallback(async () => {
     try {
@@ -131,15 +143,21 @@ export function RestaurantMenuCatalogScreen({ session }) {
     }
   }
 
-  async function handleDelete(product) {
+  function requestDelete(product) {
+    setDeleteTarget(product)
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return
     try {
       setSaving(true)
       const result = await deleteRestaurantMenuProduct({
         session,
-        restaurantProductId: product.restaurant_product_id,
+        restaurantProductId: deleteTarget.restaurant_product_id,
       })
 
-      setInfoText(result.message ?? 'Produto removido.')
+      setInfoText(result.message ?? 'Produto desativado.')
+      setDeleteTarget(null)
       await loadProducts()
     } catch (error) {
       setErrorText(error.message)
@@ -168,6 +186,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
               ? null
               : Number(newProduct.estimated_preparation_time_min),
           is_available: Boolean(newProduct.is_available),
+          option_groups: productOptionGroups,
         },
       })
 
@@ -181,6 +200,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
         estimated_preparation_time_min: '',
         is_available: true,
       })
+      setProductOptionGroups([])
 
       await loadProducts()
     } catch (error) {
@@ -190,6 +210,134 @@ export function RestaurantMenuCatalogScreen({ session }) {
     }
   }
 
+  async function loadCategoriesForModal() {
+    if (!session.chainId) {
+      setErrorText('Sem chain_id na sessao.')
+      return
+    }
+    try {
+      const list = await fetchChainCategories({ session })
+      setChainCategories(list)
+    } catch (error) {
+      setErrorText(error.message)
+    }
+  }
+
+  function openCategoriesModal() {
+    setShowCategoriesModal(true)
+    loadCategoriesForModal()
+  }
+
+  async function handleCreateCategory() {
+    const name = newCategoryName.trim()
+    if (!name) {
+      setErrorText('Nome de categoria obrigatorio.')
+      return
+    }
+    try {
+      setSaving(true)
+      await createChainCategory({ session, name })
+      setNewCategoryName('')
+      await loadCategoriesForModal()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleSaveCategoryDraft() {
+    if (!categoryDraft.id || !categoryDraft.name.trim()) return
+    try {
+      setSaving(true)
+      await updateChainCategory({
+        session,
+        categoryId: categoryDraft.id,
+        name: categoryDraft.name,
+      })
+      setCategoryDraft({ id: '', name: '' })
+      await loadCategoriesForModal()
+      await loadProducts()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDeleteCategoryConfirmed() {
+    if (!deleteCategoryTarget) return
+    try {
+      setSaving(true)
+      await deleteChainCategory({ session, categoryId: deleteCategoryTarget.id })
+      setDeleteCategoryTarget(null)
+      await loadCategoriesForModal()
+      await loadProducts()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function addOptionGroup() {
+    setProductOptionGroups((current) => [
+      ...current,
+      { name: '', min_options: 0, max_options: 1, options: [] },
+    ])
+  }
+
+  function updateOptionGroup(index, patch) {
+    setProductOptionGroups((current) =>
+      current.map((group, idx) => (idx === index ? { ...group, ...patch } : group)),
+    )
+  }
+
+  function removeOptionGroup(index) {
+    setProductOptionGroups((current) => current.filter((_, idx) => idx !== index))
+  }
+
+  function addOptionToGroup(groupIndex) {
+    setProductOptionGroups((current) =>
+      current.map((group, idx) =>
+        idx === groupIndex
+          ? {
+              ...group,
+              options: [...group.options, { name: '', extra_price: 0, default_option: false }],
+            }
+          : group,
+      ),
+    )
+  }
+
+  function updateOption(groupIndex, optionIndex, patch) {
+    setProductOptionGroups((current) =>
+      current.map((group, gIdx) =>
+        gIdx === groupIndex
+          ? {
+              ...group,
+              options: group.options.map((option, oIdx) =>
+                oIdx === optionIndex ? { ...option, ...patch } : option,
+              ),
+            }
+          : group,
+      ),
+    )
+  }
+
+  function removeOption(groupIndex, optionIndex) {
+    setProductOptionGroups((current) =>
+      current.map((group, gIdx) =>
+        gIdx === groupIndex
+          ? {
+              ...group,
+              options: group.options.filter((_, oIdx) => oIdx !== optionIndex),
+            }
+          : group,
+      ),
+    )
+  }
+
   return (
     <section className="rb-page">
       <header className="rb-page-head rb-page-head-row">
@@ -197,9 +345,14 @@ export function RestaurantMenuCatalogScreen({ session }) {
           <h2>Gestao de Menu</h2>
           <p>Gerir categorias, pratos e precos</p>
         </div>
-        <button type="button" className="rb-primary" onClick={() => setShowCreateForm((state) => !state)}>
-          {showCreateForm ? 'Fechar formulario' : '+ Adicionar prato'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="rb-btn-outline" onClick={openCategoriesModal}>
+            Gerir categorias
+          </button>
+          <button type="button" className="rb-primary" onClick={() => setShowCreateForm((state) => !state)}>
+            {showCreateForm ? 'Fechar formulario' : '+ Adicionar prato'}
+          </button>
+        </div>
       </header>
 
       {showCreateForm ? (
@@ -255,6 +408,117 @@ export function RestaurantMenuCatalogScreen({ session }) {
               />
               {' '}Disponivel
             </label>
+            <div className="rb-option-editor">
+              <div className="rb-option-editor-head">
+                <strong>Grupos de opcoes</strong>
+                <button type="button" className="rb-btn-outline" onClick={addOptionGroup}>
+                  + Adicionar grupo
+                </button>
+              </div>
+              {productOptionGroups.length === 0 ? (
+                <small>Sem grupos. Util para escolhas como "tamanho" ou "molho".</small>
+              ) : null}
+
+              {productOptionGroups.map((group, groupIndex) => (
+                <div className="rb-option-group" key={`group-${groupIndex}`}>
+                  <div className="rb-option-group-head">
+                    <input
+                      placeholder="Nome do grupo (ex: Tamanho)"
+                      value={group.name}
+                      onChange={(event) =>
+                        updateOptionGroup(groupIndex, { name: event.target.value })
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="rb-icon-mini danger"
+                      onClick={() => removeOptionGroup(groupIndex)}
+                    >
+                      Remover grupo
+                    </button>
+                  </div>
+                  <div className="rb-option-group-rules">
+                    <label>
+                      Min
+                      <input
+                        type="number"
+                        min="0"
+                        value={group.min_options}
+                        onChange={(event) =>
+                          updateOptionGroup(groupIndex, {
+                            min_options: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Max
+                      <input
+                        type="number"
+                        min="1"
+                        value={group.max_options}
+                        onChange={(event) =>
+                          updateOptionGroup(groupIndex, {
+                            max_options: Number(event.target.value),
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+
+                  {group.options.map((option, optionIndex) => (
+                    <div className="rb-option-row" key={`option-${groupIndex}-${optionIndex}`}>
+                      <input
+                        placeholder="Nome opcao"
+                        value={option.name}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, { name: event.target.value })
+                        }
+                      />
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Extra"
+                        value={option.extra_price}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            extra_price: Number(event.target.value),
+                          })
+                        }
+                      />
+                      <label className="rb-option-default">
+                        <input
+                          type="checkbox"
+                          checked={option.default_option}
+                          onChange={(event) =>
+                            updateOption(groupIndex, optionIndex, {
+                              default_option: event.target.checked,
+                            })
+                          }
+                        />
+                        default
+                      </label>
+                      <button
+                        type="button"
+                        className="rb-icon-mini danger"
+                        onClick={() => removeOption(groupIndex, optionIndex)}
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    className="rb-btn-outline"
+                    onClick={() => addOptionToGroup(groupIndex)}
+                  >
+                    + Adicionar opcao
+                  </button>
+                </div>
+              ))}
+            </div>
+
             <button type="button" className="rb-primary" onClick={handleCreate} disabled={saving}>
               Criar prato
             </button>
@@ -317,7 +581,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
                     <button
                       type="button"
                       className="rb-icon-mini danger"
-                      onClick={() => handleDelete(product)}
+                      onClick={() => requestDelete(product)}
                     >
                       Apagar
                     </button>
@@ -380,6 +644,120 @@ export function RestaurantMenuCatalogScreen({ session }) {
 
       {infoText ? <p className="rb-prep-note">{infoText}</p> : null}
       {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Desativar produto"
+        description={`Vais desativar "${deleteTarget?.name ?? 'produto'}". Os clientes deixam de o ver no menu.`}
+        confirmLabel="Desativar"
+        destructive
+        loading={saving}
+        onCancel={() => {
+          if (!saving) setDeleteTarget(null)
+        }}
+        onConfirm={confirmDelete}
+      />
+
+      <ConfirmDialog
+        open={showCategoriesModal}
+        title="Gerir categorias"
+        description="Adicionar, renomear ou apagar categorias da cadeia."
+        confirmLabel="Fechar"
+        loading={saving}
+        onCancel={() => {
+          if (!saving) {
+            setShowCategoriesModal(false)
+            setCategoryDraft({ id: '', name: '' })
+          }
+        }}
+        onConfirm={() => {
+          if (!saving) {
+            setShowCategoriesModal(false)
+            setCategoryDraft({ id: '', name: '' })
+          }
+        }}
+      >
+        <div className="rb-categories-list">
+          {chainCategories.length === 0 ? <p>Sem categorias ainda.</p> : null}
+          {chainCategories.map((category) => (
+            <div key={category.id} className="rb-category-row">
+              {categoryDraft.id === category.id ? (
+                <>
+                  <input
+                    value={categoryDraft.name}
+                    onChange={(event) =>
+                      setCategoryDraft((current) => ({ ...current, name: event.target.value }))
+                    }
+                  />
+                  <div className="rb-card-actions">
+                    <button
+                      type="button"
+                      className="rb-icon-mini"
+                      onClick={handleSaveCategoryDraft}
+                      disabled={saving}
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      className="rb-icon-mini"
+                      onClick={() => setCategoryDraft({ id: '', name: '' })}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <strong>{category.name}</strong>
+                  <div className="rb-card-actions">
+                    <button
+                      type="button"
+                      className="rb-icon-mini"
+                      onClick={() =>
+                        setCategoryDraft({ id: category.id, name: category.name })
+                      }
+                    >
+                      Renomear
+                    </button>
+                    <button
+                      type="button"
+                      className="rb-icon-mini danger"
+                      onClick={() => setDeleteCategoryTarget(category)}
+                    >
+                      Apagar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="rb-category-form">
+          <input
+            placeholder="Nova categoria"
+            value={newCategoryName}
+            onChange={(event) => setNewCategoryName(event.target.value)}
+          />
+          <button type="button" className="rb-btn-accept" onClick={handleCreateCategory} disabled={saving}>
+            Criar
+          </button>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(deleteCategoryTarget)}
+        title="Apagar categoria"
+        description={`Apagar "${deleteCategoryTarget?.name ?? ''}" da cadeia. Pratos sem categoria ficam sem categoria.`}
+        confirmLabel="Apagar"
+        destructive
+        loading={saving}
+        onCancel={() => {
+          if (!saving) setDeleteCategoryTarget(null)
+        }}
+        onConfirm={handleDeleteCategoryConfirmed}
+      />
     </section>
   )
 }

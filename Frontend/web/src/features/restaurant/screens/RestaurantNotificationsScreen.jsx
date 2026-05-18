@@ -23,12 +23,13 @@ function normalizeNotification(payload) {
 
 export function RestaurantNotificationsScreen({ session }) {
   const [status, setStatus] = useState('offline')
-  const [isListening, setIsListening] = useState(false)
+  const [isListening, setIsListening] = useState(true)
   const [showUnreadOnly, setShowUnreadOnly] = useState(false)
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [errorText, setErrorText] = useState('')
+  const [infoText, setInfoText] = useState('')
 
   const unreadCount = useMemo(() => items.filter((item) => !item.read).length, [items])
 
@@ -111,6 +112,7 @@ export function RestaurantNotificationsScreen({ session }) {
           item.id === id ? { ...item, read: true, read_at: new Date().toISOString() } : item,
         ),
       )
+      setInfoText('Notificacao marcada como lida.')
     } catch (error) {
       setErrorText(error.message)
     } finally {
@@ -124,6 +126,7 @@ export function RestaurantNotificationsScreen({ session }) {
       await markAllOperatorNotificationsRead({ session })
       const nowIso = new Date().toISOString()
       setItems((current) => current.map((item) => ({ ...item, read: true, read_at: item.read_at ?? nowIso })))
+      setInfoText('Todas as notificacoes foram marcadas como lidas.')
     } catch (error) {
       setErrorText(error.message)
     } finally {
@@ -224,6 +227,7 @@ export function RestaurantNotificationsScreen({ session }) {
           ))}
         </article>
 
+        {infoText ? <p className="rb-success-note">{infoText}</p> : null}
         {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
       </section>
     </section>

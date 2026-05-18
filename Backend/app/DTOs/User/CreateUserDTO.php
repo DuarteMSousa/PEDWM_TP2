@@ -12,6 +12,8 @@ class CreateUserDTO extends Data
         public readonly string $email,
         public readonly string $password,
         public readonly string $user_type = UserType::CUSTOMER->value,
+        public readonly ?string $chain_id = null,
+        public readonly ?string $restaurant_id = null,
     ) {
     }
 
@@ -22,6 +24,8 @@ class CreateUserDTO extends Data
             email: $this->email,
             password: bcrypt($this->password),
             user_type: $this->user_type,
+            chain_id: $this->chain_id,
+            restaurant_id: $this->restaurant_id,
         );
     }
 }

@@ -3,6 +3,8 @@ input CreateUserInput {
     email: String!
     password: String!
     user_type: UserType! = CUSTOMER
+    chain_id: ID
+    restaurant_id: ID
 }
 
 input UpdateUserInput {

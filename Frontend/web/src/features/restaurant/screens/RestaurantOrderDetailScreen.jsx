@@ -1,88 +1,431 @@
-export function RestaurantOrderDetailScreen() {
-  const items = [
-    { name: 'Smash Burger', qty: 2, note: 'Sem cebola, extra cheddar', price: '23.80 EUR' },
-    { name: 'Batata Trufada', qty: 1, note: 'Molho a parte', price: '4.50 EUR' },
-    { name: 'Kombucha Ginger', qty: 1, note: '330ml', price: '3.20 EUR' },
-  ]
+import { useCallback, useEffect, useState } from 'react'
+import {
+  acceptRestaurantOrder,
+  cancelRestaurantOrder,
+  fetchRestaurantOrderDetail,
+  markRestaurantOrderReady,
+  rejectRestaurantOrder,
+  startPreparingRestaurantOrder,
+  updateOrderItemStatus,
+} from '../../../services/restaurantOpsService'
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 
-  const rejectionReasons = [
-    'Rutura de stock',
-    'Capacidade da cozinha excedida',
-    'Falha no pagamento',
-    'Endereco fora do raio',
-  ]
+function statusLabel(status) {
+  if (status === 'PENDING') return 'Pendente'
+  if (status === 'CONFIRMED') return 'Confirmado'
+  if (status === 'PREPARING') return 'A preparar'
+  if (status === 'READY') return 'Pronto'
+  if (status === 'OUT_FOR_DELIVERY') return 'Em entrega'
+  if (status === 'DELIVERED') return 'Entregue'
+  if (status === 'CANCELLED') return 'Cancelado'
+  return status ?? '-'
+}
+
+function statusTone(status) {
+  if (status === 'PENDING') return 'pending'
+  if (status === 'CONFIRMED' || status === 'PREPARING') return 'prep'
+  if (status === 'READY' || status === 'OUT_FOR_DELIVERY' || status === 'DELIVERED') return 'done'
+  return 'off'
+}
+
+function formatTime(value) {
+  if (!value) return '-'
+  return new Date(value).toLocaleString()
+}
+
+function formatEventType(eventType) {
+  return String(eventType ?? '')
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/(^\w|\s\w)/g, (match) => match.toUpperCase())
+}
+
+export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelectOrder, onNavigate }) {
+  const [order, setOrder] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [errorText, setErrorText] = useState('')
+  const [infoText, setInfoText] = useState('')
+  const [rejectOpen, setRejectOpen] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+
+  const loadDetail = useCallback(async () => {
+    if (!selectedOrderId) {
+      setOrder(null)
+      return
+    }
+    try {
+      setLoading(true)
+      const data = await fetchRestaurantOrderDetail({ session, orderId: selectedOrderId })
+      setOrder(data)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [session, selectedOrderId])
+
+  useEffect(() => {
+    queueMicrotask(() => loadDetail())
+  }, [loadDetail])
+
+  async function withBusy(action, message) {
+    try {
+      setBusy(true)
+      await action()
+      if (message) setInfoText(message)
+      setErrorText('')
+      await loadDetail()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function handleOpenChat() {
+    if (onSelectOrder) onSelectOrder(selectedOrderId)
+    if (onNavigate) onNavigate('chat')
+  }
+
+  if (!selectedOrderId) {
+    return (
+      <section className="rb-page">
+        <header className="rb-page-head">
+          <h2>Detalhe do pedido</h2>
+          <p>Selecciona um pedido no Dashboard ou Cozinha.</p>
+        </header>
+        <div className="rb-empty-state">
+          <strong>Nenhum pedido selecionado.</strong>
+          <p>Volta ao dashboard para escolher um pedido.</p>
+          <button type="button" className="rb-btn-outline" onClick={() => onNavigate?.('dashboard')}>
+            Ir para Dashboard
+          </button>
+        </div>
+      </section>
+    )
+  }
+
+  if (loading && !order) {
+    return (
+      <section className="rb-page">
+        <header className="rb-page-head">
+          <h2>Detalhe do pedido</h2>
+          <p>A carregar...</p>
+        </header>
+      </section>
+    )
+  }
+
+  if (!order) {
+    return (
+      <section className="rb-page">
+        <header className="rb-page-head">
+          <h2>Pedido nao encontrado</h2>
+        </header>
+        {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
+      </section>
+    )
+  }
+
+  const subtotalDiscounts = (order.discounts ?? []).reduce(
+    (sum, discount) => sum + Number(discount.discount_amount ?? 0),
+    0,
+  )
 
   return (
-    <section className="workspace">
-      <header className="workspace-header">
-        <h2>Detalhe do pedido FB-1042</h2>
-        <p>Validacao completa antes de aceitar ou rejeitar a encomenda.</p>
+    <section className="rb-page">
+      <header className="rb-page-head rb-page-head-row">
+        <div>
+          <h2>Pedido #{String(order.id).slice(0, 8)}</h2>
+          <p>{order.user?.name ?? order.user_id} - {formatTime(order.created_at)}</p>
+        </div>
+        <span className={`rb-chip ${statusTone(order.status)}`}>{statusLabel(order.status)}</span>
       </header>
 
-      <div className="uc-row">
-        {['UC08', 'UC14'].map((uc) => (
-          <span key={uc} className="uc-pill">
-            {uc}
-          </span>
-        ))}
-      </div>
-
-      <div className="workspace-columns">
-        <article className="panel">
-          <h3>Resumo da encomenda</h3>
-          <p className="panel-sub">Cliente: Joana Cardoso · Criado as 12:14</p>
-          {items.map((item) => (
-            <div className="order-card" key={item.name}>
-              <div className="order-top">
-                <span className="order-id">
-                  {item.qty}x {item.name}
-                </span>
-                <span className="badge ok">{item.price}</span>
-              </div>
-              <div className="row-meta">
-                <span>{item.note}</span>
-              </div>
-            </div>
-          ))}
-          <div className="notice-row">
-            <span>
-              Metodo pagamento
-              <br />
-              <small>MBWay confirmado</small>
-            </span>
-            <span className="badge ok">COMPLETED</span>
+      <div className="rb-detail-grid">
+        <article className="rb-table-card">
+          <div className="rb-table-head">
+            <h3>Items</h3>
+            <strong>{Number(order.total).toFixed(2)} EUR</strong>
           </div>
-          <div className="notice-row">
-            <span>
-              Morada entrega
-              <br />
-              <small>Rua 5 de Outubro 201, Porto</small>
-            </span>
-            <span className="badge warn">3.1 km</span>
-          </div>
-        </article>
-
-        <article className="panel">
-          <h3>Decisao do restaurante</h3>
-          <p className="panel-sub">Ao rejeitar, motivo e obrigatorio para auditoria e notificacao.</p>
-          <div className="timeline">
-            {rejectionReasons.map((reason) => (
-              <div className="timeline-item" key={reason}>
-                <strong>{reason}</strong>
-                <span>Disponivel como motivo de rejeicao</span>
+          <div className="rb-prep-lines">
+            {(order.items ?? []).map((item) => (
+              <div className="rb-prep-line" key={item.id}>
+                <div>
+                  <strong>{item.quantity}x {item.product_name_snapshot}</strong>
+                  {(item.options ?? []).length > 0 ? (
+                    <div className="rb-detail-options">
+                      {item.options.map((option) => (
+                        <small key={option.id}>
+                          + {option.option_name_snapshot}
+                          {Number(option.extra_price) > 0
+                            ? ` (${Number(option.extra_price).toFixed(2)} EUR)`
+                            : ''}
+                        </small>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rb-step-pills">
+                  <span className={`rb-chip ${statusTone(item.status)}`}>{statusLabel(item.status)}</span>
+                  <strong>{Number(item.total_price ?? 0).toFixed(2)} EUR</strong>
+                </div>
               </div>
             ))}
           </div>
-          <div className="mini-actions">
-            <button type="button" className="mini-button">
-              Aceitar pedido
-            </button>
-            <button type="button" className="mini-button">
-              Rejeitar com motivo
-            </button>
+
+          {subtotalDiscounts > 0 ? (
+            <div className="rb-detail-row">
+              <span>Descontos aplicados</span>
+              <strong>-{subtotalDiscounts.toFixed(2)} EUR</strong>
+            </div>
+          ) : null}
+
+          <div className="rb-detail-row total">
+            <span>Total a receber</span>
+            <strong>{Number(order.total).toFixed(2)} EUR</strong>
           </div>
         </article>
+
+        <article className="rb-table-card">
+          <div className="rb-table-head">
+            <h3>Cliente & Entrega</h3>
+          </div>
+          <div className="rb-detail-row">
+            <span>Cliente</span>
+            <strong>{order.user?.name ?? '-'}</strong>
+          </div>
+          <div className="rb-detail-row">
+            <span>Email</span>
+            <strong>{order.user?.email ?? '-'}</strong>
+          </div>
+          <div className="rb-detail-row">
+            <span>Morada</span>
+            <strong>
+              {order.address
+                ? `${order.address.street}, ${order.address.city} (${order.address.postal_code})`
+                : '-'}
+            </strong>
+          </div>
+          <div className="rb-detail-row">
+            <span>Pagamento</span>
+            <strong>
+              {order.payment ? `${order.payment.method} - ${order.payment.status}` : '-'}
+            </strong>
+          </div>
+          {order.payment?.paid_at ? (
+            <div className="rb-detail-row">
+              <span>Pago em</span>
+              <strong>{formatTime(order.payment.paid_at)}</strong>
+            </div>
+          ) : null}
+          {order.delivery ? (
+            <>
+              <div className="rb-detail-row">
+                <span>Estafeta</span>
+                <strong>
+                  {order.delivery.courier?.user?.name ?? order.delivery.courier_id ?? 'Nao atribuido'}
+                </strong>
+              </div>
+              <div className="rb-detail-row">
+                <span>Estado entrega</span>
+                <strong>{order.delivery.status}</strong>
+              </div>
+              {order.delivery.pickup_time ? (
+                <div className="rb-detail-row">
+                  <span>Recolha</span>
+                  <strong>{formatTime(order.delivery.pickup_time)}</strong>
+                </div>
+              ) : null}
+              {order.delivery.delivery_time ? (
+                <div className="rb-detail-row">
+                  <span>Entregue</span>
+                  <strong>{formatTime(order.delivery.delivery_time)}</strong>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </article>
       </div>
+
+      <article className="rb-table-card">
+        <div className="rb-table-head">
+          <h3>Timeline de eventos</h3>
+          <button type="button" className="rb-btn-outline" onClick={loadDetail} disabled={loading}>
+            {loading ? 'A atualizar...' : 'Atualizar'}
+          </button>
+        </div>
+        {(order.events ?? []).length === 0 ? (
+          <p className="rb-event-empty">Sem eventos registados.</p>
+        ) : (
+          <div className="rb-event-timeline">
+            {[...(order.events ?? [])].reverse().map((event) => (
+              <div className="rb-event-item" key={`${event.event_type}-${event.timestamp}`}>
+                <span>{formatEventType(event.event_type)}</span>
+                <small>{formatTime(event.timestamp)}</small>
+              </div>
+            ))}
+          </div>
+        )}
+      </article>
+
+      <div className="rb-detail-actions">
+        {order.status === 'PENDING' ? (
+          <>
+            <button
+              type="button"
+              className="rb-btn-outline"
+              disabled={busy}
+              onClick={() => setRejectOpen(true)}
+            >
+              Rejeitar
+            </button>
+            <button
+              type="button"
+              className="rb-btn-accept"
+              disabled={busy}
+              onClick={() =>
+                withBusy(
+                  () =>
+                    acceptRestaurantOrder({
+                      session,
+                      orderId: order.id,
+                    }),
+                  'Encomenda aceite.',
+                )
+              }
+            >
+              Aceitar
+            </button>
+          </>
+        ) : null}
+        {order.status === 'CONFIRMED' ? (
+          <button
+            type="button"
+            className="rb-btn-accept"
+            disabled={busy}
+            onClick={() =>
+              withBusy(
+                () => startPreparingRestaurantOrder({ session, orderId: order.id }),
+                'Encomenda em preparacao.',
+              )
+            }
+          >
+            Iniciar preparo
+          </button>
+        ) : null}
+        {order.status === 'PREPARING' ? (
+          <button
+            type="button"
+            className="rb-btn-accept"
+            disabled={busy}
+            onClick={() =>
+              withBusy(
+                () => markRestaurantOrderReady({ session, orderId: order.id }),
+                'Encomenda pronta para recolha.',
+              )
+            }
+          >
+            Marcar pronto
+          </button>
+        ) : null}
+        {['CONFIRMED', 'PREPARING'].includes(order.status) ? (
+          <button
+            type="button"
+            className="rb-btn-outline"
+            disabled={busy}
+            onClick={() => setCancelOpen(true)}
+          >
+            Cancelar pedido
+          </button>
+        ) : null}
+        <button type="button" className="rb-btn-outline" onClick={handleOpenChat}>
+          Abrir chat
+        </button>
+      </div>
+
+      {infoText ? <p className="rb-success-note">{infoText}</p> : null}
+      {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
+
+      <ConfirmDialog
+        open={rejectOpen}
+        title="Rejeitar encomenda"
+        confirmLabel="Rejeitar"
+        destructive
+        loading={busy}
+        onCancel={() => {
+          if (!busy) {
+            setRejectOpen(false)
+            setRejectReason('')
+          }
+        }}
+        onConfirm={() =>
+          withBusy(
+            () =>
+              rejectRestaurantOrder({
+                session,
+                orderId: order.id,
+                reason: rejectReason,
+              }),
+            'Encomenda rejeitada.',
+          ).then(() => {
+            setRejectOpen(false)
+            setRejectReason('')
+          })
+        }
+      >
+        <label>
+          Motivo (opcional)
+          <textarea
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+            placeholder="Ex: rutura de stock"
+            disabled={busy}
+          />
+        </label>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        title="Cancelar encomenda"
+        confirmLabel="Cancelar encomenda"
+        destructive
+        loading={busy}
+        onCancel={() => {
+          if (!busy) {
+            setCancelOpen(false)
+            setCancelReason('')
+          }
+        }}
+        onConfirm={() =>
+          withBusy(
+            () =>
+              cancelRestaurantOrder({
+                session,
+                orderId: order.id,
+                reason: cancelReason,
+              }),
+            'Encomenda cancelada.',
+          ).then(() => {
+            setCancelOpen(false)
+            setCancelReason('')
+          })
+        }
+      >
+        <label>
+          Motivo (opcional)
+          <textarea
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            placeholder="Ex: avaria de equipamento"
+            disabled={busy}
+          />
+        </label>
+      </ConfirmDialog>
     </section>
   )
 }

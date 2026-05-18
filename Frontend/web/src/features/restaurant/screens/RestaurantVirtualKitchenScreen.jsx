@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   acceptRestaurantOrder,
+  cancelRestaurantOrder,
   fetchRestaurantActiveOrders,
   markRestaurantOrderReady,
   rejectRestaurantOrder,
   startPreparingRestaurantOrder,
   updateOrderItemStatus,
 } from '../../../services/restaurantOpsService'
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
+import { subscribeToRestaurantOrdersTopic } from '../../../services/realtime/topicsRealtime'
 
 function mapOrderTone(status) {
   if (status === 'PENDING') return 'pending'
@@ -36,6 +39,13 @@ function formatTime(value) {
   return new Date(value).toLocaleTimeString()
 }
 
+function formatEventType(eventType) {
+  return String(eventType ?? '')
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/(^\w|\s\w)/g, (match) => match.toUpperCase())
+}
+
 export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavigate }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -43,6 +53,11 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
   const [busyItemId, setBusyItemId] = useState('')
   const [errorText, setErrorText] = useState('')
   const [infoText, setInfoText] = useState('')
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [dialogLoading, setDialogLoading] = useState(false)
 
   const loadOrders = useCallback(async () => {
     try {
@@ -62,9 +77,30 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
       loadOrders()
     })
 
-    const timer = setInterval(loadOrders, 15000)
+    const timer = setInterval(loadOrders, 30000)
     return () => clearInterval(timer)
   }, [loadOrders])
+
+  useEffect(() => {
+    if (!session?.restaurantId) return undefined
+    let unsubscribe = null
+    try {
+      unsubscribe = subscribeToRestaurantOrdersTopic({
+        restaurantId: session.restaurantId,
+        authToken: session.token,
+        devUserId: session.devUserId,
+        onEvent: () => {
+          loadOrders()
+        },
+        onError: () => {},
+      })
+    } catch {
+      // ignore
+    }
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [session?.restaurantId, session?.token, session?.devUserId, loadOrders])
 
   const pendingOrders = useMemo(
     () => orders.filter((order) => order.order_status === 'PENDING'),
@@ -89,16 +125,57 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
     }
   }
 
-  async function handleReject(orderId) {
+  function requestReject(order) {
+    setRejectTarget(order)
+    setRejectReason('')
+  }
+
+  function requestCancel(order) {
+    setCancelTarget(order)
+    setCancelReason('')
+  }
+
+  async function handleConfirmReject() {
+    if (!rejectTarget) return
     try {
-      setBusyOrderId(orderId)
-      await rejectRestaurantOrder({ session, orderId })
+      setDialogLoading(true)
+      setBusyOrderId(rejectTarget.order_id)
+      await rejectRestaurantOrder({
+        session,
+        orderId: rejectTarget.order_id,
+        reason: rejectReason,
+      })
       setInfoText('Encomenda rejeitada.')
+      setRejectTarget(null)
+      setRejectReason('')
       await loadOrders()
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setBusyOrderId('')
+      setDialogLoading(false)
+    }
+  }
+
+  async function handleConfirmCancel() {
+    if (!cancelTarget) return
+    try {
+      setDialogLoading(true)
+      setBusyOrderId(cancelTarget.order_id)
+      await cancelRestaurantOrder({
+        session,
+        orderId: cancelTarget.order_id,
+        reason: cancelReason,
+      })
+      setInfoText('Encomenda cancelada.')
+      setCancelTarget(null)
+      setCancelReason('')
+      await loadOrders()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setBusyOrderId('')
+      setDialogLoading(false)
     }
   }
 
@@ -198,7 +275,7 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
                 type="button"
                 className="rb-btn-outline"
                 disabled={busyOrderId === order.order_id}
-                onClick={() => handleReject(order.order_id)}
+                onClick={() => requestReject(order)}
               >
                 Rejeitar
               </button>
@@ -292,6 +369,20 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
             })}
           </div>
 
+          <div className="rb-event-timeline">
+            <strong>Timeline do pedido</strong>
+            {(order.events ?? []).length === 0 ? (
+              <p className="rb-event-empty">Sem eventos registados.</p>
+            ) : (
+              order.events.slice(-4).reverse().map((event) => (
+                <div className="rb-event-item" key={`${event.event_type}-${event.timestamp}`}>
+                  <span>{formatEventType(event.event_type)}</span>
+                  <small>{formatTime(event.timestamp)}</small>
+                </div>
+              ))
+            )}
+          </div>
+
           <footer className="rb-prep-actions">
             <button
               type="button"
@@ -327,12 +418,74 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
             >
               Abrir chat
             </button>
+            {['CONFIRMED', 'PREPARING'].includes(order.order_status) ? (
+              <button
+                type="button"
+                className="rb-btn-outline"
+                onClick={() => requestCancel(order)}
+                disabled={busyOrderId === order.order_id}
+              >
+                Cancelar pedido
+              </button>
+            ) : null}
           </footer>
         </article>
       ))}
 
       {infoText ? <p className="rb-prep-note">{infoText}</p> : null}
       {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
+
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="Rejeitar encomenda"
+        description="O motivo e usado em auditoria e notifica o cliente."
+        confirmLabel="Rejeitar"
+        destructive
+        loading={dialogLoading}
+        onCancel={() => {
+          if (!dialogLoading) {
+            setRejectTarget(null)
+            setRejectReason('')
+          }
+        }}
+        onConfirm={handleConfirmReject}
+      >
+        <label>
+          Motivo (opcional)
+          <textarea
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+            placeholder="Ex: rutura de stock"
+            disabled={dialogLoading}
+          />
+        </label>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Cancelar encomenda em preparacao"
+        description="O cliente recebera notificacao de cancelamento. Indica o motivo (opcional)."
+        confirmLabel="Cancelar encomenda"
+        destructive
+        loading={dialogLoading}
+        onCancel={() => {
+          if (!dialogLoading) {
+            setCancelTarget(null)
+            setCancelReason('')
+          }
+        }}
+        onConfirm={handleConfirmCancel}
+      >
+        <label>
+          Motivo (opcional)
+          <textarea
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            placeholder="Ex: avaria de equipamento"
+            disabled={dialogLoading}
+          />
+        </label>
+      </ConfirmDialog>
     </section>
   )
 }

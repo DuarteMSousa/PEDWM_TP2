@@ -38,6 +38,41 @@ export function subscribeToUserNotificationsTopic({
   return () => echo.leave(channelName)
 }
 
+export function subscribeToRestaurantOrdersTopic({
+  restaurantId,
+  authToken,
+  devUserId,
+  onEvent,
+  onError,
+}) {
+  const echo = getEchoClient({ authToken, devUserId })
+  const channelName = `restaurant.${restaurantId}.orders`
+  const channel = echo.private(channelName)
+
+  const eventNames = [
+    'ORDER_CREATED',
+    'ORDER_CONFIRMED',
+    'ORDER_REJECTED',
+    'ORDER_PREPARING',
+    'ORDER_READY',
+    'ORDER_OUT_FOR_DELIVERY',
+    'ORDER_DELIVERED',
+    'ORDER_CANCELLED',
+  ]
+
+  eventNames.forEach((eventName) => {
+    channel.listen(`.${eventName}`, (payload) => {
+      if (onEvent) onEvent(eventName, payload)
+    })
+  })
+
+  channel.error((error) => {
+    if (onError) onError(error)
+  })
+
+  return () => echo.leave(channelName)
+}
+
 export function subscribeToOrderTrackingTopic({
   orderId,
   authToken,

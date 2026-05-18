@@ -32,6 +32,10 @@ function mapOrder(order) {
     delivery_id: order.delivery?.id ?? null,
     delivery_status: order.delivery?.status ?? null,
     courier_id: order.delivery?.courier_id ?? null,
+    events: (order.events ?? []).map((event) => ({
+      event_type: event.event_type,
+      timestamp: event.timestamp,
+    })),
     items: (order.items ?? []).map((item) => ({
       order_item_id: item.id,
       name: item.product_name_snapshot,
@@ -100,6 +104,54 @@ const OPERATOR_RESTAURANT_QUERY = `
   }
 `
 
+const RESTAURANT_ORDER_DETAIL_QUERY = `
+  query RestaurantOrder($restaurantId: ID!, $orderId: ID!) {
+    restaurantOrder(restaurant_id: $restaurantId, order_id: $orderId) {
+      id
+      user_id
+      restaurant_id
+      status
+      total
+      restaurant_name_snapshot
+      created_at
+      updated_at
+      user { id name email }
+      address { street city postal_code country latitude longitude }
+      payment { id method status amount transaction_id paid_at expired_at }
+      delivery {
+        id
+        courier_id
+        status
+        pickup_time
+        delivery_time
+        delivery_fee
+        courier { user_id status user { name } }
+      }
+      events { event_type timestamp payload }
+      items {
+        id
+        status
+        quantity
+        unit_price
+        product_name_snapshot
+        total_price
+        options {
+          id
+          option_name_snapshot
+          extra_price
+        }
+      }
+      discounts {
+        id
+        name_snapshot
+        discount_amount
+        discount_type
+        discount_target
+      }
+    }
+  }
+`
+
 const RESTAURANT_ACTIVE_ORDERS_QUERY = `
   query RestaurantActiveOrders($restaurantId: ID!) {
     restaurantActiveOrders(restaurant_id: $restaurantId) {
@@ -112,6 +164,7 @@ const RESTAURANT_ACTIVE_ORDERS_QUERY = `
       user { id name }
       address { street city }
       delivery { id courier_id status }
+      events { event_type timestamp }
       items {
         id
         status
@@ -135,6 +188,15 @@ const ACCEPT_RESTAURANT_ORDER_MUTATION = `
 const REJECT_RESTAURANT_ORDER_MUTATION = `
   mutation RejectRestaurantOrder($input: RestaurantOrderDecisionInput!) {
     rejectRestaurantOrder(input: $input) {
+      id
+      status
+    }
+  }
+`
+
+const CANCEL_RESTAURANT_ORDER_MUTATION = `
+  mutation CancelRestaurantOrder($input: RestaurantOrderDecisionInput!) {
+    cancelRestaurantOrder(input: $input) {
       id
       status
     }
@@ -195,6 +257,83 @@ const RESTAURANT_MENU_QUERY = `
   }
 `
 
+const CHAIN_PROMOTIONS_QUERY = `
+  query ChainPromotions($chainId: ID!) {
+    chainPromotions(chain_id: $chainId) {
+      id
+      name
+      description
+      type
+      target
+      start_date
+      end_date
+      promotionItems {
+        id
+        product_id
+        category_id
+        discount
+      }
+    }
+  }
+`
+
+const CHAIN_COUPONS_QUERY = `
+  query ChainCoupons($chainId: ID!) {
+    chainCoupons(chain_id: $chainId) {
+      id
+      code
+      description
+      type
+      target
+      expiry_date
+    }
+  }
+`
+
+const CREATE_PROMOTION_MUTATION = `
+  mutation CreatePromotion($actorUserId: ID!, $input: CreatePromotionInput!) {
+    createPromotion(actor_user_id: $actorUserId, input: $input) {
+      id
+      name
+    }
+  }
+`
+
+const DELETE_PROMOTION_MUTATION = `
+  mutation DeletePromotion($actorUserId: ID!, $id: ID!) {
+    deletePromotion(actor_user_id: $actorUserId, id: $id)
+  }
+`
+
+const CREATE_COUPON_MUTATION = `
+  mutation CreateCoupon($input: CreateCouponInput!) {
+    createCoupon(input: $input) {
+      id
+      code
+    }
+  }
+`
+
+const DELETE_COUPON_MUTATION = `
+  mutation DeleteCoupon($id: ID!) {
+    deleteCoupon(id: $id)
+  }
+`
+
+const TARGET_REVIEWS_QUERY = `
+  query TargetReviews($targetType: ReviewTargetTypeInput!, $targetId: ID!, $perPage: Int) {
+    targetReviews(target_type: $targetType, target_id: $targetId, per_page: $perPage) {
+      id
+      user_id
+      rating
+      comment
+      target_type
+      target_id
+      created_at
+    }
+  }
+`
+
 const RESTAURANT_QUERY = `
   query Restaurant($id: ID!) {
     restaurant(id: $id) {
@@ -210,6 +349,31 @@ const CHAIN_CATEGORIES_QUERY = `
     chainCategories(chain_id: $chainId) {
       id
       name
+    }
+  }
+`
+
+const UPDATE_CATEGORY_MUTATION = `
+  mutation UpdateCategory($id: ID!, $input: UpdateCategoryInput!) {
+    updateCategory(id: $id, input: $input) {
+      id
+      name
+    }
+  }
+`
+
+const DELETE_CATEGORY_MUTATION = `
+  mutation DeleteCategory($id: ID!) {
+    deleteCategory(id: $id)
+  }
+`
+
+const UPDATE_PRODUCT_MUTATION = `
+  mutation UpdateProduct($actorUserId: ID!, $id: ID!, $input: UpdateProductInput!) {
+    updateProduct(actor_user_id: $actorUserId, id: $id, input: $input) {
+      id
+      name
+      price
     }
   }
 `
@@ -359,7 +523,7 @@ export async function bootstrapRestaurantSession({
   }
 
   if (!resolvedRestaurant?.id) {
-    throw new Error('Nao foi possivel resolver o restaurante do operador.')
+    throw new Error('Conta sem restaurante associado. Cria um restaurante ou pede associacao ao administrador.')
   }
 
   return {
@@ -427,6 +591,19 @@ export async function registerRestaurantUser({
   })
 }
 
+export async function fetchRestaurantOrderDetail({ session, orderId }) {
+  if (!orderId) return null
+  const data = await graphqlRequest({
+    query: RESTAURANT_ORDER_DETAIL_QUERY,
+    variables: {
+      restaurantId: session.restaurantId,
+      orderId,
+    },
+    ...requestOptions(session),
+  })
+  return data.restaurantOrder ?? null
+}
+
 export async function fetchRestaurantActiveOrders(session) {
   const data = await graphqlRequest({
     query: RESTAURANT_ACTIVE_ORDERS_QUERY,
@@ -465,7 +642,7 @@ export async function rejectRestaurantOrder({ session, orderId, reason = null })
       input: {
         actor_user_id: actorUserId(session),
         order_id: orderId,
-        reason,
+        reason: reason && String(reason).trim() !== '' ? String(reason).trim() : null,
       },
     },
     ...requestOptions(session),
@@ -475,6 +652,26 @@ export async function rejectRestaurantOrder({ session, orderId, reason = null })
     ok: true,
     order_id: data.rejectRestaurantOrder.id,
     status: data.rejectRestaurantOrder.status,
+  }
+}
+
+export async function cancelRestaurantOrder({ session, orderId, reason = null }) {
+  const data = await graphqlRequest({
+    query: CANCEL_RESTAURANT_ORDER_MUTATION,
+    variables: {
+      input: {
+        actor_user_id: actorUserId(session),
+        order_id: orderId,
+        reason: reason && String(reason).trim() !== '' ? String(reason).trim() : null,
+      },
+    },
+    ...requestOptions(session),
+  })
+
+  return {
+    ok: true,
+    order_id: data.cancelRestaurantOrder.id,
+    status: data.cancelRestaurantOrder.status,
   }
 }
 
@@ -619,7 +816,18 @@ export async function createRestaurantMenuProduct({ session, input }) {
         name: input.name,
         price: Number(input.price),
         description: input.description,
-        option_groups: [],
+        option_groups: Array.isArray(input.option_groups)
+          ? input.option_groups.map((group) => ({
+              name: group.name,
+              min_options: Number(group.min_options ?? 0),
+              max_options: Number(group.max_options ?? 1),
+              options: (group.options ?? []).map((option) => ({
+                name: option.name,
+                extra_price: Number(option.extra_price ?? 0),
+                default_option: Boolean(option.default_option),
+              })),
+            }))
+          : [],
       },
     },
     ...requestOptions(session),
@@ -690,6 +898,164 @@ export async function deleteRestaurantMenuProduct({ session, restaurantProductId
     restaurant_product_id: restaurantProductId,
     message: 'Produto desativado.',
   }
+}
+
+export async function fetchChainPromotions({ session, chainId }) {
+  const data = await graphqlRequest({
+    query: CHAIN_PROMOTIONS_QUERY,
+    variables: { chainId: chainId ?? session.chainId },
+    ...requestOptions(session),
+  })
+  return data.chainPromotions ?? []
+}
+
+export async function fetchChainCoupons({ session, chainId }) {
+  const data = await graphqlRequest({
+    query: CHAIN_COUPONS_QUERY,
+    variables: { chainId: chainId ?? session.chainId },
+    ...requestOptions(session),
+  })
+  return data.chainCoupons ?? []
+}
+
+export async function createChainPromotion({ session, input }) {
+  const data = await graphqlRequest({
+    query: CREATE_PROMOTION_MUTATION,
+    variables: {
+      actorUserId: actorUserId(session),
+      input: {
+        chain_id: session.chainId,
+        name: input.name,
+        description: input.description ?? null,
+        type: input.type,
+        target: input.target,
+        start_date: input.start_date ?? null,
+        end_date: input.end_date ?? null,
+        items: input.items ?? [],
+      },
+    },
+    ...requestOptions(session),
+  })
+  return data.createPromotion
+}
+
+export async function deleteChainPromotion({ session, promotionId }) {
+  const data = await graphqlRequest({
+    query: DELETE_PROMOTION_MUTATION,
+    variables: { actorUserId: actorUserId(session), id: promotionId },
+    ...requestOptions(session),
+  })
+  return { ok: Boolean(data.deletePromotion) }
+}
+
+export async function createChainCoupon({ session, input }) {
+  const data = await graphqlRequest({
+    query: CREATE_COUPON_MUTATION,
+    variables: {
+      input: {
+        chain_id: session.chainId,
+        code: input.code,
+        description: input.description ?? null,
+        type: input.type,
+        target: input.target,
+        discount: Number(input.discount),
+        min_order_total: input.min_order_total
+          ? Number(input.min_order_total)
+          : null,
+        max_discount_amount: input.max_discount_amount
+          ? Number(input.max_discount_amount)
+          : null,
+        max_uses: input.max_uses ? Number(input.max_uses) : null,
+        expiry_date: input.expiry_date ?? null,
+      },
+    },
+    ...requestOptions(session),
+  })
+  return data.createCoupon
+}
+
+export async function deleteChainCoupon({ session, couponId }) {
+  const data = await graphqlRequest({
+    query: DELETE_COUPON_MUTATION,
+    variables: { id: couponId },
+    ...requestOptions(session),
+  })
+  return { ok: Boolean(data.deleteCoupon) }
+}
+
+export async function fetchRestaurantReviews({ session, restaurantId, limit = 30 }) {
+  const data = await graphqlRequest({
+    query: TARGET_REVIEWS_QUERY,
+    variables: {
+      targetType: 'RESTAURANT',
+      targetId: restaurantId ?? session.restaurantId,
+      perPage: limit,
+    },
+    ...requestOptions(session),
+  })
+  return data.targetReviews ?? []
+}
+
+export async function fetchChainCategories({ session, chainId }) {
+  const data = await graphqlRequest({
+    query: CHAIN_CATEGORIES_QUERY,
+    variables: { chainId: chainId ?? session.chainId },
+    ...requestOptions(session),
+  })
+  return data.chainCategories ?? []
+}
+
+export async function createChainCategory({ session, chainId, name }) {
+  const data = await graphqlRequest({
+    query: CREATE_CATEGORY_MUTATION,
+    variables: {
+      input: { chain_id: chainId ?? session.chainId, name: name.trim() },
+    },
+    ...requestOptions(session),
+  })
+  return data.createCategory
+}
+
+export async function updateChainCategory({ session, categoryId, name }) {
+  const data = await graphqlRequest({
+    query: UPDATE_CATEGORY_MUTATION,
+    variables: { id: categoryId, input: { name: name.trim() } },
+    ...requestOptions(session),
+  })
+  return data.updateCategory
+}
+
+export async function deleteChainCategory({ session, categoryId }) {
+  const data = await graphqlRequest({
+    query: DELETE_CATEGORY_MUTATION,
+    variables: { id: categoryId },
+    ...requestOptions(session),
+  })
+  return { ok: Boolean(data.deleteCategory) }
+}
+
+export async function updateRestaurantMenuProductWithOptions({
+  session,
+  productId,
+  name,
+  description,
+  optionGroups,
+}) {
+  const input = {}
+  if (name !== undefined) input.name = name
+  if (description !== undefined) input.description = description
+  if (optionGroups !== undefined) input.option_groups = optionGroups
+
+  const data = await graphqlRequest({
+    query: UPDATE_PRODUCT_MUTATION,
+    variables: {
+      actorUserId: actorUserId(session),
+      id: productId,
+      input,
+    },
+    ...requestOptions(session),
+  })
+  return data.updateProduct
 }
 
 export async function fetchOperatorNotifications({

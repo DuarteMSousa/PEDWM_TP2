@@ -96,10 +96,7 @@ class RestaurantService implements RestaurantServiceInterface
 
         $chainId = ChainManager::query()->where('user_id', $userId)->value('chain_id');
         if (! $chainId) {
-            return Restaurant::query()
-                ->with($this->with)
-                ->orderByDesc('created_at')
-                ->first();
+            return null;
         }
 
         return Restaurant::query()

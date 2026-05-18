@@ -1,21 +1,44 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
 import NetInfo from '@react-native-community/netinfo'
 import { RealtimeTopicsCard } from '../components/realtime/RealtimeTopicsCard'
 import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
 import {
   addCartItem,
+  cancelClientOrderById,
   checkoutCart,
+  createClientAddress,
+  createClientReview,
+  createOrderChat,
+  fetchOrderChats,
+  sendChatMessage,
+  updateClientUser,
+  fetchClientAddresses,
+  fetchClientNotifications,
+  fetchClientOrdersHistory,
   fetchMyCart,
   fetchMyOrders,
+  fetchOrderPayment,
   fetchOrderTracking,
+  fetchProductOptionGroups,
   fetchRestaurantMenu,
   fetchRestaurants,
+  payPaymentNow,
+  markAllClientNotificationsRead,
+  markClientNotificationRead,
   removeCartItem,
+  repeatClientOrderToCart,
+  setDefaultClientAddress,
   updateCartItem,
 } from '../services/commerceService'
 import { subscribeToOrderTracking } from '../services/realtime/trackingRealtime'
-import { subscribeToUserNotificationsTopic } from '../services/realtime/topicsRealtime'
+import {
+  subscribeToChatTopic,
+  subscribeToCustomerOrdersTopic,
+  subscribeToUserNotificationsTopic,
+} from '../services/realtime/topicsRealtime'
+
+const INBOX_MAX_ITEMS = 60
 
 const ICON = {
   user: '\u{1F464}',
@@ -65,6 +88,71 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
   const [loading, setLoading] = useState(false)
   const [errorText, setErrorText] = useState('')
   const [successText, setSuccessText] = useState('')
+  const [showInbox, setShowInbox] = useState(false)
+  const [inboxItems, setInboxItems] = useState([])
+  const [inboxLoading, setInboxLoading] = useState(false)
+  const [inboxSavingId, setInboxSavingId] = useState('')
+  const [inboxUnreadOnly, setInboxUnreadOnly] = useState(false)
+  const inboxUnreadCount = useMemo(
+    () => inboxItems.filter((item) => !item.read).length,
+    [inboxItems],
+  )
+  const [ordersHistory, setOrdersHistory] = useState([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const [cancelTargetOrder, setCancelTargetOrder] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false)
+  const [busyOrderId, setBusyOrderId] = useState('')
+  const [addresses, setAddresses] = useState([])
+  const [selectedAddressId, setSelectedAddressId] = useState(null)
+  const [paymentMethod, setPaymentMethod] = useState('CASH')
+  const [couponCode, setCouponCode] = useState('')
+  const [showAddressModal, setShowAddressModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [addressDraft, setAddressDraft] = useState({
+    label: '',
+    street: '',
+    city: '',
+    postal_code: '',
+    country: 'Portugal',
+    latitude: '',
+    longitude: '',
+    is_default: false,
+  })
+  const [showAddressForm, setShowAddressForm] = useState(false)
+  const [isSavingAddress, setIsSavingAddress] = useState(false)
+  const [optionsTargetProduct, setOptionsTargetProduct] = useState(null)
+  const [optionGroups, setOptionGroups] = useState([])
+  const [optionSelections, setOptionSelections] = useState({})
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false)
+  const [pendingPayment, setPendingPayment] = useState(null)
+  const [paymentRemainingSeconds, setPaymentRemainingSeconds] = useState(null)
+  const [isPayingNow, setIsPayingNow] = useState(false)
+  const [reviewTarget, setReviewTarget] = useState(null)
+  const [reviewRating, setReviewRating] = useState(5)
+  const [reviewComment, setReviewComment] = useState('')
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const [profileDraft, setProfileDraft] = useState({
+    name: session?.name ?? '',
+    email: session?.email ?? '',
+  })
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [chatModalState, setChatModalState] = useState({
+    visible: false,
+    chat: null,
+    messages: [],
+    type: null,
+    participants: [],
+  })
+  const [chatDraft, setChatDraft] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const [chatSending, setChatSending] = useState(false)
+
+  const selectedAddress = useMemo(
+    () => addresses.find((address) => address.id === selectedAddressId) ?? null,
+    [addresses, selectedAddressId],
+  )
 
   const userId = session?.userId || session?.devUserId
 
@@ -119,6 +207,144 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
 
   useEffect(() => {
     if (!userId || !isOnline) {
+      return undefined
+    }
+
+    let unsubscribe = null
+    let cancelled = false
+
+    try {
+      unsubscribe = subscribeToCustomerOrdersTopic({
+        customerId: userId,
+        authToken: session?.token,
+        devUserId: session?.devUserId,
+        onEvent: (eventName, payload) => {
+          if (cancelled) return
+
+          const eventOrderId = payload?.data?.order_id ?? payload?.orderId ?? null
+
+          if (eventOrderId && activeOrderId && eventOrderId === activeOrderId) {
+            loadTracking(eventOrderId)
+          }
+
+          if (eventName === 'ORDER_DELIVERED' || eventName === 'ORDER_CANCELLED') {
+            setOrdersHistory((current) =>
+              current.map((order) =>
+                order.id === eventOrderId
+                  ? {
+                      ...order,
+                      status: eventName === 'ORDER_DELIVERED' ? 'DELIVERED' : 'CANCELLED',
+                    }
+                  : order,
+              ),
+            )
+            if (activeOrderId === eventOrderId && eventName === 'ORDER_CANCELLED') {
+              setActiveOrderId('')
+            }
+          }
+
+          if (eventName === 'PAYMENT_COMPLETED' && pendingPayment?.orderId === eventOrderId) {
+            setPendingPayment(null)
+            setSuccessText('Pagamento confirmado via realtime.')
+            setRoute('tracking')
+            loadTracking(eventOrderId)
+          }
+
+          if (eventName === 'PAYMENT_FAILED' || eventName === 'PAYMENT_EXPIRED') {
+            if (pendingPayment?.orderId === eventOrderId) {
+              setPendingPayment(null)
+              setErrorText('Pagamento falhado/expirado.')
+            }
+          }
+        },
+        onError: () => {
+          // canal pode falhar silenciosamente; reconexao via Echo cuida disso
+        },
+      })
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      cancelled = true
+      if (unsubscribe) unsubscribe()
+    }
+  }, [userId, isOnline, session?.token, session?.devUserId, activeOrderId, pendingPayment])
+
+  useEffect(() => {
+    if (!chatModalState.visible || !chatModalState.chat?.id) {
+      return undefined
+    }
+
+    let unsubscribe = null
+    try {
+      unsubscribe = subscribeToChatTopic({
+        chatId: chatModalState.chat.id,
+        authToken: session?.token,
+        devUserId: session?.devUserId,
+        onMessage: (payload) => {
+          setChatModalState((current) => {
+            if (!current.visible) return current
+            const incoming = {
+              id: payload?.eventId ?? `${Date.now()}-${Math.random()}`,
+              content: payload?.content ?? '',
+              sender_participant_id: payload?.senderUserId ?? 'desconhecido',
+              timestamp: payload?.timestamp ?? new Date().toISOString(),
+              source: 'socket',
+            }
+            const exists = current.messages.some((message) => message.id === incoming.id)
+            if (exists) return current
+            return { ...current, messages: [incoming, ...current.messages].slice(0, 80) }
+          })
+        },
+        onError: () => {
+          // ignore silently
+        },
+      })
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [chatModalState.visible, chatModalState.chat?.id, session?.token, session?.devUserId])
+
+  useEffect(() => {
+    if (!pendingPayment) {
+      setPaymentRemainingSeconds(null)
+      return undefined
+    }
+
+    function compute() {
+      const elapsedMs = Date.now() - pendingPayment.createdAtMs
+      const remainingMs = 10 * 60 * 1000 - elapsedMs
+      return Math.max(0, Math.ceil(remainingMs / 1000))
+    }
+
+    setPaymentRemainingSeconds(compute())
+
+    const tick = setInterval(() => {
+      const next = compute()
+      setPaymentRemainingSeconds(next)
+      if (next <= 0) {
+        setPendingPayment(null)
+        setErrorText('Pagamento expirou. Tenta novamente.')
+      }
+    }, 1000)
+
+    const poll = setInterval(() => {
+      refreshPendingPaymentStatus()
+    }, 5000)
+
+    return () => {
+      clearInterval(tick)
+      clearInterval(poll)
+    }
+  }, [pendingPayment])
+
+  useEffect(() => {
+    if (!userId || !isOnline) {
       setNotificationState('offline')
       return undefined
     }
@@ -143,6 +369,26 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
               message: payload?.message ?? 'Nova atualizacao recebida.',
             })
             setSuccessText(`${ICON.bell} ${payload?.title ?? 'Nova notificacao'}`)
+            setInboxItems((current) => {
+              const incoming = {
+                id: payload?.notificationId ?? payload?.eventId ?? `${Date.now()}-${Math.random()}`,
+                type: payload?.type ?? 'INFO',
+                title: payload?.title ?? 'Nova notificacao',
+                message: payload?.message ?? 'Sem descricao',
+                sent_at: payload?.sentAt ?? new Date().toISOString(),
+                read_at: null,
+                read: false,
+              }
+              const next = [incoming, ...current]
+              const seen = new Set()
+              const deduped = []
+              next.forEach((item) => {
+                if (seen.has(item.id)) return
+                seen.add(item.id)
+                deduped.push(item)
+              })
+              return deduped.slice(0, INBOX_MAX_ITEMS)
+            })
           },
           onError: () => {
             setNotificationState('error')
@@ -228,11 +474,16 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
 
     try {
       setLoading(true)
-      const [nextRestaurants, nextCart, activeOrders] = await Promise.all([
-        fetchRestaurants(session),
-        fetchMyCart(session),
-        fetchMyOrders(session, { activeOnly: true, limit: 1 }),
-      ])
+      const [nextRestaurants, nextCart, activeOrders, notifications, addressList] =
+        await Promise.all([
+          fetchRestaurants(session),
+          fetchMyCart(session),
+          fetchMyOrders(session, { activeOnly: true, limit: 1 }),
+          fetchClientNotifications({ session, unreadOnly: false, limit: INBOX_MAX_ITEMS }).catch(
+            () => [],
+          ),
+          fetchClientAddresses(session).catch(() => []),
+        ])
 
       setRestaurants(nextRestaurants)
       if (nextRestaurants.length > 0) {
@@ -245,11 +496,379 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
         setActiveOrderId(activeOrders[0].id)
       }
 
+      setInboxItems(notifications)
+      setAddresses(addressList)
+      const defaultAddress = addressList.find((address) => address.is_default) ?? addressList[0]
+      if (defaultAddress) {
+        setSelectedAddressId(defaultAddress.id)
+      }
       setErrorText('')
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function reloadAddresses() {
+    try {
+      const list = await fetchClientAddresses(session)
+      setAddresses(list)
+      if (!selectedAddressId && list.length > 0) {
+        const fallback = list.find((address) => address.is_default) ?? list[0]
+        setSelectedAddressId(fallback.id)
+      }
+    } catch (error) {
+      setErrorText(error.message)
+    }
+  }
+
+  async function handleCreateAddress() {
+    const trimmed = {
+      street: addressDraft.street.trim(),
+      city: addressDraft.city.trim(),
+      postal_code: addressDraft.postal_code.trim(),
+      country: addressDraft.country.trim(),
+      latitude: addressDraft.latitude,
+      longitude: addressDraft.longitude,
+      label: addressDraft.label.trim() || null,
+      is_default: addressDraft.is_default,
+    }
+
+    if (!trimmed.street || !trimmed.city || !trimmed.postal_code || !trimmed.country) {
+      setErrorText('Preenche rua, cidade, codigo postal e pais.')
+      return
+    }
+
+    const lat = Number(trimmed.latitude)
+    const lng = Number(trimmed.longitude)
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      setErrorText('Coordenadas invalidas. Insere latitude e longitude numericas.')
+      return
+    }
+
+    try {
+      setIsSavingAddress(true)
+      const created = await createClientAddress({
+        session,
+        input: { ...trimmed, latitude: lat, longitude: lng },
+      })
+      await reloadAddresses()
+      setSelectedAddressId(created.id)
+      setShowAddressForm(false)
+      setAddressDraft({
+        label: '',
+        street: '',
+        city: '',
+        postal_code: '',
+        country: 'Portugal',
+        latitude: '',
+        longitude: '',
+        is_default: false,
+      })
+      setSuccessText('Morada criada.')
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsSavingAddress(false)
+    }
+  }
+
+  async function handleSetDefaultAddress(addressId) {
+    try {
+      await setDefaultClientAddress({ session, addressId })
+      setAddresses((current) =>
+        current.map((address) => ({
+          ...address,
+          is_default: address.id === addressId,
+        })),
+      )
+      setSelectedAddressId(addressId)
+    } catch (error) {
+      setErrorText(error.message)
+    }
+  }
+
+  async function loadInbox() {
+    if (!ensureOnline('atualizar inbox')) {
+      return
+    }
+
+    try {
+      setInboxLoading(true)
+      const data = await fetchClientNotifications({
+        session,
+        unreadOnly: false,
+        limit: INBOX_MAX_ITEMS,
+      })
+      setInboxItems(data)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setInboxLoading(false)
+    }
+  }
+
+  async function handleMarkInboxItemRead(notificationId) {
+    try {
+      setInboxSavingId(notificationId)
+      await markClientNotificationRead({ session, notificationId })
+      const nowIso = new Date().toISOString()
+      setInboxItems((current) =>
+        current.map((item) =>
+          item.id === notificationId
+            ? { ...item, read: true, read_at: item.read_at ?? nowIso }
+            : item,
+        ),
+      )
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setInboxSavingId('')
+    }
+  }
+
+  async function handleMarkAllInboxRead() {
+    try {
+      setInboxSavingId('all')
+      await markAllClientNotificationsRead({ session })
+      const nowIso = new Date().toISOString()
+      setInboxItems((current) =>
+        current.map((item) => ({
+          ...item,
+          read: true,
+          read_at: item.read_at ?? nowIso,
+        })),
+      )
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setInboxSavingId('')
+    }
+  }
+
+  function openInbox() {
+    setShowInbox(true)
+    loadInbox()
+  }
+
+  async function loadOrdersHistory() {
+    if (!ensureOnline('carregar pedidos')) {
+      return
+    }
+
+    try {
+      setOrdersLoading(true)
+      const data = await fetchClientOrdersHistory({ session, limit: 30 })
+      setOrdersHistory(data)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setOrdersLoading(false)
+    }
+  }
+
+  function openOrdersHistory() {
+    setRoute('orders')
+    loadOrdersHistory()
+  }
+
+  function requestCancelOrder(order) {
+    setCancelTargetOrder(order)
+    setCancelReason('')
+    setErrorText('')
+  }
+
+  async function confirmCancelOrder() {
+    if (!cancelTargetOrder) return
+    if (!ensureOnline('cancelar pedido')) return
+
+    try {
+      setIsCancellingOrder(true)
+      await cancelClientOrderById({
+        session,
+        orderId: cancelTargetOrder.id,
+        reason: cancelReason,
+      })
+      setSuccessText('Pedido cancelado.')
+      setOrdersHistory((current) =>
+        current.map((item) =>
+          item.id === cancelTargetOrder.id ? { ...item, status: 'CANCELLED' } : item,
+        ),
+      )
+      if (activeOrderId === cancelTargetOrder.id) {
+        setActiveOrderId('')
+      }
+      setCancelTargetOrder(null)
+      setCancelReason('')
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsCancellingOrder(false)
+    }
+  }
+
+  async function openChatForCurrentOrder(targetType) {
+    if (!activeOrderId) {
+      setErrorText('Sem pedido ativo para iniciar chat.')
+      return
+    }
+    if (!ensureOnline('abrir chat')) return
+
+    try {
+      setChatLoading(true)
+      let existingChats = await fetchOrderChats({ session, orderId: activeOrderId })
+      let target = existingChats.find((chat) => chat.type === targetType) ?? null
+
+      if (!target) {
+        const participantIds = [userId]
+        if (targetType === 'CUSTOMER_RESTAURANT' && tracking?.order?.restaurant) {
+          // O backend resolve internamente; passamos so o cliente como participante seguro
+        }
+        if (targetType === 'CUSTOMER_COURIER' && tracking?.courier_id) {
+          participantIds.push(tracking.courier_id)
+        }
+
+        target = await createOrderChat({
+          session,
+          orderId: activeOrderId,
+          type: targetType,
+          participantUserIds: participantIds,
+        })
+      }
+
+      setChatModalState({
+        visible: true,
+        chat: target,
+        messages: target.messages ?? [],
+        type: targetType,
+        participants: target.participants ?? [],
+      })
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  async function sendChatMessageFromModal() {
+    const draft = chatDraft.trim()
+    if (!draft || !chatModalState.chat?.id) return
+    if (!ensureOnline('enviar mensagem')) return
+
+    setChatDraft('')
+    try {
+      setChatSending(true)
+      const sent = await sendChatMessage({
+        session,
+        chatId: chatModalState.chat.id,
+        content: draft,
+      })
+      setChatModalState((current) => ({
+        ...current,
+        messages: [{ ...sent, source: 'mutation' }, ...current.messages].slice(0, 80),
+      }))
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+      setChatDraft(draft)
+    } finally {
+      setChatSending(false)
+    }
+  }
+
+  function closeChatModal() {
+    setChatModalState({
+      visible: false,
+      chat: null,
+      messages: [],
+      type: null,
+      participants: [],
+    })
+    setChatDraft('')
+  }
+
+  function openReviewModal(order, targetType, targetId) {
+    if (!order || !targetType || !targetId) return
+    setReviewTarget({
+      orderId: order.id,
+      restaurantName: order.restaurant_name,
+      targetType,
+      targetId,
+    })
+    setReviewRating(5)
+    setReviewComment('')
+    setErrorText('')
+  }
+
+  async function submitReview() {
+    if (!reviewTarget) return
+    if (!ensureOnline('enviar avaliacao')) return
+
+    try {
+      setIsSubmittingReview(true)
+      await createClientReview({
+        session,
+        rating: reviewRating,
+        comment: reviewComment,
+        targetType: reviewTarget.targetType,
+        targetId: reviewTarget.targetId,
+      })
+      setSuccessText('Avaliacao enviada. Obrigado!')
+      setErrorText('')
+      setReviewTarget(null)
+      setReviewRating(5)
+      setReviewComment('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }
+
+  async function handleSaveProfile() {
+    if (!ensureOnline('guardar perfil')) return
+
+    try {
+      setIsSavingProfile(true)
+      const updated = await updateClientUser({
+        session,
+        name: profileDraft.name,
+        email: profileDraft.email,
+      })
+      setSuccessText('Perfil atualizado.')
+      setErrorText('')
+      if (updated) {
+        setProfileDraft({ name: updated.name ?? '', email: updated.email ?? '' })
+      }
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsSavingProfile(false)
+    }
+  }
+
+  async function handleRepeatOrder(order) {
+    if (!ensureOnline('repetir pedido')) return
+
+    try {
+      setBusyOrderId(order.id)
+      const nextCart = await repeatClientOrderToCart({ session, orderId: order.id })
+      setCart(nextCart)
+      setSuccessText(`Itens de ${order.restaurant_name ?? 'pedido anterior'} adicionados ao carrinho.`)
+      setErrorText('')
+      setRoute('cart')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setBusyOrderId('')
     }
   }
 
@@ -281,7 +900,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
     setCart(nextCart)
   }
 
-  async function addToCart(restaurantProductId) {
+  async function addToCart(restaurantProductId, optionIds = []) {
     if (!ensureOnline('adicionar ao carrinho')) {
       return
     }
@@ -292,6 +911,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
         session,
         restaurantProductId,
         quantity: 1,
+        optionIds,
       })
       setCart(nextCart)
       setSuccessText('Item adicionado ao carrinho.')
@@ -300,6 +920,86 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       setErrorText(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handleAddProductWithOptions(menuItem) {
+    if (!ensureOnline('adicionar ao carrinho')) return
+
+    if (!menuItem.product_id) {
+      await addToCart(menuItem.restaurant_product_id)
+      return
+    }
+
+    try {
+      setIsLoadingOptions(true)
+      const groups = await fetchProductOptionGroups({
+        session,
+        productId: menuItem.product_id,
+      })
+
+      if (groups.length === 0) {
+        await addToCart(menuItem.restaurant_product_id)
+        return
+      }
+
+      const defaults = {}
+      groups.forEach((group) => {
+        defaults[group.id] = group.options.filter((option) => option.default_option).map((option) => option.id)
+      })
+
+      setOptionGroups(groups)
+      setOptionSelections(defaults)
+      setOptionsTargetProduct(menuItem)
+      setErrorText('')
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsLoadingOptions(false)
+    }
+  }
+
+  function toggleOptionSelection(groupId, optionId, group) {
+    setOptionSelections((current) => {
+      const currentSelection = current[groupId] ?? []
+      const isSelected = currentSelection.includes(optionId)
+      let nextSelection
+
+      if (isSelected) {
+        nextSelection = currentSelection.filter((id) => id !== optionId)
+      } else if (group.max_options <= 1) {
+        nextSelection = [optionId]
+      } else if (currentSelection.length >= group.max_options) {
+        nextSelection = [...currentSelection.slice(1), optionId]
+      } else {
+        nextSelection = [...currentSelection, optionId]
+      }
+
+      return { ...current, [groupId]: nextSelection }
+    })
+  }
+
+  async function confirmAddWithOptions() {
+    const invalidGroup = optionGroups.find((group) => {
+      const count = (optionSelections[group.id] ?? []).length
+      return count < group.min_options || count > group.max_options
+    })
+
+    if (invalidGroup) {
+      setErrorText(
+        `Grupo "${invalidGroup.name}" requer entre ${invalidGroup.min_options} e ${invalidGroup.max_options} opcoes.`,
+      )
+      return
+    }
+
+    const allOptionIds = Object.values(optionSelections).flat()
+    const target = optionsTargetProduct
+    setOptionsTargetProduct(null)
+    setOptionGroups([])
+    setOptionSelections({})
+
+    if (target) {
+      await addToCart(target.restaurant_product_id, allOptionIds)
     }
   }
 
@@ -372,20 +1072,85 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
       return
     }
 
+    if (!selectedAddressId) {
+      setErrorText('Escolhe uma morada de entrega antes do checkout.')
+      return
+    }
+
     try {
       setLoading(true)
-      const result = await checkoutCart(session)
+      const result = await checkoutCart(session, {
+        addressId: selectedAddressId,
+        paymentMethod,
+        couponCode: couponCode || null,
+      })
       setLastCheckout(result)
       setActiveOrderId(result.order_id)
-      setRoute('tracking')
-      setSuccessText('Pedido criado com sucesso.')
       setErrorText('')
+      setCouponCode('')
       await refreshCart()
-      await loadTracking(result.order_id)
+
+      if (result.payment_status === 'PENDING' && result.payment_id) {
+        setPendingPayment({
+          paymentId: result.payment_id,
+          orderId: result.order_id,
+          method: result.payment_method,
+          total: result.total,
+          createdAtMs: Date.now(),
+        })
+        setSuccessText('Pedido criado. Falta confirmar o pagamento.')
+      } else {
+        setRoute('tracking')
+        setSuccessText('Pedido criado com sucesso.')
+        await loadTracking(result.order_id)
+      }
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handlePayPendingPayment() {
+    if (!pendingPayment) return
+    if (!ensureOnline('confirmar pagamento')) return
+
+    try {
+      setIsPayingNow(true)
+      const payment = await payPaymentNow({
+        session,
+        paymentId: pendingPayment.paymentId,
+      })
+      setSuccessText('Pagamento confirmado.')
+      setErrorText('')
+      setPendingPayment(null)
+      setRoute('tracking')
+      await loadTracking(pendingPayment.orderId)
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setIsPayingNow(false)
+    }
+  }
+
+  async function refreshPendingPaymentStatus() {
+    if (!pendingPayment) return
+    try {
+      const payment = await fetchOrderPayment({
+        session,
+        orderId: pendingPayment.orderId,
+      })
+      if (payment?.status === 'COMPLETED') {
+        setPendingPayment(null)
+        setSuccessText('Pagamento confirmado externamente.')
+        setRoute('tracking')
+        await loadTracking(pendingPayment.orderId)
+      } else if (payment?.status === 'FAILED') {
+        setPendingPayment(null)
+        setErrorText('Pagamento expirou ou falhou.')
+      }
+    } catch {
+      // ignore polling errors silently
     }
   }
 
@@ -421,6 +1186,16 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
 
     if (route === 'tracking') {
       setRoute('home')
+      return
+    }
+
+    if (route === 'orders') {
+      setRoute('home')
+      return
+    }
+
+    if (route === 'profile') {
+      setRoute('home')
     }
   }
 
@@ -442,7 +1217,40 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
             }
           }}
           hasActiveOrder={Boolean(activeOrderId)}
-          onLogout={onLogout}
+          onOpenProfile={() => setRoute('profile')}
+          inboxUnreadCount={inboxUnreadCount}
+          onOpenInbox={openInbox}
+          onOpenOrders={openOrdersHistory}
+        />
+      )}
+      {route === 'profile' && (
+        <ProfileScreen
+          session={session}
+          profileDraft={profileDraft}
+          onChangeDraft={setProfileDraft}
+          isSavingProfile={isSavingProfile}
+          onSave={handleSaveProfile}
+          onBack={back}
+          onLogoutRequest={() => setShowLogoutConfirm(true)}
+          addresses={addresses}
+          onOpenAddresses={() => setShowAddressModal(true)}
+        />
+      )}
+      {route === 'orders' && (
+        <OrdersHistoryScreen
+          orders={ordersHistory}
+          loading={ordersLoading}
+          busyOrderId={busyOrderId}
+          onBack={back}
+          onRefresh={loadOrdersHistory}
+          onCancel={requestCancelOrder}
+          onRepeat={handleRepeatOrder}
+          onTrack={(order) => {
+            setActiveOrderId(order.id)
+            setRoute('tracking')
+            loadTracking(order.id)
+          }}
+          onReview={openReviewModal}
         />
       )}
       {route === 'menu' && (
@@ -451,9 +1259,9 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
           items={menuItems}
           itemCount={itemCount}
           total={total}
-          loading={loading}
+          loading={loading || isLoadingOptions}
           onBack={back}
-          onAdd={addToCart}
+          onAdd={handleAddProductWithOptions}
           onOpenCart={() => setRoute('cart')}
         />
       )}
@@ -468,6 +1276,12 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
           onIncrease={increase}
           onRemove={remove}
           onPlaceOrder={placeOrder}
+          selectedAddress={selectedAddress}
+          paymentMethod={paymentMethod}
+          couponCode={couponCode}
+          onChangeCouponCode={setCouponCode}
+          onOpenAddressPicker={() => setShowAddressModal(true)}
+          onOpenPaymentPicker={() => setShowPaymentModal(true)}
         />
       )}
       {route === 'tracking' && (
@@ -478,11 +1292,726 @@ export function CustomerAppScreen({ session, pushStatus, onLogout }) {
           isOnline={isOnline}
           onBack={back}
           onRefresh={() => activeOrderId && loadTracking(activeOrderId)}
+          onOpenChatRestaurant={() => openChatForCurrentOrder('CUSTOMER_RESTAURANT')}
+          onOpenChatCourier={() => openChatForCurrentOrder('CUSTOMER_COURIER')}
+          chatLoading={chatLoading}
         />
       )}
 
       {successText ? <Text style={styles.successText}>{ICON.check} {successText}</Text> : null}
       {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
+
+      <Modal
+        visible={Boolean(reviewTarget)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!isSubmittingReview) setReviewTarget(null)
+        }}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.failModalCardClient}>
+            <Text style={styles.inboxTitle}>
+              Avaliar {reviewTarget?.targetType === 'COURIER' ? 'estafeta' : 'restaurante'}
+            </Text>
+            <Text style={styles.inboxSubtitle}>
+              {reviewTarget?.restaurantName
+                ? `Pedido em ${reviewTarget.restaurantName}`
+                : 'Partilha a tua experiencia'}
+            </Text>
+
+            <View style={styles.starsRow}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Pressable
+                  key={star}
+                  onPress={() => setReviewRating(star)}
+                  style={styles.starButton}
+                  disabled={isSubmittingReview}
+                >
+                  <Text
+                    style={[
+                      styles.starText,
+                      reviewRating >= star ? styles.starTextActive : null,
+                    ]}
+                  >
+                    {ICON.star}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.ratingLabel}>{reviewRating} / 5</Text>
+
+            <Text style={styles.checkoutRowLabel}>Comentario (opcional)</Text>
+            <TextInput
+              style={[styles.couponInput, { minHeight: 70, textAlignVertical: 'top' }]}
+              placeholder="Conta como correu..."
+              placeholderTextColor="#94a3b8"
+              value={reviewComment}
+              onChangeText={setReviewComment}
+              multiline
+              editable={!isSubmittingReview}
+            />
+
+            <View style={styles.cancelActionsRow}>
+              <Pressable
+                style={styles.cancelSecondary}
+                onPress={() => {
+                  if (!isSubmittingReview) setReviewTarget(null)
+                }}
+                disabled={isSubmittingReview}
+              >
+                <Text style={styles.cancelSecondaryText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.cancelDanger, { backgroundColor: '#0b9b3f' }]}
+                onPress={submitReview}
+                disabled={isSubmittingReview}
+              >
+                <Text style={styles.cancelDangerText}>
+                  {isSubmittingReview ? 'A enviar...' : 'Enviar avaliacao'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showLogoutConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowLogoutConfirm(false)}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.failModalCardClient}>
+            <Text style={styles.inboxTitle}>Terminar sessao?</Text>
+            <Text style={styles.inboxSubtitle}>
+              Vais sair da conta. Tera de fazer login outra vez.
+            </Text>
+
+            <View style={styles.cancelActionsRow}>
+              <Pressable
+                style={styles.cancelSecondary}
+                onPress={() => setShowLogoutConfirm(false)}
+              >
+                <Text style={styles.cancelSecondaryText}>Voltar</Text>
+              </Pressable>
+              <Pressable
+                style={styles.cancelDanger}
+                onPress={() => {
+                  setShowLogoutConfirm(false)
+                  onLogout()
+                }}
+              >
+                <Text style={styles.cancelDangerText}>Sair</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={chatModalState.visible}
+        animationType="slide"
+        transparent
+        onRequestClose={closeChatModal}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inboxTitle}>
+                  Chat com {chatModalState.type === 'CUSTOMER_COURIER' ? 'estafeta' : 'restaurante'}
+                </Text>
+                <Text style={styles.inboxSubtitle}>
+                  {chatModalState.chat?.id
+                    ? `Chat #${String(chatModalState.chat.id).slice(0, 8)}`
+                    : 'Carregando'}
+                </Text>
+              </View>
+              <Pressable style={styles.inboxClose} onPress={closeChatModal}>
+                <Text style={styles.inboxCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.inboxList} contentContainerStyle={styles.inboxListContent}>
+              {chatModalState.messages.length === 0 ? (
+                <Text style={styles.inboxEmpty}>Sem mensagens ainda.</Text>
+              ) : null}
+              {chatModalState.messages.map((message) => {
+                const isMine = message.sender_participant_id === userId
+                return (
+                  <View
+                    key={message.id}
+                    style={[
+                      styles.chatBubble,
+                      isMine ? styles.chatBubbleMine : styles.chatBubbleOther,
+                    ]}
+                  >
+                    <Text style={styles.chatBubbleText}>{message.content}</Text>
+                    <Text style={styles.chatBubbleTime}>
+                      {message.timestamp
+                        ? new Date(message.timestamp).toLocaleTimeString()
+                        : ''}
+                    </Text>
+                  </View>
+                )
+              })}
+            </ScrollView>
+
+            <View style={styles.chatComposeRow}>
+              <TextInput
+                style={styles.chatInput}
+                value={chatDraft}
+                onChangeText={setChatDraft}
+                placeholder="Escreve uma mensagem..."
+                placeholderTextColor="#94a3b8"
+                editable={!chatSending}
+                multiline
+              />
+              <Pressable
+                style={styles.chatSendBtn}
+                onPress={sendChatMessageFromModal}
+                disabled={chatSending || chatDraft.trim() === ''}
+              >
+                <Text style={styles.chatSendBtnText}>
+                  {chatSending ? '...' : 'Enviar'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(pendingPayment)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!isPayingNow) {
+            setPendingPayment(null)
+          }
+        }}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.failModalCardClient}>
+            <Text style={styles.inboxTitle}>Pagamento pendente</Text>
+            <Text style={styles.inboxSubtitle}>
+              Confirma o pagamento {paymentMethodLabel(pendingPayment?.method ?? 'CARD')} no portal externo.
+              Apos confirmacao, o pedido fica em CONFIRMED.
+            </Text>
+
+            <View style={styles.paymentCountdown}>
+              <Text style={styles.paymentCountdownLabel}>Tempo restante</Text>
+              <Text
+                style={[
+                  styles.paymentCountdownValue,
+                  paymentRemainingSeconds !== null && paymentRemainingSeconds <= 60
+                    ? styles.paymentCountdownDanger
+                    : null,
+                ]}
+              >
+                {paymentRemainingSeconds === null
+                  ? '--:--'
+                  : `${String(Math.floor(paymentRemainingSeconds / 60)).padStart(2, '0')}:${String(
+                      paymentRemainingSeconds % 60,
+                    ).padStart(2, '0')}`}
+              </Text>
+            </View>
+
+            <View style={styles.confirmSummary}>
+              <SummaryLine
+                label="Total"
+                value={`EUR ${Number(pendingPayment?.total ?? 0).toFixed(2)}`}
+              />
+              <SummaryLine label="Metodo" value={paymentMethodLabel(pendingPayment?.method ?? 'CARD')} />
+            </View>
+
+            <View style={styles.cancelActionsRow}>
+              <Pressable
+                style={styles.cancelSecondary}
+                onPress={() => {
+                  if (!isPayingNow) setPendingPayment(null)
+                }}
+                disabled={isPayingNow}
+              >
+                <Text style={styles.cancelSecondaryText}>Fechar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.cancelDanger, { backgroundColor: '#0b9b3f' }]}
+                onPress={handlePayPendingPayment}
+                disabled={isPayingNow}
+              >
+                <Text style={styles.cancelDangerText}>
+                  {isPayingNow ? 'A confirmar...' : 'Simular pagamento'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(optionsTargetProduct)}
+        animationType="slide"
+        transparent
+        onRequestClose={() => {
+          if (!loading) {
+            setOptionsTargetProduct(null)
+            setOptionGroups([])
+            setOptionSelections({})
+          }
+        }}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.inboxTitle}>{optionsTargetProduct?.name ?? 'Configurar'}</Text>
+                <Text style={styles.inboxSubtitle}>
+                  Escolhe as opcoes obrigatorias antes de adicionar
+                </Text>
+              </View>
+              <Pressable
+                style={styles.inboxClose}
+                onPress={() => {
+                  setOptionsTargetProduct(null)
+                  setOptionGroups([])
+                  setOptionSelections({})
+                }}
+              >
+                <Text style={styles.inboxCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.inboxList} contentContainerStyle={styles.inboxListContent}>
+              {optionGroups.map((group) => {
+                const selection = optionSelections[group.id] ?? []
+                return (
+                  <View key={group.id} style={styles.optionGroupCard}>
+                    <View style={styles.optionGroupHeader}>
+                      <Text style={styles.optionGroupName}>{group.name}</Text>
+                      <Text style={styles.optionGroupRule}>
+                        {group.min_options === group.max_options
+                          ? `Escolhe ${group.max_options}`
+                          : `Escolhe ${group.min_options}-${group.max_options}`}
+                      </Text>
+                    </View>
+                    {group.options.map((option) => {
+                      const checked = selection.includes(option.id)
+                      return (
+                        <Pressable
+                          key={option.id}
+                          style={[
+                            styles.optionRow,
+                            checked ? styles.optionRowChecked : null,
+                          ]}
+                          onPress={() => toggleOptionSelection(group.id, option.id, group)}
+                        >
+                          <Text
+                            style={[
+                              styles.optionRowText,
+                              checked ? styles.optionRowTextChecked : null,
+                            ]}
+                          >
+                            {checked ? '[x] ' : '[ ] '}
+                            {option.name}
+                          </Text>
+                          {option.extra_price > 0 ? (
+                            <Text style={styles.optionRowPrice}>
+                              + {option.extra_price.toFixed(2)} EUR
+                            </Text>
+                          ) : null}
+                        </Pressable>
+                      )
+                    })}
+                  </View>
+                )
+              })}
+            </ScrollView>
+
+            <View style={styles.cancelActionsRow}>
+              <Pressable
+                style={styles.cancelSecondary}
+                onPress={() => {
+                  setOptionsTargetProduct(null)
+                  setOptionGroups([])
+                  setOptionSelections({})
+                }}
+                disabled={loading}
+              >
+                <Text style={styles.cancelSecondaryText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.cancelDanger, { backgroundColor: '#3479ed' }]}
+                onPress={confirmAddWithOptions}
+                disabled={loading}
+              >
+                <Text style={styles.cancelDangerText}>
+                  {loading ? 'A adicionar...' : 'Adicionar ao carrinho'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showAddressModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowAddressModal(false)}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <View>
+                <Text style={styles.inboxTitle}>Moradas de entrega</Text>
+                <Text style={styles.inboxSubtitle}>
+                  Escolhe ou cria uma morada para receber a encomenda
+                </Text>
+              </View>
+              <Pressable style={styles.inboxClose} onPress={() => setShowAddressModal(false)}>
+                <Text style={styles.inboxCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView style={styles.inboxList} contentContainerStyle={styles.inboxListContent}>
+              {addresses.length === 0 ? (
+                <Text style={styles.inboxEmpty}>Sem moradas. Cria uma abaixo.</Text>
+              ) : null}
+
+              {addresses.map((address) => {
+                const isSelected = selectedAddressId === address.id
+                return (
+                  <Pressable
+                    key={address.id}
+                    style={[
+                      styles.addressOption,
+                      isSelected ? styles.addressOptionSelected : null,
+                    ]}
+                    onPress={() => {
+                      setSelectedAddressId(address.id)
+                      setShowAddressModal(false)
+                    }}
+                  >
+                    <View style={styles.addressOptionMain}>
+                      <Text style={styles.addressOptionLabel}>
+                        {address.label || 'Morada'} {address.is_default ? '· default' : ''}
+                      </Text>
+                      <Text style={styles.addressOptionDetail}>
+                        {address.street}, {address.city}
+                      </Text>
+                      <Text style={styles.addressOptionDetail}>
+                        {address.postal_code} - {address.country}
+                      </Text>
+                    </View>
+                    {!address.is_default ? (
+                      <Pressable
+                        style={styles.addressSetDefault}
+                        onPress={() => handleSetDefaultAddress(address.id)}
+                      >
+                        <Text style={styles.addressSetDefaultText}>Default</Text>
+                      </Pressable>
+                    ) : null}
+                  </Pressable>
+                )
+              })}
+
+              {showAddressForm ? (
+                <View style={styles.addressForm}>
+                  <Text style={styles.checkoutSectionTitle}>Nova morada</Text>
+                  {[
+                    { key: 'label', placeholder: 'Etiqueta (Casa, Trabalho)' },
+                    { key: 'street', placeholder: 'Rua *' },
+                    { key: 'city', placeholder: 'Cidade *' },
+                    { key: 'postal_code', placeholder: 'Codigo postal *' },
+                    { key: 'country', placeholder: 'Pais *' },
+                    { key: 'latitude', placeholder: 'Latitude (ex: 41.1579)' },
+                    { key: 'longitude', placeholder: 'Longitude (ex: -8.6291)' },
+                  ].map((field) => (
+                    <TextInput
+                      key={field.key}
+                      style={styles.couponInput}
+                      placeholder={field.placeholder}
+                      placeholderTextColor="#94a3b8"
+                      value={String(addressDraft[field.key] ?? '')}
+                      onChangeText={(text) =>
+                        setAddressDraft((current) => ({ ...current, [field.key]: text }))
+                      }
+                      keyboardType={
+                        field.key === 'latitude' || field.key === 'longitude' ? 'numeric' : 'default'
+                      }
+                    />
+                  ))}
+                  <Pressable
+                    style={styles.addressDefaultToggle}
+                    onPress={() =>
+                      setAddressDraft((current) => ({
+                        ...current,
+                        is_default: !current.is_default,
+                      }))
+                    }
+                  >
+                    <Text style={styles.addressDefaultToggleText}>
+                      {addressDraft.is_default ? '[x] Marcar como default' : '[ ] Marcar como default'}
+                    </Text>
+                  </Pressable>
+                  <View style={styles.cancelActionsRow}>
+                    <Pressable
+                      style={styles.cancelSecondary}
+                      onPress={() => setShowAddressForm(false)}
+                      disabled={isSavingAddress}
+                    >
+                      <Text style={styles.cancelSecondaryText}>Voltar</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.cancelDanger, { backgroundColor: '#3479ed' }]}
+                      onPress={handleCreateAddress}
+                      disabled={isSavingAddress}
+                    >
+                      <Text style={styles.cancelDangerText}>
+                        {isSavingAddress ? 'A guardar...' : 'Criar morada'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.addressAddBtn}
+                  onPress={() => setShowAddressForm(true)}
+                >
+                  <Text style={styles.addressAddBtnText}>+ Adicionar nova morada</Text>
+                </Pressable>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showPaymentModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.failModalCardClient}>
+            <View style={styles.inboxHeader}>
+              <Text style={styles.inboxTitle}>Metodo de pagamento</Text>
+              <Pressable style={styles.inboxClose} onPress={() => setShowPaymentModal(false)}>
+                <Text style={styles.inboxCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            {['CASH', 'CARD', 'MBWAY', 'PAYPAL'].map((method) => (
+              <Pressable
+                key={method}
+                style={[
+                  styles.paymentOption,
+                  paymentMethod === method ? styles.paymentOptionSelected : null,
+                ]}
+                onPress={() => {
+                  setPaymentMethod(method)
+                  setShowPaymentModal(false)
+                }}
+              >
+                <Text
+                  style={[
+                    styles.paymentOptionText,
+                    paymentMethod === method ? styles.paymentOptionTextSelected : null,
+                  ]}
+                >
+                  {paymentMethodLabel(method)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={Boolean(cancelTargetOrder)}
+        animationType="fade"
+        transparent
+        onRequestClose={() => {
+          if (!isCancellingOrder) {
+            setCancelTargetOrder(null)
+          }
+        }}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.cancelOrderCard}>
+            <Text style={styles.inboxTitle}>Cancelar pedido</Text>
+            <Text style={styles.inboxSubtitle}>
+              Esta acao notifica o restaurante e termina o pedido. Indica o motivo (opcional).
+            </Text>
+
+            {cancelTargetOrder ? (
+              <View style={styles.cancelSummaryRow}>
+                <Text style={styles.cancelSummaryLabel}>
+                  {cancelTargetOrder.restaurant_name ?? '-'} - EUR{' '}
+                  {Number(cancelTargetOrder.total ?? 0).toFixed(2)}
+                </Text>
+              </View>
+            ) : null}
+
+            <Text style={styles.cancelInputLabel}>Motivo (opcional)</Text>
+            <TextInput
+              style={styles.cancelInput}
+              value={cancelReason}
+              onChangeText={setCancelReason}
+              editable={!isCancellingOrder}
+              placeholder="Ex: enganei-me na morada"
+              placeholderTextColor="#94a3b8"
+              multiline
+            />
+
+            <View style={styles.cancelActionsRow}>
+              <Pressable
+                style={styles.cancelSecondary}
+                onPress={() => {
+                  if (!isCancellingOrder) {
+                    setCancelTargetOrder(null)
+                    setCancelReason('')
+                  }
+                }}
+                disabled={isCancellingOrder}
+              >
+                <Text style={styles.cancelSecondaryText}>Voltar</Text>
+              </Pressable>
+              <Pressable
+                style={styles.cancelDanger}
+                onPress={confirmCancelOrder}
+                disabled={isCancellingOrder}
+              >
+                <Text style={styles.cancelDangerText}>
+                  {isCancellingOrder ? 'A cancelar...' : 'Cancelar pedido'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showInbox}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowInbox(false)}
+      >
+        <View style={styles.inboxBackdrop}>
+          <View style={styles.inboxCard}>
+            <View style={styles.inboxHeader}>
+              <View>
+                <Text style={styles.inboxTitle}>Notificacoes</Text>
+                <Text style={styles.inboxSubtitle}>
+                  {inboxUnreadCount > 0
+                    ? `${inboxUnreadCount} nao lidas`
+                    : 'Todas as notificacoes lidas'}
+                </Text>
+              </View>
+              <Pressable style={styles.inboxClose} onPress={() => setShowInbox(false)}>
+                <Text style={styles.inboxCloseText}>{'×'}</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.inboxActions}>
+              <Pressable
+                style={[
+                  styles.inboxFilter,
+                  inboxUnreadOnly ? styles.inboxFilterActive : null,
+                ]}
+                onPress={() => setInboxUnreadOnly((current) => !current)}
+              >
+                <Text
+                  style={[
+                    styles.inboxFilterText,
+                    inboxUnreadOnly ? styles.inboxFilterTextActive : null,
+                  ]}
+                >
+                  {inboxUnreadOnly ? 'Mostrar todas' : 'So nao lidas'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.inboxFilter}
+                onPress={loadInbox}
+                disabled={inboxLoading}
+              >
+                <Text style={styles.inboxFilterText}>
+                  {inboxLoading ? 'A carregar...' : 'Atualizar'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={styles.inboxFilter}
+                onPress={handleMarkAllInboxRead}
+                disabled={inboxUnreadCount === 0 || inboxSavingId === 'all'}
+              >
+                <Text style={styles.inboxFilterText}>
+                  {inboxSavingId === 'all' ? 'A marcar...' : 'Marcar tudo lido'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.inboxList}
+              contentContainerStyle={styles.inboxListContent}
+            >
+              {(() => {
+                const visible = inboxUnreadOnly
+                  ? inboxItems.filter((item) => !item.read)
+                  : inboxItems
+
+                if (!inboxLoading && visible.length === 0) {
+                  return <Text style={styles.inboxEmpty}>Sem notificacoes para mostrar.</Text>
+                }
+
+                return visible.map((item) => (
+                  <View
+                    key={item.id}
+                    style={[
+                      styles.inboxItem,
+                      item.read ? styles.inboxItemRead : styles.inboxItemUnread,
+                    ]}
+                  >
+                    <View style={styles.inboxItemTop}>
+                      <Text style={styles.inboxItemTitle}>{item.title}</Text>
+                      <Text
+                        style={[
+                          styles.inboxItemBadge,
+                          item.read ? styles.inboxItemBadgeRead : styles.inboxItemBadgeUnread,
+                        ]}
+                      >
+                        {item.type}
+                      </Text>
+                    </View>
+                    <Text style={styles.inboxItemMessage}>{item.message}</Text>
+                    <View style={styles.inboxItemFooter}>
+                      <Text style={styles.inboxItemTimestamp}>
+                        {item.sent_at
+                          ? new Date(item.sent_at).toLocaleString()
+                          : '-'}
+                      </Text>
+                      {!item.read ? (
+                        <Pressable
+                          onPress={() => handleMarkInboxItemRead(item.id)}
+                          disabled={inboxSavingId === item.id}
+                        >
+                          <Text style={styles.inboxItemAction}>
+                            {inboxSavingId === item.id ? 'A marcar...' : 'Marcar lida'}
+                          </Text>
+                        </Pressable>
+                      ) : (
+                        <Text style={styles.inboxItemReadLabel}>Lida</Text>
+                      )}
+                    </View>
+                  </View>
+                ))
+              })()}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   )
 }
@@ -497,7 +2026,10 @@ function HomeScreen({
   onOpenRestaurant,
   onOpenTracking,
   hasActiveOrder,
-  onLogout,
+  onOpenProfile,
+  inboxUnreadCount,
+  onOpenInbox,
+  onOpenOrders,
 }) {
   return (
     <View style={styles.screen}>
@@ -507,9 +2039,21 @@ function HomeScreen({
             <Text style={styles.brand}>FastBite</Text>
             <Text style={styles.subtitle}>O que deseja comer hoje?</Text>
           </View>
-          <Pressable style={styles.profileButton} onPress={onLogout}>
-            <Text style={styles.profileIcon}>{ICON.user}</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable style={styles.bellButton} onPress={onOpenInbox}>
+              <Text style={styles.bellIcon}>{ICON.bell}</Text>
+              {inboxUnreadCount > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>
+                    {inboxUnreadCount > 99 ? '99+' : inboxUnreadCount}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+            <Pressable style={styles.profileButton} onPress={onOpenProfile}>
+              <Text style={styles.profileIcon}>{ICON.user}</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.searchField}>
@@ -551,6 +2095,10 @@ function HomeScreen({
             </Text>
           </Pressable>
         ) : null}
+
+        <Pressable style={styles.ordersLink} onPress={onOpenOrders}>
+          <Text style={styles.ordersLinkText}>Meus pedidos</Text>
+        </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -614,7 +2162,7 @@ function MenuScreen({ restaurant, items, itemCount, total, loading, onBack, onAd
 
             <Pressable
               style={styles.addButton}
-              onPress={() => onAdd(item.restaurant_product_id)}
+              onPress={() => onAdd(item)}
               disabled={!item.is_available}
             >
               <Text style={styles.addButtonText}>{ICON.plus}</Text>
@@ -634,6 +2182,14 @@ function MenuScreen({ restaurant, items, itemCount, total, loading, onBack, onAd
   )
 }
 
+function paymentMethodLabel(method) {
+  if (method === 'CASH') return 'Dinheiro a entrega'
+  if (method === 'CARD') return 'Cartao'
+  if (method === 'MBWAY') return 'MB Way'
+  if (method === 'PAYPAL') return 'PayPal'
+  return method
+}
+
 function CartScreen({
   items,
   subtotal,
@@ -644,10 +2200,19 @@ function CartScreen({
   onIncrease,
   onRemove,
   onPlaceOrder,
+  selectedAddress,
+  paymentMethod,
+  couponCode,
+  onChangeCouponCode,
+  onOpenAddressPicker,
+  onOpenPaymentPicker,
 }) {
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, styles.cartScroll]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.scrollContent, styles.cartScroll]}
+        showsVerticalScrollIndicator={false}
+      >
         {items.length === 0 ? <Text style={styles.mutedText}>Carrinho vazio.</Text> : null}
 
         {items.map((item) => (
@@ -675,6 +2240,42 @@ function CartScreen({
             </Pressable>
           </View>
         ))}
+
+        <View style={styles.checkoutCard}>
+          <Text style={styles.checkoutSectionTitle}>Detalhes da entrega</Text>
+
+          <Pressable style={styles.checkoutRow} onPress={onOpenAddressPicker}>
+            <View style={styles.checkoutRowText}>
+              <Text style={styles.checkoutRowLabel}>Morada de entrega</Text>
+              <Text style={styles.checkoutRowValue} numberOfLines={2}>
+                {selectedAddress
+                  ? `${selectedAddress.label ? selectedAddress.label + ' - ' : ''}${selectedAddress.street}, ${selectedAddress.city}`
+                  : 'Escolher morada'}
+              </Text>
+            </View>
+            <Text style={styles.checkoutRowArrow}>{'>'}</Text>
+          </Pressable>
+
+          <Pressable style={styles.checkoutRow} onPress={onOpenPaymentPicker}>
+            <View style={styles.checkoutRowText}>
+              <Text style={styles.checkoutRowLabel}>Metodo de pagamento</Text>
+              <Text style={styles.checkoutRowValue}>{paymentMethodLabel(paymentMethod)}</Text>
+            </View>
+            <Text style={styles.checkoutRowArrow}>{'>'}</Text>
+          </Pressable>
+
+          <View style={styles.couponRow}>
+            <Text style={styles.checkoutRowLabel}>Cupao</Text>
+            <TextInput
+              style={styles.couponInput}
+              value={couponCode}
+              onChangeText={onChangeCouponCode}
+              placeholder="Codigo de cupao (opcional)"
+              placeholderTextColor="#94a3b8"
+              autoCapitalize="characters"
+            />
+          </View>
+        </View>
       </ScrollView>
 
       <View style={styles.checkoutBar}>
@@ -694,7 +2295,17 @@ function CartScreen({
   )
 }
 
-function TrackingScreen({ tracking, checkout, realtimeState, isOnline, onBack, onRefresh }) {
+function TrackingScreen({
+  tracking,
+  checkout,
+  realtimeState,
+  isOnline,
+  onBack,
+  onRefresh,
+  onOpenChatRestaurant,
+  onOpenChatCourier,
+  chatLoading,
+}) {
   const events = tracking?.events ?? []
   const realtimeLabel =
     realtimeState === 'live'
@@ -728,6 +2339,27 @@ function TrackingScreen({ tracking, checkout, realtimeState, isOnline, onBack, o
         <Pressable style={styles.successBanner} onPress={onRefresh}>
           <Text style={styles.successBannerText}>{ICON.check} Atualizar tracking</Text>
         </Pressable>
+
+        <View style={styles.chatButtonsRow}>
+          <Pressable
+            style={styles.chatButton}
+            onPress={onOpenChatRestaurant}
+            disabled={chatLoading}
+          >
+            <Text style={styles.chatButtonText}>
+              {chatLoading ? 'A abrir...' : 'Chat com restaurante'}
+            </Text>
+          </Pressable>
+          {tracking?.courier_id ? (
+            <Pressable
+              style={styles.chatButton}
+              onPress={onOpenChatCourier}
+              disabled={chatLoading}
+            >
+              <Text style={styles.chatButtonText}>Chat com estafeta</Text>
+            </Pressable>
+          ) : null}
+        </View>
 
         <View style={styles.trackCard}>
           <Text style={styles.trackSummaryTitle}>Estado atual</Text>
@@ -803,6 +2435,214 @@ function SummaryLine({ label, value }) {
       <Text style={styles.summaryValue}>{value}</Text>
     </View>
   )
+}
+
+const CANCELLABLE_STATUSES = ['PENDING', 'CONFIRMED']
+const TRACKABLE_STATUSES = ['CONFIRMED', 'PREPARING', 'READY', 'OUT_FOR_DELIVERY']
+
+function OrdersHistoryScreen({
+  orders,
+  loading,
+  busyOrderId,
+  onBack,
+  onRefresh,
+  onCancel,
+  onRepeat,
+  onTrack,
+  onReview,
+}) {
+  return (
+    <View style={styles.screen}>
+      <View style={styles.trackHeader}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backArrow}>{'←'}</Text>
+        </Pressable>
+        <Text style={styles.trackTitle}>Meus pedidos</Text>
+        <Text style={styles.trackSub}>Historico de encomendas</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Pressable style={styles.successBanner} onPress={onRefresh} disabled={loading}>
+          <Text style={styles.successBannerText}>
+            {loading ? 'A carregar...' : 'Atualizar pedidos'}
+          </Text>
+        </Pressable>
+
+        {!loading && orders.length === 0 ? (
+          <Text style={styles.mutedText}>Sem pedidos no historico.</Text>
+        ) : null}
+
+        {orders.map((order) => {
+          const canCancel = CANCELLABLE_STATUSES.includes(order.status)
+          const canTrack = TRACKABLE_STATUSES.includes(order.status)
+          const canReview = order.status === 'DELIVERED'
+          const isBusy = busyOrderId === order.id
+
+          return (
+            <View key={order.id} style={styles.orderCard}>
+              <View style={styles.orderCardTop}>
+                <View style={styles.orderCardHeading}>
+                  <Text style={styles.orderCardRestaurant}>{order.restaurant_name ?? '-'}</Text>
+                  <Text style={styles.orderCardDate}>
+                    {order.created_at ? new Date(order.created_at).toLocaleString() : '-'}
+                  </Text>
+                </View>
+                <Text style={[styles.orderStatusChip, orderStatusChipStyle(order.status)]}>
+                  {statusLabel(order.status)}
+                </Text>
+              </View>
+
+              {order.items_summary ? (
+                <Text style={styles.orderCardItems} numberOfLines={2}>
+                  {order.items_summary}
+                </Text>
+              ) : null}
+
+              <View style={styles.orderCardFooter}>
+                <Text style={styles.orderCardTotal}>{`EUR ${Number(order.total ?? 0).toFixed(2)}`}</Text>
+                <View style={styles.orderCardActions}>
+                  {canTrack ? (
+                    <Pressable
+                      style={styles.orderActionBtn}
+                      onPress={() => onTrack(order)}
+                      disabled={isBusy}
+                    >
+                      <Text style={styles.orderActionBtnText}>Acompanhar</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    style={styles.orderActionBtn}
+                    onPress={() => onRepeat(order)}
+                    disabled={isBusy}
+                  >
+                    <Text style={styles.orderActionBtnText}>
+                      {isBusy ? 'A repetir...' : 'Repetir'}
+                    </Text>
+                  </Pressable>
+                  {canCancel ? (
+                    <Pressable
+                      style={[styles.orderActionBtn, styles.orderActionDanger]}
+                      onPress={() => onCancel(order)}
+                      disabled={isBusy}
+                    >
+                      <Text style={[styles.orderActionBtnText, styles.orderActionDangerText]}>
+                        Cancelar
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {canReview && order.restaurant_id ? (
+                    <Pressable
+                      style={styles.orderActionBtn}
+                      onPress={() => onReview(order, 'RESTAURANT', order.restaurant_id)}
+                    >
+                      <Text style={styles.orderActionBtnText}>Avaliar restaurante</Text>
+                    </Pressable>
+                  ) : null}
+                  {canReview && order.courier_id ? (
+                    <Pressable
+                      style={styles.orderActionBtn}
+                      onPress={() => onReview(order, 'COURIER', order.courier_id)}
+                    >
+                      <Text style={styles.orderActionBtnText}>Avaliar estafeta</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          )
+        })}
+      </ScrollView>
+    </View>
+  )
+}
+
+function ProfileScreen({
+  session,
+  profileDraft,
+  onChangeDraft,
+  isSavingProfile,
+  onSave,
+  onBack,
+  onLogoutRequest,
+  addresses,
+  onOpenAddresses,
+}) {
+  return (
+    <View style={styles.screen}>
+      <View style={styles.trackHeader}>
+        <Pressable onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backArrow}>{'←'}</Text>
+        </Pressable>
+        <Text style={styles.trackTitle}>Perfil</Text>
+        <Text style={styles.trackSub}>{session?.email ?? '-'}</Text>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.checkoutCard}>
+          <Text style={styles.checkoutSectionTitle}>Dados pessoais</Text>
+
+          <Text style={styles.checkoutRowLabel}>Nome</Text>
+          <TextInput
+            style={styles.couponInput}
+            value={profileDraft.name}
+            onChangeText={(text) => onChangeDraft((current) => ({ ...current, name: text }))}
+            placeholder="Nome completo"
+            placeholderTextColor="#94a3b8"
+          />
+
+          <Text style={styles.checkoutRowLabel}>Email</Text>
+          <TextInput
+            style={styles.couponInput}
+            value={profileDraft.email}
+            onChangeText={(text) => onChangeDraft((current) => ({ ...current, email: text }))}
+            placeholder="email@dominio.pt"
+            placeholderTextColor="#94a3b8"
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+
+          <Pressable
+            style={[styles.orderButton, isSavingProfile ? { opacity: 0.6 } : null]}
+            onPress={onSave}
+            disabled={isSavingProfile}
+          >
+            <Text style={styles.orderButtonText}>
+              {isSavingProfile ? 'A guardar...' : 'Guardar perfil'}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.checkoutCard}>
+          <Text style={styles.checkoutSectionTitle}>Moradas</Text>
+          <Text style={styles.checkoutRowValue}>
+            {addresses.length === 0
+              ? 'Sem moradas guardadas.'
+              : `${addresses.length} morada(s) guardada(s).`}
+          </Text>
+          <Pressable style={[styles.addressAddBtn, { marginTop: 12 }]} onPress={onOpenAddresses}>
+            <Text style={styles.addressAddBtnText}>Gerir moradas</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.checkoutCard}>
+          <Text style={styles.checkoutSectionTitle}>Sessao</Text>
+          <Pressable
+            style={[styles.cancelDanger, { marginTop: 8 }]}
+            onPress={onLogoutRequest}
+          >
+            <Text style={styles.cancelDangerText}>Terminar sessao</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    </View>
+  )
+}
+
+function orderStatusChipStyle(status) {
+  if (status === 'DELIVERED') return styles.orderStatusOk
+  if (status === 'CANCELLED') return styles.orderStatusOff
+  if (status === 'OUT_FOR_DELIVERY' || status === 'READY') return styles.orderStatusGo
+  return styles.orderStatusPending
 }
 
 const styles = StyleSheet.create({
@@ -1116,5 +2956,702 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     fontWeight: '700',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  bellButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellIcon: { color: '#ffffff', fontSize: 17 },
+  bellBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 999,
+    paddingHorizontal: 4,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bellBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  inboxBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  inboxCard: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 18,
+    maxHeight: '90%',
+  },
+  inboxHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  inboxTitle: {
+    color: '#0f172a',
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  inboxSubtitle: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  inboxClose: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inboxCloseText: {
+    color: '#475569',
+    fontSize: 22,
+    lineHeight: 22,
+  },
+  inboxActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  inboxFilter: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+  },
+  inboxFilterActive: {
+    backgroundColor: '#3479ed',
+    borderColor: '#3479ed',
+  },
+  inboxFilterText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  inboxFilterTextActive: {
+    color: '#ffffff',
+  },
+  inboxList: {
+    marginTop: 4,
+    maxHeight: 480,
+  },
+  inboxListContent: {
+    paddingBottom: 12,
+  },
+  inboxEmpty: {
+    color: '#64748b',
+    fontSize: 13,
+    paddingVertical: 12,
+  },
+  inboxItem: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  inboxItemRead: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+  },
+  inboxItemUnread: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+  },
+  inboxItemTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  inboxItemTitle: {
+    flex: 1,
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  inboxItemBadge: {
+    fontSize: 10,
+    fontWeight: '800',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  inboxItemBadgeUnread: {
+    backgroundColor: '#1d4ed8',
+    color: '#ffffff',
+  },
+  inboxItemBadgeRead: {
+    backgroundColor: '#e2e8f0',
+    color: '#475569',
+  },
+  inboxItemMessage: {
+    marginTop: 4,
+    color: '#475569',
+    fontSize: 13,
+  },
+  inboxItemFooter: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  inboxItemTimestamp: {
+    color: '#64748b',
+    fontSize: 11,
+  },
+  inboxItemAction: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  inboxItemReadLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  ordersLink: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+  },
+  ordersLinkText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  orderCard: {
+    borderWidth: 1,
+    borderColor: '#dfe4ec',
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    padding: 12,
+    marginBottom: 10,
+  },
+  orderCardTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  orderCardHeading: {
+    flex: 1,
+  },
+  orderCardRestaurant: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  orderCardDate: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  orderStatusChip: {
+    fontSize: 10,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  orderStatusOk: {
+    backgroundColor: '#dcfce7',
+    color: '#166534',
+  },
+  orderStatusOff: {
+    backgroundColor: '#fee2e2',
+    color: '#991b1b',
+  },
+  orderStatusGo: {
+    backgroundColor: '#dbeafe',
+    color: '#1d4ed8',
+  },
+  orderStatusPending: {
+    backgroundColor: '#fef9c3',
+    color: '#854d0e',
+  },
+  orderCardItems: {
+    marginTop: 8,
+    color: '#475569',
+    fontSize: 13,
+  },
+  orderCardFooter: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  orderCardTotal: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  orderCardActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 6,
+    flexShrink: 1,
+  },
+  orderActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#3479ed',
+    backgroundColor: '#ffffff',
+  },
+  orderActionBtnText: {
+    color: '#1d4ed8',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  orderActionDanger: {
+    borderColor: '#fecaca',
+    backgroundColor: '#fff5f5',
+  },
+  orderActionDangerText: {
+    color: '#b91c1c',
+  },
+  cancelOrderCard: {
+    margin: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 18,
+  },
+  cancelSummaryRow: {
+    marginTop: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  cancelSummaryLabel: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  cancelInputLabel: {
+    marginTop: 12,
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cancelInput: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#d5dce7',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#0f172a',
+    fontSize: 14,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  cancelActionsRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cancelSecondary: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelSecondaryText: {
+    color: '#334155',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  cancelDanger: {
+    flex: 1,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#dc2626',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelDangerText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  checkoutCard: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#dfe4ec',
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginBottom: 12,
+  },
+  checkoutSectionTitle: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  checkoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f7',
+  },
+  checkoutRowText: {
+    flex: 1,
+  },
+  checkoutRowLabel: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  checkoutRowValue: {
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  checkoutRowArrow: {
+    color: '#94a3b8',
+    fontSize: 18,
+    fontWeight: '900',
+    paddingLeft: 8,
+  },
+  couponRow: {
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eef2f7',
+    paddingTop: 10,
+  },
+  couponInput: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#d5dce7',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#0f172a',
+    fontSize: 14,
+    marginBottom: 6,
+  },
+  addressOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#dfe4ec',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  addressOptionSelected: {
+    borderColor: '#3479ed',
+    backgroundColor: '#eff6ff',
+  },
+  addressOptionMain: {
+    flex: 1,
+  },
+  addressOptionLabel: {
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  addressOptionDetail: {
+    color: '#475569',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  addressSetDefault: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  addressSetDefaultText: {
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  addressAddBtn: {
+    borderWidth: 1,
+    borderColor: '#3479ed',
+    borderRadius: 12,
+    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+  },
+  addressAddBtnText: {
+    color: '#1d4ed8',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  addressForm: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: '#f8fafc',
+  },
+  addressDefaultToggle: {
+    paddingVertical: 6,
+  },
+  addressDefaultToggleText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  failModalCardClient: {
+    margin: 16,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    padding: 18,
+  },
+  paymentOption: {
+    borderWidth: 1,
+    borderColor: '#dfe4ec',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    marginTop: 8,
+  },
+  paymentOptionSelected: {
+    borderColor: '#3479ed',
+    backgroundColor: '#eff6ff',
+  },
+  paymentOptionText: {
+    color: '#0f172a',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  paymentOptionTextSelected: {
+    color: '#1d4ed8',
+    fontWeight: '900',
+  },
+  optionGroupCard: {
+    borderWidth: 1,
+    borderColor: '#dfe4ec',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    backgroundColor: '#f8fafc',
+  },
+  optionGroupHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  optionGroupName: {
+    color: '#0f172a',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  optionGroupRule: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  optionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  optionRowChecked: {
+    backgroundColor: '#eff6ff',
+  },
+  optionRowText: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  optionRowTextChecked: {
+    color: '#1d4ed8',
+    fontWeight: '800',
+  },
+  optionRowPrice: {
+    color: '#64748b',
+    fontSize: 12,
+  },
+  paymentCountdown: {
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  paymentCountdownLabel: {
+    color: '#92400e',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  paymentCountdownValue: {
+    color: '#92400e',
+    fontSize: 28,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+  },
+  paymentCountdownDanger: {
+    color: '#b91c1c',
+  },
+  confirmSummary: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  starsRow: {
+    marginTop: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  starButton: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  starText: {
+    fontSize: 30,
+    color: '#cbd5e1',
+  },
+  starTextActive: {
+    color: '#f59e0b',
+  },
+  ratingLabel: {
+    marginTop: 4,
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  chatButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  chatButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    backgroundColor: '#eff6ff',
+    alignItems: 'center',
+  },
+  chatButtonText: {
+    color: '#1d4ed8',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  chatBubble: {
+    maxWidth: '78%',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+  },
+  chatBubbleMine: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#3479ed',
+  },
+  chatBubbleOther: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f1f5f9',
+  },
+  chatBubbleText: {
+    color: '#0f172a',
+    fontSize: 14,
+  },
+  chatBubbleTime: {
+    color: '#475569',
+    fontSize: 10,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  chatComposeRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginTop: 8,
+  },
+  chatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d5dce7',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#0f172a',
+    fontSize: 14,
+    minHeight: 44,
+    maxHeight: 100,
+  },
+  chatSendBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#3479ed',
+  },
+  chatSendBtnText: {
+    color: '#ffffff',
+    fontWeight: '800',
   },
 })

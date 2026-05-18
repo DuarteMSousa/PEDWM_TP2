@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   acceptRestaurantOrder,
+  cancelRestaurantOrder,
   fetchRestaurantActiveOrders,
   rejectRestaurantOrder,
 } from '../../../services/restaurantOpsService'
+import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
+import { subscribeToRestaurantOrdersTopic } from '../../../services/realtime/topicsRealtime'
 
 function statusLabel(status) {
   if (status === 'PENDING') return 'Pendente'
@@ -21,11 +24,42 @@ function statusTone(status) {
   return 'off'
 }
 
+function playBeep(ref) {
+  try {
+    if (typeof window === 'undefined') return
+    const AudioContext = window.AudioContext || window.webkitAudioContext
+    if (!AudioContext) return
+    if (!ref.current) {
+      ref.current = new AudioContext()
+    }
+    const ctx = ref.current
+    const oscillator = ctx.createOscillator()
+    const gain = ctx.createGain()
+    oscillator.connect(gain)
+    gain.connect(ctx.destination)
+    oscillator.frequency.value = 880
+    gain.gain.setValueAtTime(0.2, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+    oscillator.start()
+    oscillator.stop(ctx.currentTime + 0.35)
+  } catch {
+    // ignore
+  }
+}
+
 export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [errorText, setErrorText] = useState('')
+  const [infoText, setInfoText] = useState('')
   const [busyOrderId, setBusyOrderId] = useState('')
+  const [rejectTarget, setRejectTarget] = useState(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [cancelTarget, setCancelTarget] = useState(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [dialogLoading, setDialogLoading] = useState(false)
+  const [realtimeState, setRealtimeState] = useState('offline')
+  const beepRef = useRef(null)
 
   const loadOrders = useCallback(async () => {
     try {
@@ -44,14 +78,48 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
     queueMicrotask(() => {
       loadOrders()
     })
-    const timer = setInterval(loadOrders, 15000)
+    const timer = setInterval(loadOrders, 30000)
     return () => clearInterval(timer)
   }, [loadOrders])
+
+  useEffect(() => {
+    if (!session?.restaurantId) {
+      return undefined
+    }
+
+    let unsubscribe = null
+    setRealtimeState('connecting')
+    try {
+      unsubscribe = subscribeToRestaurantOrdersTopic({
+        restaurantId: session.restaurantId,
+        authToken: session.token,
+        devUserId: session.devUserId,
+        onEvent: (eventName) => {
+          setRealtimeState('live')
+          if (eventName === 'ORDER_CREATED') {
+            playBeep(beepRef)
+            setInfoText('Novo pedido recebido.')
+          }
+          loadOrders()
+        },
+        onError: () => {
+          setRealtimeState('error')
+        },
+      })
+    } catch {
+      setRealtimeState('error')
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [session?.restaurantId, session?.token, session?.devUserId, loadOrders])
 
   async function handleAccept(orderId) {
     try {
       setBusyOrderId(orderId)
       await acceptRestaurantOrder({ session, orderId })
+      setInfoText('Encomenda aceite com sucesso.')
       await loadOrders()
     } catch (error) {
       setErrorText(error.message)
@@ -60,21 +128,68 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
     }
   }
 
-  async function handleReject(orderId) {
+  function requestReject(order) {
+    setRejectTarget(order)
+    setRejectReason('')
+  }
+
+  function requestCancel(order) {
+    setCancelTarget(order)
+    setCancelReason('')
+  }
+
+  async function handleConfirmReject() {
+    if (!rejectTarget) return
     try {
-      setBusyOrderId(orderId)
-      await rejectRestaurantOrder({ session, orderId })
+      setDialogLoading(true)
+      setBusyOrderId(rejectTarget.order_id)
+      await rejectRestaurantOrder({
+        session,
+        orderId: rejectTarget.order_id,
+        reason: rejectReason,
+      })
+      setInfoText('Encomenda rejeitada.')
+      setRejectTarget(null)
+      setRejectReason('')
       await loadOrders()
     } catch (error) {
       setErrorText(error.message)
     } finally {
       setBusyOrderId('')
+      setDialogLoading(false)
+    }
+  }
+
+  async function handleConfirmCancel() {
+    if (!cancelTarget) return
+    try {
+      setDialogLoading(true)
+      setBusyOrderId(cancelTarget.order_id)
+      await cancelRestaurantOrder({
+        session,
+        orderId: cancelTarget.order_id,
+        reason: cancelReason,
+      })
+      setInfoText('Encomenda cancelada.')
+      setCancelTarget(null)
+      setCancelReason('')
+      await loadOrders()
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setBusyOrderId('')
+      setDialogLoading(false)
     }
   }
 
   function handleOpenChat(orderId) {
     if (onSelectOrder) onSelectOrder(orderId)
     if (onNavigate) onNavigate('chat')
+  }
+
+  function handleOpenDetail(orderId) {
+    if (onSelectOrder) onSelectOrder(orderId)
+    if (onNavigate) onNavigate('order-detail')
   }
 
   const stats = useMemo(() => {
@@ -93,9 +208,22 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
 
   return (
     <section className="rb-page">
-      <header className="rb-page-head">
-        <h2>Dashboard</h2>
-        <p>Encomendas ativas em tempo real</p>
+      <header className="rb-page-head rb-page-head-row">
+        <div>
+          <h2>Dashboard</h2>
+          <p>Encomendas ativas em tempo real</p>
+        </div>
+        <span
+          className={`badge ${realtimeState === 'live' ? 'ok' : realtimeState === 'error' ? 'danger' : 'warn'}`}
+        >
+          {realtimeState === 'live'
+            ? 'Realtime ativo'
+            : realtimeState === 'connecting'
+              ? 'A ligar'
+              : realtimeState === 'error'
+                ? 'Realtime erro'
+                : 'Offline'}
+        </span>
       </header>
 
       <div className="rb-stat-grid">
@@ -130,12 +258,29 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan={6}>A carregar...</td>
-              </tr>
+              Array.from({ length: 4 }).map((_, idx) => (
+                <tr key={`skeleton-${idx}`}>
+                  <td colSpan={6}>
+                    <div className="rb-skeleton-line" />
+                  </td>
+                </tr>
+              ))
             ) : orders.length === 0 ? (
               <tr>
-                <td colSpan={6}>Sem encomendas ativas.</td>
+                <td colSpan={6}>
+                  <div className="rb-empty-state">
+                    <strong>Sem encomendas ativas.</strong>
+                    <p>Quando entrarem novos pedidos, aparecem aqui automaticamente.</p>
+                    <div className="rb-empty-actions">
+                      <button type="button" className="rb-notif-filter" onClick={loadOrders}>
+                        Recarregar
+                      </button>
+                      <button type="button" className="rb-notif-filter" onClick={() => onNavigate?.('kitchen')}>
+                        Ir para Cozinha
+                      </button>
+                    </div>
+                  </div>
+                </td>
               </tr>
             ) : (
               orders.map((order) => (
@@ -156,7 +301,7 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
                           type="button"
                           className="rb-btn-outline"
                           disabled={busyOrderId === order.order_id}
-                          onClick={() => handleReject(order.order_id)}
+                          onClick={() => requestReject(order)}
                         >
                           Rejeitar
                         </button>
@@ -171,19 +316,38 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
                         <button
                           type="button"
                           className="rb-btn-outline"
-                          onClick={() => handleOpenChat(order.order_id)}
+                          onClick={() => handleOpenDetail(order.order_id)}
                         >
-                          Chat
+                          Detalhe
                         </button>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        className="rb-btn-outline"
-                        onClick={() => handleOpenChat(order.order_id)}
-                      >
-                        Abrir chat
-                      </button>
+                      <div className="rb-kitchen-actions">
+                        {['CONFIRMED', 'PREPARING'].includes(order.order_status) ? (
+                          <button
+                            type="button"
+                            className="rb-btn-outline"
+                            disabled={busyOrderId === order.order_id}
+                            onClick={() => requestCancel(order)}
+                          >
+                            Cancelar pedido
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="rb-btn-outline"
+                          onClick={() => handleOpenDetail(order.order_id)}
+                        >
+                          Detalhe
+                        </button>
+                        <button
+                          type="button"
+                          className="rb-btn-outline"
+                          onClick={() => handleOpenChat(order.order_id)}
+                        >
+                          Abrir chat
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -191,8 +355,61 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
             )}
           </tbody>
         </table>
+        {infoText ? <p className="rb-success-note">{infoText}</p> : null}
         {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
       </article>
+
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        title="Rejeitar encomenda"
+        description="O motivo e usado em auditoria e notifica o cliente."
+        confirmLabel="Rejeitar"
+        destructive
+        loading={dialogLoading}
+        onCancel={() => {
+          if (!dialogLoading) {
+            setRejectTarget(null)
+            setRejectReason('')
+          }
+        }}
+        onConfirm={handleConfirmReject}
+      >
+        <label>
+          Motivo (opcional)
+          <textarea
+            value={rejectReason}
+            onChange={(event) => setRejectReason(event.target.value)}
+            placeholder="Ex: rutura de stock, capacidade excedida"
+            disabled={dialogLoading}
+          />
+        </label>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={Boolean(cancelTarget)}
+        title="Cancelar encomenda ja aceite"
+        description="O cliente recebera notificacao de cancelamento. Indica o motivo (opcional)."
+        confirmLabel="Cancelar encomenda"
+        destructive
+        loading={dialogLoading}
+        onCancel={() => {
+          if (!dialogLoading) {
+            setCancelTarget(null)
+            setCancelReason('')
+          }
+        }}
+        onConfirm={handleConfirmCancel}
+      >
+        <label>
+          Motivo (opcional)
+          <textarea
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            placeholder="Ex: problema com fornecedor"
+            disabled={dialogLoading}
+          />
+        </label>
+      </ConfirmDialog>
     </section>
   )
 }

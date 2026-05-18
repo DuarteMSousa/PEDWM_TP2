@@ -3,6 +3,9 @@ import { RestaurantVirtualKitchenScreen } from './screens/RestaurantVirtualKitch
 import { RestaurantMenuCatalogScreen } from './screens/RestaurantMenuCatalogScreen'
 import { RestaurantChatScreen } from './screens/RestaurantChatScreen'
 import { RestaurantNotificationsScreen } from './screens/RestaurantNotificationsScreen'
+import { RestaurantOrderDetailScreen } from './screens/RestaurantOrderDetailScreen'
+import { RestaurantReviewsScreen } from './screens/RestaurantReviewsScreen'
+import { RestaurantCampaignsScreen } from './screens/RestaurantCampaignsScreen'
 
 export const RESTAURANT_VIEWS = [
   {
@@ -15,14 +18,32 @@ export const RESTAURANT_VIEWS = [
     id: 'kitchen',
     label: 'Cozinha virtual',
     icon: 'KV',
-    badge: 3,
     Component: RestaurantVirtualKitchenScreen,
+  },
+  {
+    id: 'order-detail',
+    label: 'Detalhe pedido',
+    icon: 'DP',
+    Component: RestaurantOrderDetailScreen,
+    hideFromNav: true,
   },
   {
     id: 'menu',
     label: 'Gestao de menu',
     icon: 'GM',
     Component: RestaurantMenuCatalogScreen,
+  },
+  {
+    id: 'reviews',
+    label: 'Avaliacoes',
+    icon: 'AV',
+    Component: RestaurantReviewsScreen,
+  },
+  {
+    id: 'campaigns',
+    label: 'Campanhas',
+    icon: 'CP',
+    Component: RestaurantCampaignsScreen,
   },
   {
     id: 'chat',
