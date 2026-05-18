@@ -85,7 +85,9 @@ class RayAopServiceProvider extends ServiceProvider
             return;
         }
 
-        $this->ensureCacheDirectory();
+        if (! $this->ensureCacheDirectory()) {
+            return;
+        }
 
         $this->app->singleton(Aspect::class, function (): Aspect {
             $aspect = new Aspect(config('ray_aop.cache_dir'));
@@ -170,12 +172,33 @@ class RayAopServiceProvider extends ServiceProvider
         return $arguments;
     }
 
-    private function ensureCacheDirectory(): void
+    private function ensureCacheDirectory(): bool
     {
-        $cacheDir = config('ray_aop.cache_dir');
+        $cacheDir = (string) config('ray_aop.cache_dir');
 
-        if (! is_dir($cacheDir)) {
-            mkdir($cacheDir, 0775, true);
+        if ($cacheDir === '') {
+            logger()->warning('Ray AOP disabled: "ray_aop.cache_dir" is not configured.');
+
+            return false;
         }
+
+        if (! is_dir($cacheDir) && ! mkdir($cacheDir, 0777, true) && ! is_dir($cacheDir)) {
+            logger()->warning("Ray AOP disabled: failed to create cache directory [{$cacheDir}].");
+
+            return false;
+        }
+
+        if (! is_writable($cacheDir)) {
+            @chmod($cacheDir, 0777);
+            clearstatcache(true, $cacheDir);
+        }
+
+        if (! is_writable($cacheDir)) {
+            logger()->warning("Ray AOP disabled: cache directory [{$cacheDir}] is not writable.");
+
+            return false;
+        }
+
+        return true;
     }
 }

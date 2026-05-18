@@ -11,6 +11,8 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
   children,
+  cardClassName = '',
+  bodyClassName = '',
 }) {
   const confirmButtonRef = useRef(null)
 
@@ -40,7 +42,7 @@ export function ConfirmDialog({
       aria-modal="true"
       aria-labelledby="rb-dialog-title"
     >
-      <div className="rb-dialog-card">
+      <div className={`rb-dialog-card ${cardClassName}`.trim()}>
         <header className="rb-dialog-head">
           <h3 id="rb-dialog-title">{title}</h3>
           <button
@@ -56,7 +58,7 @@ export function ConfirmDialog({
 
         {description ? <p className="rb-dialog-description">{description}</p> : null}
 
-        {children ? <div className="rb-dialog-body">{children}</div> : null}
+        {children ? <div className={`rb-dialog-body ${bodyClassName}`.trim()}>{children}</div> : null}
 
         <footer className="rb-dialog-actions">
           <button

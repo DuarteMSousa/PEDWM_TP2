@@ -439,181 +439,10 @@ export function RestaurantMenuCatalogScreen({ session }) {
             Gerir categorias
           </button>
           <button type="button" className="rb-primary" onClick={() => setShowCreateForm((state) => !state)}>
-            {showCreateForm ? 'Fechar formulario' : '+ Adicionar prato'}
+            {showCreateForm ? 'Fechar criacao' : '+ Adicionar prato'}
           </button>
         </div>
       </header>
-
-      {showCreateForm ? (
-        <article className="rb-search-wrap">
-          <div className="rb-login-form">
-            <label>
-              Categoria
-              <input
-                value={newProduct.category}
-                onChange={(event) => setNewProduct((state) => ({ ...state, category: event.target.value }))}
-              />
-            </label>
-            <label>
-              Nome
-              <input
-                value={newProduct.name}
-                onChange={(event) => setNewProduct((state) => ({ ...state, name: event.target.value }))}
-              />
-            </label>
-            <label>
-              Preco (EUR)
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={newProduct.price}
-                onChange={(event) => setNewProduct((state) => ({ ...state, price: event.target.value }))}
-              />
-            </label>
-            <label>
-              Tempo de preparacao (min)
-              <input
-                type="number"
-                min="1"
-                value={newProduct.estimated_preparation_time_min}
-                onChange={(event) =>
-                  setNewProduct((state) => ({ ...state, estimated_preparation_time_min: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              Descricao
-              <input
-                value={newProduct.description}
-                onChange={(event) => setNewProduct((state) => ({ ...state, description: event.target.value }))}
-              />
-            </label>
-            <label>
-              <input
-                type="checkbox"
-                checked={newProduct.is_available}
-                onChange={(event) => setNewProduct((state) => ({ ...state, is_available: event.target.checked }))}
-              />
-              {' '}Disponivel
-            </label>
-            <div className="rb-option-editor">
-              <div className="rb-option-editor-head">
-                <strong>Grupos de opcoes</strong>
-                <button type="button" className="rb-btn-outline" onClick={addOptionGroup}>
-                  + Adicionar grupo
-                </button>
-              </div>
-              {productOptionGroups.length === 0 ? (
-                <small>Sem grupos. Util para escolhas como "tamanho" ou "molho".</small>
-              ) : null}
-
-              {productOptionGroups.map((group, groupIndex) => (
-                <div className="rb-option-group" key={`group-${groupIndex}`}>
-                  <div className="rb-option-group-head">
-                    <input
-                      placeholder="Nome do grupo (ex: Tamanho)"
-                      value={group.name}
-                      onChange={(event) =>
-                        updateOptionGroup(groupIndex, { name: event.target.value })
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="rb-icon-mini danger"
-                      onClick={() => removeOptionGroup(groupIndex)}
-                    >
-                      Remover grupo
-                    </button>
-                  </div>
-                  <div className="rb-option-group-rules">
-                    <label>
-                      Min
-                      <input
-                        type="number"
-                        min="0"
-                        value={group.min_options}
-                        onChange={(event) =>
-                          updateOptionGroup(groupIndex, {
-                            min_options: Number(event.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Max
-                      <input
-                        type="number"
-                        min="1"
-                        value={group.max_options}
-                        onChange={(event) =>
-                          updateOptionGroup(groupIndex, {
-                            max_options: Number(event.target.value),
-                          })
-                        }
-                      />
-                    </label>
-                  </div>
-
-                  {group.options.map((option, optionIndex) => (
-                    <div className="rb-option-row" key={`option-${groupIndex}-${optionIndex}`}>
-                      <input
-                        placeholder="Nome opcao"
-                        value={option.name}
-                        onChange={(event) =>
-                          updateOption(groupIndex, optionIndex, { name: event.target.value })
-                        }
-                      />
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder="Extra"
-                        value={option.extra_price}
-                        onChange={(event) =>
-                          updateOption(groupIndex, optionIndex, {
-                            extra_price: Number(event.target.value),
-                          })
-                        }
-                      />
-                      <label className="rb-option-default">
-                        <input
-                          type="checkbox"
-                          checked={option.default_option}
-                          onChange={(event) =>
-                            updateOption(groupIndex, optionIndex, {
-                              default_option: event.target.checked,
-                            })
-                          }
-                        />
-                        default
-                      </label>
-                      <button
-                        type="button"
-                        className="rb-icon-mini danger"
-                        onClick={() => removeOption(groupIndex, optionIndex)}
-                      >
-                        x
-                      </button>
-                    </div>
-                  ))}
-
-                  <button
-                    type="button"
-                    className="rb-btn-outline"
-                    onClick={() => addOptionToGroup(groupIndex)}
-                  >
-                    + Adicionar opcao
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <button type="button" className="rb-primary" onClick={handleCreate} disabled={saving}>
-              Criar prato
-            </button>
-          </div>
-        </article>
-      ) : null}
 
       <article className="rb-search-wrap">
         <input
@@ -866,6 +695,184 @@ export function RestaurantMenuCatalogScreen({ session }) {
 
       {infoText ? <p className="rb-prep-note">{infoText}</p> : null}
       {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
+
+      <ConfirmDialog
+        open={showCreateForm}
+        title="Criar prato"
+        description="Preenche os dados do prato e confirma para adicionar ao menu."
+        confirmLabel="Criar prato"
+        cancelLabel="Fechar"
+        cardClassName="rb-dialog-card-wide"
+        bodyClassName="rb-create-modal-body"
+        loading={saving}
+        onCancel={() => {
+          if (!saving) setShowCreateForm(false)
+        }}
+        onConfirm={handleCreate}
+      >
+        <div className="rb-login-form rb-create-product-modal-form">
+          <label>
+            Categoria
+            <input
+              value={newProduct.category}
+              onChange={(event) => setNewProduct((state) => ({ ...state, category: event.target.value }))}
+            />
+          </label>
+          <label>
+            Nome
+            <input
+              value={newProduct.name}
+              onChange={(event) => setNewProduct((state) => ({ ...state, name: event.target.value }))}
+            />
+          </label>
+          <label>
+            Preco (EUR)
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={newProduct.price}
+              onChange={(event) => setNewProduct((state) => ({ ...state, price: event.target.value }))}
+            />
+          </label>
+          <label>
+            Tempo de preparacao (min)
+            <input
+              type="number"
+              min="1"
+              value={newProduct.estimated_preparation_time_min}
+              onChange={(event) =>
+                setNewProduct((state) => ({ ...state, estimated_preparation_time_min: event.target.value }))
+              }
+            />
+          </label>
+          <label>
+            Descricao
+            <input
+              value={newProduct.description}
+              onChange={(event) => setNewProduct((state) => ({ ...state, description: event.target.value }))}
+            />
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={newProduct.is_available}
+              onChange={(event) => setNewProduct((state) => ({ ...state, is_available: event.target.checked }))}
+            />
+            {' '}Disponivel
+          </label>
+          <div className="rb-option-editor">
+            <div className="rb-option-editor-head">
+              <strong>Grupos de opcoes</strong>
+              <button type="button" className="rb-btn-outline" onClick={addOptionGroup}>
+                + Adicionar grupo
+              </button>
+            </div>
+            {productOptionGroups.length === 0 ? (
+              <small>Sem grupos. Util para escolhas como "tamanho" ou "molho".</small>
+            ) : null}
+
+            {productOptionGroups.map((group, groupIndex) => (
+              <div className="rb-option-group" key={`group-${groupIndex}`}>
+                <div className="rb-option-group-head">
+                  <input
+                    placeholder="Nome do grupo (ex: Tamanho)"
+                    value={group.name}
+                    onChange={(event) =>
+                      updateOptionGroup(groupIndex, { name: event.target.value })
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="rb-icon-mini danger"
+                    onClick={() => removeOptionGroup(groupIndex)}
+                  >
+                    Remover grupo
+                  </button>
+                </div>
+                <div className="rb-option-group-rules">
+                  <label>
+                    Min
+                    <input
+                      type="number"
+                      min="0"
+                      value={group.min_options}
+                      onChange={(event) =>
+                        updateOptionGroup(groupIndex, {
+                          min_options: Number(event.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                  <label>
+                    Max
+                    <input
+                      type="number"
+                      min="1"
+                      value={group.max_options}
+                      onChange={(event) =>
+                        updateOptionGroup(groupIndex, {
+                          max_options: Number(event.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </div>
+
+                {group.options.map((option, optionIndex) => (
+                  <div className="rb-option-row" key={`option-${groupIndex}-${optionIndex}`}>
+                    <input
+                      placeholder="Nome opcao"
+                      value={option.name}
+                      onChange={(event) =>
+                        updateOption(groupIndex, optionIndex, { name: event.target.value })
+                      }
+                    />
+                    <input
+                      type="number"
+                      step="0.01"
+                      placeholder="Extra"
+                      value={option.extra_price}
+                      onChange={(event) =>
+                        updateOption(groupIndex, optionIndex, {
+                          extra_price: Number(event.target.value),
+                        })
+                      }
+                    />
+                    <label className="rb-option-default">
+                      <input
+                        type="checkbox"
+                        checked={option.default_option}
+                        onChange={(event) =>
+                          updateOption(groupIndex, optionIndex, {
+                            default_option: event.target.checked,
+                          })
+                        }
+                      />
+                      default
+                    </label>
+                    <button
+                      type="button"
+                      className="rb-icon-mini danger"
+                      onClick={() => removeOption(groupIndex, optionIndex)}
+                    >
+                      x
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  type="button"
+                  className="rb-btn-outline"
+                  onClick={() => addOptionToGroup(groupIndex)}
+                >
+                  + Adicionar opcao
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </ConfirmDialog>
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
