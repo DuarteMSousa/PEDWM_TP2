@@ -1,25 +1,25 @@
 import { useState } from 'react'
-import { bootstrapRestaurantSession } from '../../../services/restaurantOpsService'
+import {
+  bootstrapRestaurantSession,
+  registerRestaurantUser,
+} from '../../../services/restaurantOpsService'
 
-const DEFAULT_DEV_USER_ID = import.meta.env.VITE_DEV_RESTAURANT_USER_ID ?? ''
 const DEFAULT_TOKEN = import.meta.env.VITE_AUTH_BEARER_TOKEN ?? ''
-const DEFAULT_RESTAURANT_ID = import.meta.env.VITE_DEV_RESTAURANT_ID ?? ''
 
 export function RestaurantLoginScreen({ onLogin }) {
   const [email, setEmail] = useState('manager@fastbite.pt')
-  const [password, setPassword] = useState('********')
-  const [loading, setLoading] = useState(false)
+  const [password, setPassword] = useState('')
+  const [loadingAction, setLoadingAction] = useState('')
   const [errorText, setErrorText] = useState('')
 
   async function handleSubmit(event) {
     event.preventDefault()
     try {
-      setLoading(true)
+      setLoadingAction('login')
       const session = await bootstrapRestaurantSession({
         email,
+        password,
         restaurant: '',
-        devUserId: DEFAULT_DEV_USER_ID,
-        restaurantId: DEFAULT_RESTAURANT_ID,
         token: DEFAULT_TOKEN,
       })
       setErrorText('')
@@ -27,7 +27,25 @@ export function RestaurantLoginScreen({ onLogin }) {
     } catch (error) {
       setErrorText(error.message)
     } finally {
-      setLoading(false)
+      setLoadingAction('')
+    }
+  }
+
+  async function handleRegister() {
+    try {
+      setLoadingAction('register')
+      const session = await registerRestaurantUser({
+        email,
+        password,
+        restaurant: '',
+        token: DEFAULT_TOKEN,
+      })
+      setErrorText('')
+      onLogin(session)
+    } catch (error) {
+      setErrorText(error.message)
+    } finally {
+      setLoadingAction('')
     }
   }
 
@@ -48,10 +66,19 @@ export function RestaurantLoginScreen({ onLogin }) {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               type="password"
+              required
             />
           </label>
-          <button type="submit" className="rb-primary" disabled={loading}>
-            {loading ? 'A entrar...' : 'Entrar'}
+          <button type="submit" className="rb-primary" disabled={loadingAction !== ''}>
+            {loadingAction === 'login' ? 'A entrar...' : 'Entrar'}
+          </button>
+          <button
+            type="button"
+            className="rb-icon-btn"
+            onClick={handleRegister}
+            disabled={loadingAction !== ''}
+          >
+            {loadingAction === 'register' ? 'A criar conta...' : 'Criar conta'}
           </button>
         </form>
         {errorText ? <p className="rb-chat-error">{errorText}</p> : null}

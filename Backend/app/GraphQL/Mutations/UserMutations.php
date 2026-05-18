@@ -30,6 +30,14 @@ class UserMutations
         ));
     }
 
+    public function login($_, array $args)
+    {
+        return $this->userService->authenticateByCredentials(
+            $args['email'],
+            $args['password'],
+        );
+    }
+
     public function update($_, array $args)
     {
         return $this->userService->updateUser($args['id'], new UpdateUserDTO(

@@ -8,6 +8,7 @@ use App\DTOs\User\UpdateUserDTO;
 interface UserRepositoryInterface
 {
     public function findById(string $id);
+    public function findByEmail(string $email);
 
     public function createUser(CreateUserDTO $data);
 
@@ -15,5 +16,4 @@ interface UserRepositoryInterface
 
     public function deleteUser(string $id);
 }
-
 

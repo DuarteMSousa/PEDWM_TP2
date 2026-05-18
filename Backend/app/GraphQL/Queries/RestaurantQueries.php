@@ -43,4 +43,9 @@ class RestaurantQueries
     {
         return $this->restaurantService->forLocalManager($args['user_id']);
     }
+
+    public function operatorRestaurant($_, array $args)
+    {
+        return $this->restaurantService->forOperator($args['user_id']);
+    }
 }

@@ -22,4 +22,6 @@ interface RestaurantServiceInterface
     public function forChain(string $chainId);
 
     public function forLocalManager(string $userId): ?Restaurant;
+
+    public function forOperator(string $userId): ?Restaurant;
 }

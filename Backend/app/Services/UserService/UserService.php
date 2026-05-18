@@ -6,6 +6,8 @@ use App\Aspects\Transactional;
 use App\DTOs\User\CreateUserDTO;
 use App\DTOs\User\UpdateUserDTO;
 use App\Repositories\UserRepository\UserRepositoryInterface;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 class UserService implements UserServiceInterface
 {
@@ -16,9 +18,28 @@ class UserService implements UserServiceInterface
         return $this->userRepository->findById($id);
     }
 
+    public function authenticateByCredentials(string $email, string $password)
+    {
+        $user = $this->userRepository->findByEmail($email);
+
+        if (! $user || ! Hash::check($password, $user->password)) {
+            throw ValidationException::withMessages([
+                'credentials' => ['Email ou password invalidos.'],
+            ]);
+        }
+
+        return $user;
+    }
+
     #[Transactional]
     public function createUser(CreateUserDTO $data)
     {
+        if ($this->userRepository->findByEmail($data->email)) {
+            throw ValidationException::withMessages([
+                'email' => ['Este email ja esta registado.'],
+            ]);
+        }
+
         return $this->userRepository->createUser($data->withHashedPassword());
     }
 

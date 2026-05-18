@@ -46,6 +46,8 @@ extend type Query {
     @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@chainManagerRestaurants")
   localManagerRestaurant(user_id: ID!): Restaurant
     @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@localManagerRestaurant")
+  operatorRestaurant(user_id: ID!): Restaurant
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@operatorRestaurant")
 }
 
 extend type Mutation {

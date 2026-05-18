@@ -69,9 +69,9 @@ function mapNotification(notification) {
   }
 }
 
-const USER_QUERY = `
-  query User($id: ID!) {
-    user(id: $id) {
+const LOGIN_USER_MUTATION = `
+  mutation LoginUser($email: String!, $password: String!) {
+    loginUser(email: $email, password: $password) {
       id
       name
       user_type
@@ -79,9 +79,20 @@ const USER_QUERY = `
   }
 `
 
-const LOCAL_MANAGER_RESTAURANT_QUERY = `
-  query LocalManagerRestaurant($userId: ID!) {
-    localManagerRestaurant(user_id: $userId) {
+const CREATE_USER_MUTATION = `
+  mutation CreateUser($input: CreateUserInput!) {
+    createUser(input: $input) {
+      id
+      name
+      email
+      user_type
+    }
+  }
+`
+
+const OPERATOR_RESTAURANT_QUERY = `
+  query OperatorRestaurant($userId: ID!) {
+    operatorRestaurant(user_id: $userId) {
       id
       name
       chain_id
@@ -291,36 +302,39 @@ const MARK_ALL_NOTIFICATIONS_READ_MUTATION = `
 
 export async function bootstrapRestaurantSession({
   email,
+  password,
   restaurant,
-  devUserId,
-  restaurantId,
+  restaurantId = '',
   token,
 }) {
-  const trimmedDevUserId = devUserId.trim()
-  const trimmedRestaurantId = restaurantId.trim()
+  const trimmedEmail = email.trim()
+  const trimmedPassword = password.trim()
+  const trimmedRestaurantId = String(restaurantId ?? '').trim()
   const trimmedToken = token.trim()
 
-  if (!trimmedDevUserId) {
-    throw new Error('Define Dev User ID para associar a sessao ao operador real.')
-  }
-
-  const requestSession = {
-    devUserId: trimmedDevUserId,
-    token: trimmedToken,
+  if (!trimmedEmail || !trimmedPassword) {
+    throw new Error('Preenche email e password.')
   }
 
   const userData = await graphqlRequest({
-    query: USER_QUERY,
-    variables: { id: trimmedDevUserId },
-    ...requestOptions(requestSession),
+    query: LOGIN_USER_MUTATION,
+    variables: {
+      email: trimmedEmail,
+      password: trimmedPassword,
+    },
   })
 
-  if (!userData.user) {
-    throw new Error('Operador nao encontrado para o Dev User ID indicado.')
+  if (!userData.loginUser) {
+    throw new Error('Nao foi possivel autenticar o utilizador.')
   }
 
-  const operatorName = userData.user.name || email.split('@')[0] || 'manager'
-  const userType = userData.user.user_type
+  const authenticatedUser = userData.loginUser
+  const requestSession = {
+    devUserId: authenticatedUser.id,
+    token: trimmedToken,
+  }
+  const operatorName = authenticatedUser.name || trimmedEmail.split('@')[0] || 'manager'
+  const userType = authenticatedUser.user_type
 
   if (userType !== 'LOCAL_MANAGER' && userType !== 'CHAIN_MANAGER') {
     throw new Error(`Utilizador ${operatorName} nao tem perfil de restaurante.`)
@@ -335,13 +349,13 @@ export async function bootstrapRestaurantSession({
       ...requestOptions(requestSession),
     })
     resolvedRestaurant = restaurantData.restaurant
-  } else if (userType === 'LOCAL_MANAGER') {
+  } else {
     const managerRestaurantData = await graphqlRequest({
-      query: LOCAL_MANAGER_RESTAURANT_QUERY,
-      variables: { userId: trimmedDevUserId },
+      query: OPERATOR_RESTAURANT_QUERY,
+      variables: { userId: authenticatedUser.id },
       ...requestOptions(requestSession),
     })
-    resolvedRestaurant = managerRestaurantData.localManagerRestaurant
+    resolvedRestaurant = managerRestaurantData.operatorRestaurant
   }
 
   if (!resolvedRestaurant?.id) {
@@ -353,11 +367,64 @@ export async function bootstrapRestaurantSession({
     restaurant: resolvedRestaurant.name || restaurant || 'Unidade',
     restaurantId: resolvedRestaurant.id,
     chainId: resolvedRestaurant.chain_id ?? null,
-    userId: userData.user.id,
-    devUserId: trimmedDevUserId,
+    userId: authenticatedUser.id,
+    devUserId: authenticatedUser.id,
     token: trimmedToken,
     userType,
   }
+}
+
+export async function registerRestaurantUser({
+  email,
+  password,
+  restaurant,
+  restaurantId,
+  token,
+}) {
+  const trimmedEmail = String(email ?? '').trim()
+  const trimmedPassword = String(password ?? '').trim()
+
+  if (!trimmedEmail || !trimmedPassword) {
+    throw new Error('Preenche email e password.')
+  }
+
+  const defaultName = trimmedEmail.split('@')[0] || 'manager'
+
+  try {
+    await graphqlRequest({
+      query: CREATE_USER_MUTATION,
+      variables: {
+        input: {
+          name: defaultName,
+          email: trimmedEmail,
+          password: trimmedPassword,
+          user_type: 'CHAIN_MANAGER',
+        },
+      },
+    })
+  } catch (error) {
+    const message = String(error?.message ?? '')
+    if (
+      message.includes('users_email_unique') ||
+      message.toLowerCase().includes('unique constraint') ||
+      message.toLowerCase().includes('unique') ||
+      message.toLowerCase().includes('ja esta registado') ||
+      message.toLowerCase().includes('duplicate') ||
+      message.toLowerCase().includes('already')
+    ) {
+      throw new Error('Este email ja esta registado.')
+    }
+
+    throw error
+  }
+
+  return bootstrapRestaurantSession({
+    email: trimmedEmail,
+    password: trimmedPassword,
+    restaurant,
+    restaurantId,
+    token,
+  })
 }
 
 export async function fetchRestaurantActiveOrders(session) {
