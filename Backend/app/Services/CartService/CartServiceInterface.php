@@ -8,17 +8,17 @@ use App\Models\Cart;
 
 interface CartServiceInterface
 {
-    public function forUser(string $userId): Cart;
+    public function getCartByUserId(string $userId): Cart;
 
-    public function findForUser(string $userId, string $cartId): ?Cart;
+    public function getCartByUserIdAndCartId(string $userId, string $cartId): ?Cart;
 
-    public function addItem(string $clientUserId, AddCartItemDTO $data): Cart;
+    public function addCartItem(string $clientUserId, AddCartItemDTO $data): Cart;
 
-    public function updateItem(string $clientUserId, string $cartItemId, UpdateCartItemDTO $data): Cart;
+    public function updateCartItem(string $clientUserId, string $cartItemId, UpdateCartItemDTO $data): Cart;
 
-    public function removeItem(string $userId, string $cartItemId): Cart;
+    public function removeCartItem(string $userId, string $cartItemId): Cart;
 
-    public function clear(string $userId): bool;
+    public function clearCart(string $userId): bool;
 
-    public function recalculate(string $cartId): Cart;
+    public function recalculateCartTotal(string $cartId): Cart;
 }

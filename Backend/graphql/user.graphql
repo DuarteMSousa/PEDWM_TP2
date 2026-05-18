@@ -35,7 +35,7 @@ input UpdateUserAddressInput {
 }
 
 extend type Query {
-    user(id: ID!): User @field(resolver: "App\\GraphQL\\Queries\\UserQueries@getById")
+    user(id: ID!): User @field(resolver: "App\\GraphQL\\Queries\\UserQueries@getUserById")
     clientAddresses(user_id: ID!): [UserAddress!]! @field(resolver: "App\\GraphQL\\Queries\\UserQueries@clientAddresses")
 }
 

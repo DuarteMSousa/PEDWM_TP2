@@ -13,26 +13,26 @@ class PaymentMutations
 
     public function createPayment($_, array $args)
     {
-        return $this->paymentService->create(CreatePaymentDTO::from($args['input']));
+        return $this->paymentService->createPayment(CreatePaymentDTO::from($args['input']));
     }
 
     public function confirmPayment($_, array $args)
     {
-        return $this->paymentService->confirm($args['payment_id'], $args['transaction_id'] ?? null);
+        return $this->paymentService->confirmPayment($args['payment_id'], $args['transaction_id'] ?? null);
     }
 
     public function payPayment($_, array $args)
     {
-        return $this->paymentService->confirm($args['payment_id'], $args['transaction_id'] ?? null);
+        return $this->paymentService->confirmPayment($args['payment_id'], $args['transaction_id'] ?? null);
     }
 
     public function cancelPayment($_, array $args)
     {
-        return $this->paymentService->cancel($args['payment_id'], $args['reason'] ?? null);
+        return $this->paymentService->cancelPayment($args['payment_id'], $args['reason'] ?? null);
     }
 
     public function failPayment($_, array $args)
     {
-        return $this->paymentService->fail($args['payment_id'], $args['reason'] ?? null);
+        return $this->paymentService->failPayment($args['payment_id'], $args['reason'] ?? null);
     }
 }

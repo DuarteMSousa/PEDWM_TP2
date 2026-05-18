@@ -16,14 +16,14 @@ class CartService implements CartServiceInterface
 {
     private array $with = ['items.restaurantProduct.product', 'items.options.productOption'];
 
-    public function forUser(string $userId): Cart
+    public function getCartByUserId(string $userId): Cart
     {
         return Cart::query()
             ->firstOrCreate(['user_id' => $userId], ['total' => 0])
             ->load($this->with);
     }
 
-    public function findForUser(string $userId, string $cartId): ?Cart
+    public function getCartByUserIdAndCartId(string $userId, string $cartId): ?Cart
     {
         return Cart::query()
             ->with($this->with)
@@ -32,9 +32,9 @@ class CartService implements CartServiceInterface
     }
 
     #[Transactional]
-    public function addItem(string $clientUserId, AddCartItemDTO $data): Cart
+    public function addCartItem(string $clientUserId, AddCartItemDTO $data): Cart
     {
-        $cart = $this->forUser($clientUserId);
+        $cart = $this->getCartByUserId($clientUserId);
         $restaurantProduct = RestaurantProduct::query()
             ->with(['product.optionGroups.options'])
             ->findOrFail($data->restaurant_product_id);
@@ -67,11 +67,11 @@ class CartService implements CartServiceInterface
             ]);
         }
 
-        return $this->recalculate($cart->id);
+        return $this->recalculateCartTotal($cart->id);
     }
 
     #[Transactional]
-    public function updateItem(string $clientUserId, string $cartItemId, UpdateCartItemDTO $data): Cart
+    public function updateCartItem(string $clientUserId, string $cartItemId, UpdateCartItemDTO $data): Cart
     {
         $item = CartItem::query()
             ->with('restaurantProduct.product.optionGroups.options')
@@ -104,11 +104,11 @@ class CartService implements CartServiceInterface
             'total_price' => $lineTotal,
         ]);
 
-        return $this->recalculate($item->cart_id);
+        return $this->recalculateCartTotal($item->cart_id);
     }
 
     #[Transactional]
-    public function removeItem(string $userId, string $cartItemId): Cart
+    public function removeCartItem(string $userId, string $cartItemId): Cart
     {
         $item = CartItem::query()
             ->whereHas('cart', fn ($query) => $query->where('user_id', $userId))
@@ -116,13 +116,13 @@ class CartService implements CartServiceInterface
         $cartId = $item->cart_id;
         $item->delete();
 
-        return $this->recalculate($cartId);
+        return $this->recalculateCartTotal($cartId);
     }
 
     #[Transactional]
-    public function clear(string $userId): bool
+    public function clearCart(string $userId): bool
     {
-        $cart = $this->forUser($userId);
+        $cart = $this->getCartByUserId($userId);
         $cart->items()->delete();
         $cart->update(['total' => 0]);
 
@@ -130,7 +130,7 @@ class CartService implements CartServiceInterface
     }
 
     #[Transactional]
-    public function recalculate(string $cartId): Cart
+    public function recalculateCartTotal(string $cartId): Cart
     {
         $cart = Cart::query()->with($this->with)->findOrFail($cartId);
         $cart->update(['total' => PricingCalculator::calculateSubtotal($cart->items->pluck('total_price'))]);

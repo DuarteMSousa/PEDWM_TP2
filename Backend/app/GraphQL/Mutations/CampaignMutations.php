@@ -38,5 +38,5 @@ class CampaignMutations
 
     public function createCoupon($_, array $args) { return $this->couponService->createCoupon(CreateCouponDTO::from($args['input'])); }
     public function updateCoupon($_, array $args) { return $this->couponService->updateCoupon($args['id'], UpdateCouponDTO::from($args['input'])); }
-    public function deleteCoupon($_, array $args): bool { return $this->couponService->delete($args['id']); }
+    public function deleteCoupon($_, array $args): bool { return $this->couponService->deleteCoupon($args['id']); }
 }

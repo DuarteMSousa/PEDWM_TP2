@@ -8,13 +8,13 @@ use App\Models\UserAddress;
 
 interface UserAddressServiceInterface
 {
-    public function forUser(string $userId);
+    public function getUserAddressesByUserId(string $userId);
 
-    public function createForUser(string $userId, CreateUserAddressDTO $data): UserAddress;
+    public function createUserAddress(string $userId, CreateUserAddressDTO $data): UserAddress;
 
-    public function updateForUser(string $userId, string $addressId, UpdateUserAddressDTO $data): ?UserAddress;
+    public function updateUserAddress(string $userId, string $addressId, UpdateUserAddressDTO $data): ?UserAddress;
 
-    public function deleteForUser(string $userId, string $addressId): bool;
+    public function deleteUserAddress(string $userId, string $addressId): bool;
 
-    public function setDefault(string $userId, string $addressId): ?UserAddress;
+    public function setDefaultUserAddress(string $userId, string $addressId): ?UserAddress;
 }

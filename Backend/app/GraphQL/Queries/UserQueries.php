@@ -13,13 +13,13 @@ class UserQueries
     ) {
     }
 
-    public function getById($_, array $args)
+    public function getUserById($_, array $args)
     {
-        return $this->userService->getById($args['id']);
+        return $this->userService->getUserById($args['id']);
     }
 
     public function clientAddresses($_, array $args)
     {
-        return $this->userAddressService->forUser($args['user_id']);
+        return $this->userAddressService->getUserAddressesByUserId($args['user_id']);
     }
 }

@@ -13,12 +13,12 @@ class NotificationMutations
 
     public function markNotificationRead($_, array $args): array
     {
-        return $this->notificationFeedService->markRead($args['user_id'], $args['notification_id']);
+        return $this->notificationFeedService->markNotificationAsRead($args['user_id'], $args['notification_id']);
     }
 
     public function markAllClientNotificationsRead($_, array $args): array
     {
-        return $this->notificationFeedService->markAllRead($args['user_id']);
+        return $this->notificationFeedService->markAllNotificationsAsRead($args['user_id']);
     }
 
     public function registerPushToken($_, array $args): array

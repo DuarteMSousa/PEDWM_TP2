@@ -8,15 +8,15 @@ use App\Models\RestaurantProduct;
 
 interface RestaurantProductServiceInterface
 {
-    public function find(string $id): ?RestaurantProduct;
+    public function getRestaurantProductById(string $id): ?RestaurantProduct;
 
-    public function forRestaurant(string $restaurantId);
+    public function getRestaurantProductsByRestaurantId(string $restaurantId);
 
-    public function menu(string $restaurantId): array;
+    public function getRestaurantMenu(string $restaurantId): array;
 
-    public function setAvailability(string $id, bool $isAvailable): ?RestaurantProduct;
+    public function setRestaurantProductAvailability(string $id, bool $isAvailable): ?RestaurantProduct;
 
-    public function create(string $actorUserId, CreateRestaurantProductDTO $data): RestaurantProduct;
+    public function createRestaurantProduct(string $actorUserId, CreateRestaurantProductDTO $data): RestaurantProduct;
 
-    public function update(string $actorUserId, string $id, UpdateRestaurantProductDTO $data): ?RestaurantProduct;
+    public function updateRestaurantProduct(string $actorUserId, string $id, UpdateRestaurantProductDTO $data): ?RestaurantProduct;
 }

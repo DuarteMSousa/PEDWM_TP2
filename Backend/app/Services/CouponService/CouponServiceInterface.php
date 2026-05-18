@@ -8,15 +8,15 @@ use App\Models\Coupon;
 
 interface CouponServiceInterface
 {
-    public function forChain(string $chainId);
+    public function getCouponsByChainId(string $chainId);
 
-    public function findByCode(string $code): ?Coupon;
+    public function getCouponByCode(string $code): ?Coupon;
 
-    public function find(string $id): ?Coupon;
+    public function getCouponById(string $id): ?Coupon;
 
     public function createCoupon(CreateCouponDTO $data): Coupon;
 
     public function updateCoupon(string $id, UpdateCouponDTO $data): ?Coupon;
 
-    public function delete(string $id): bool;
+    public function deleteCoupon(string $id): bool;
 }

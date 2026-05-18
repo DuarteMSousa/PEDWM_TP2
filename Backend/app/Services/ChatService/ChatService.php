@@ -13,7 +13,7 @@ use App\Models\User;
 
 class ChatService implements ChatServiceInterface
 {
-    public function forOrder(string $orderId)
+    public function getChatsByOrderId(string $orderId)
     {
         return Chat::query()
             ->with(['participants', 'messages'])
@@ -22,12 +22,12 @@ class ChatService implements ChatServiceInterface
             ->get();
     }
 
-    public function find(string $id): ?Chat
+    public function getChatById(string $id): ?Chat
     {
         return Chat::query()->with(['participants', 'messages'])->find($id);
     }
 
-    public function messages(string $chatId, int $page, int $perPage)
+    public function getMessagesByChatId(string $chatId, int $page, int $perPage)
     {
         return Message::query()
             ->where('chat_id', $chatId)
@@ -36,7 +36,7 @@ class ChatService implements ChatServiceInterface
             ->items();
     }
 
-    public function participants(string $chatId)
+    public function getParticipantsByChatId(string $chatId)
     {
         return ChatParticipant::query()
             ->where('chat_id', $chatId)
@@ -65,7 +65,7 @@ class ChatService implements ChatServiceInterface
     }
 
     #[Transactional]
-    public function close(string $chatId): Chat
+    public function closeChat(string $chatId): Chat
     {
         $chat = Chat::query()->findOrFail($chatId);
         $chat->update(['closed_at' => now()]);
@@ -74,7 +74,7 @@ class ChatService implements ChatServiceInterface
     }
 
     #[Transactional]
-    public function addParticipant(string $actorUserId, AddChatParticipantDTO $data): ChatParticipant
+    public function addChatParticipant(string $actorUserId, AddChatParticipantDTO $data): ChatParticipant
     {
         return ChatParticipant::query()->create([
             'chat_id' => $data->chat_id,
@@ -85,13 +85,13 @@ class ChatService implements ChatServiceInterface
     }
 
     #[Transactional]
-    public function removeParticipant(string $participantId): bool
+    public function removeChatParticipant(string $participantId): bool
     {
         return (bool) ChatParticipant::query()->whereKey($participantId)->delete();
     }
 
     #[Transactional]
-    public function sendMessage(string $senderUserId, SendMessageDTO $data): Message
+    public function sendChatMessage(string $senderUserId, SendMessageDTO $data): Message
     {
         $participant = ChatParticipant::query()
             ->where('chat_id', $data->chat_id)
@@ -107,7 +107,7 @@ class ChatService implements ChatServiceInterface
     }
 
     #[Transactional]
-    public function markAsRead(string $chatId, string $userId): ChatParticipant
+    public function markChatAsRead(string $chatId, string $userId): ChatParticipant
     {
         $participant = ChatParticipant::query()
             ->where('chat_id', $chatId)

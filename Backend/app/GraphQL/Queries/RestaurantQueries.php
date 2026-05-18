@@ -16,36 +16,36 @@ class RestaurantQueries
 
     public function restaurants($_, array $args)
     {
-        return $this->restaurantService->search(SearchRestaurantsDTO::from($args['input'] ?? []));
+        return $this->restaurantService->searchRestaurants(SearchRestaurantsDTO::from($args['input'] ?? []));
     }
 
     public function restaurant($_, array $args)
     {
-        return $this->restaurantService->find($args['id']);
+        return $this->restaurantService->getRestaurantById($args['id']);
     }
 
     public function restaurantChains()
     {
-        return $this->restaurantChainService->all(500);
+        return $this->restaurantChainService->getAllRestaurantChains(500);
     }
 
     public function restaurantChain($_, array $args)
     {
-        return $this->restaurantChainService->find($args['id']);
+        return $this->restaurantChainService->getRestaurantChainById($args['id']);
     }
 
     public function chainManagerRestaurants($_, array $args)
     {
-        return $this->restaurantService->forChain($args['chain_id']);
+        return $this->restaurantService->getRestaurantsByChainId($args['chain_id']);
     }
 
     public function localManagerRestaurant($_, array $args)
     {
-        return $this->restaurantService->forLocalManager($args['user_id']);
+        return $this->restaurantService->getRestaurantByLocalManagerUserId($args['user_id']);
     }
 
     public function operatorRestaurant($_, array $args)
     {
-        return $this->restaurantService->forOperator($args['user_id']);
+        return $this->restaurantService->getRestaurantByOperatorUserId($args['user_id']);
     }
 }

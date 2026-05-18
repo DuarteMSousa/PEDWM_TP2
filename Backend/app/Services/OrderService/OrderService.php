@@ -39,7 +39,7 @@ class OrderService implements OrderServiceInterface
         'delivery.events',
     ];
 
-    public function clientOrders(string $userId, ?array $statuses = null, int $page = 1, int $perPage = 20)
+    public function getClientOrders(string $userId, ?array $statuses = null, int $page = 1, int $perPage = 20)
     {
         $query = Order::query()
             ->with($this->with)
@@ -53,7 +53,7 @@ class OrderService implements OrderServiceInterface
         return $query->paginate($perPage, ['*'], 'page', $page)->items();
     }
 
-    public function clientOrder(string $userId, string $orderId): ?Order
+    public function getClientOrder(string $userId, string $orderId): ?Order
     {
         return Order::query()
             ->with($this->with)
@@ -61,7 +61,7 @@ class OrderService implements OrderServiceInterface
             ->find($orderId);
     }
 
-    public function restaurantOrders(string $restaurantId, ?array $statuses = null, int $page = 1, int $perPage = 20)
+    public function getRestaurantOrders(string $restaurantId, ?array $statuses = null, int $page = 1, int $perPage = 20)
     {
         $query = Order::query()
             ->with($this->with)
@@ -75,7 +75,7 @@ class OrderService implements OrderServiceInterface
         return $query->paginate($perPage, ['*'], 'page', $page)->items();
     }
 
-    public function restaurantActiveOrders(string $restaurantId)
+    public function getActiveRestaurantOrders(string $restaurantId)
     {
         return Order::query()
             ->with($this->with)
@@ -85,7 +85,7 @@ class OrderService implements OrderServiceInterface
             ->get();
     }
 
-    public function restaurantOrder(string $restaurantId, string $orderId): ?Order
+    public function getRestaurantOrder(string $restaurantId, string $orderId): ?Order
     {
         return Order::query()
             ->with($this->with)
@@ -93,7 +93,7 @@ class OrderService implements OrderServiceInterface
             ->find($orderId);
     }
 
-    public function events(string $orderId)
+    public function getOrderEvents(string $orderId)
     {
         return OrderEvent::query()
             ->where('order_id', $orderId)
@@ -102,7 +102,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function checkout(string $clientUserId, CheckoutDTO $data): array
+    public function checkoutOrder(string $clientUserId, CheckoutDTO $data): array
     {
         $cart = Cart::query()
             ->with(['items.restaurantProduct.product.category', 'items.options.productOption'])
@@ -224,7 +224,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function cancelByClient(string $userId, string $orderId, ?string $reason): Order
+    public function cancelOrderByClient(string $userId, string $orderId, ?string $reason): Order
     {
         $order = Order::query()->where('user_id', $userId)->findOrFail($orderId);
 
@@ -232,7 +232,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function cancelBySystem(string $orderId, string $reason): Order
+    public function cancelOrderBySystem(string $orderId, string $reason): Order
     {
         $order = Order::query()->findOrFail($orderId);
 
@@ -246,21 +246,21 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function acceptByRestaurant(string $actorUserId, string $orderId): Order
+    public function acceptOrderByRestaurant(string $actorUserId, string $orderId): Order
     {
         $order = Order::query()->findOrFail($orderId);
 
         $order = $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
         $order->loadMissing(['restaurant.address', 'address']);
         $deliveryFee = app(OrderPricingService::class)->deliveryFee($order->restaurant, $order->address);
-        $delivery = app(DeliveryServiceInterface::class)->createForOrder($order->id, $deliveryFee);
+        $delivery = app(DeliveryServiceInterface::class)->createDeliveryForOrder($order->id, $deliveryFee);
         AssignCourierToDeliveryJob::dispatch($delivery->id)->afterCommit();
 
         return $order;
     }
 
     #[Transactional]
-    public function rejectByRestaurant(string $actorUserId, string $orderId, ?string $reason): Order
+    public function rejectOrderByRestaurant(string $actorUserId, string $orderId, ?string $reason): Order
     {
         $order = Order::query()->findOrFail($orderId);
 
@@ -270,7 +270,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function startPreparing(string $actorUserId, string $orderId): Order
+    public function startPreparingOrder(string $actorUserId, string $orderId): Order
     {
         $order = Order::query()->findOrFail($orderId);
 
@@ -278,7 +278,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function updateItemStatus(string $actorUserId, string $orderItemId, string $status): Order
+    public function updateOrderItemStatus(string $actorUserId, string $orderItemId, string $status): Order
     {
         $item = OrderItem::query()->with('order.items')->findOrFail($orderItemId);
         $item->update(['status' => $status]);
@@ -294,7 +294,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function markReady(string $actorUserId, string $orderId): Order
+    public function markOrderReady(string $actorUserId, string $orderId): Order
     {
         $order = Order::query()->findOrFail($orderId);
 
@@ -302,10 +302,10 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function repeatOrder(string $userId, string $orderId): Cart
+    public function repeatClientOrder(string $userId, string $orderId): Cart
     {
         $order = Order::query()->with('items.options')->where('user_id', $userId)->findOrFail($orderId);
-        $cart = app(CartServiceInterface::class)->forUser($userId);
+        $cart = app(CartServiceInterface::class)->getCartByUserId($userId);
         $cart->items()->delete();
 
         foreach ($order->items as $item) {
@@ -324,23 +324,23 @@ class OrderService implements OrderServiceInterface
             }
         }
 
-        return app(CartServiceInterface::class)->recalculate($cart->id);
+        return app(CartServiceInterface::class)->recalculateCartTotal($cart->id);
     }
 
     #[Transactional]
-    public function markOutForDelivery(Order $order, string $actorUserId): Order
+    public function markOrderOutForDelivery(Order $order, string $actorUserId): Order
     {
         return $this->transition($order, OrderStatus::OUT_FOR_DELIVERY, OrderEventType::ORDER_OUT_FOR_DELIVERY, $actorUserId);
     }
 
     #[Transactional]
-    public function markDelivered(Order $order, string $actorUserId): Order
+    public function markOrderDelivered(Order $order, string $actorUserId): Order
     {
         return $this->transition($order, OrderStatus::DELIVERED, OrderEventType::ORDER_DELIVERED, $actorUserId);
     }
 
     #[Transactional]
-    public function confirmAfterPayment(Order $order, string $actorUserId): Order
+    public function confirmOrderAfterPayment(Order $order, string $actorUserId): Order
     {
         $this->recordEvent($order, OrderEventType::ORDER_PAYMENT_COMPLETED, $actorUserId);
 
@@ -348,7 +348,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function recordCourierAssigned(Order $order, string $actorUserId): Order
+    public function recordCourierAssignedToOrder(Order $order, string $actorUserId): Order
     {
         $this->recordEvent($order, OrderEventType::ORDER_COURIER_ASSIGNED, $actorUserId);
 
@@ -356,7 +356,7 @@ class OrderService implements OrderServiceInterface
     }
 
     #[Transactional]
-    public function recordPickedUp(Order $order, string $actorUserId): Order
+    public function recordOrderPickedUp(Order $order, string $actorUserId): Order
     {
         $this->recordEvent($order, OrderEventType::ORDER_PICKED_UP, $actorUserId);
 

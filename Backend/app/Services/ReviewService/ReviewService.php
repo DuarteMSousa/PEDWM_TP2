@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class ReviewService implements ReviewServiceInterface
 {
-    public function forUser(string $userId, int $page, int $perPage)
+    public function getReviewsByUserId(string $userId, int $page, int $perPage)
     {
         return Review::query()
             ->where('user_id', $userId)
@@ -19,7 +19,7 @@ class ReviewService implements ReviewServiceInterface
             ->items();
     }
 
-    public function forTarget(string $targetType, string $targetId, int $page, int $perPage)
+    public function getReviewsByTarget(string $targetType, string $targetId, int $page, int $perPage)
     {
         return Review::query()
             ->where('target_type', $targetType)
@@ -30,7 +30,7 @@ class ReviewService implements ReviewServiceInterface
     }
 
     #[Transactional]
-    public function updateForUser(string $userId, string $reviewId, UpdateReviewDTO $data): ?Review
+    public function updateReview(string $userId, string $reviewId, UpdateReviewDTO $data): ?Review
     {
         $review = Review::query()->where('user_id', $userId)->find($reviewId);
 
@@ -50,7 +50,7 @@ class ReviewService implements ReviewServiceInterface
     }
 
     #[Transactional]
-    public function deleteForUser(string $userId, string $reviewId): bool
+    public function deleteReview(string $userId, string $reviewId): bool
     {
         return (bool) Review::query()
             ->where('user_id', $userId)
@@ -59,7 +59,7 @@ class ReviewService implements ReviewServiceInterface
     }
 
     #[Transactional]
-    public function create(CreateReviewDTO $data): Review
+    public function createReview(CreateReviewDTO $data): Review
     {
         $this->validateInput($data->toArray());
 

@@ -15,12 +15,12 @@ class RestaurantProductService implements RestaurantProductServiceInterface
 {
     private array $with = ['product.optionGroups.options', 'restaurant'];
 
-    public function find(string $id): ?RestaurantProduct
+    public function getRestaurantProductById(string $id): ?RestaurantProduct
     {
         return RestaurantProduct::query()->with($this->with)->find($id);
     }
 
-    public function forRestaurant(string $restaurantId)
+    public function getRestaurantProductsByRestaurantId(string $restaurantId)
     {
         return RestaurantProduct::query()
             ->with($this->with)
@@ -28,10 +28,10 @@ class RestaurantProductService implements RestaurantProductServiceInterface
             ->get();
     }
 
-    public function menu(string $restaurantId): array
+    public function getRestaurantMenu(string $restaurantId): array
     {
         $restaurant = Restaurant::query()->with(['chain', 'address'])->findOrFail($restaurantId);
-        $products = $this->forRestaurant($restaurantId);
+        $products = $this->getRestaurantProductsByRestaurantId($restaurantId);
         $categoryIds = $products->pluck('product.category_id')->filter()->unique()->values();
         $categories = Category::query()
             ->with('products.optionGroups.options')
@@ -47,13 +47,13 @@ class RestaurantProductService implements RestaurantProductServiceInterface
     }
 
     #[Transactional]
-    public function setAvailability(string $id, bool $isAvailable): ?RestaurantProduct
+    public function setRestaurantProductAvailability(string $id, bool $isAvailable): ?RestaurantProduct
     {
-        return $this->update('', $id, new UpdateRestaurantProductDTO(is_available: $isAvailable));
+        return $this->updateRestaurantProduct('', $id, new UpdateRestaurantProductDTO(is_available: $isAvailable));
     }
 
     #[Transactional]
-    public function create(string $actorUserId, CreateRestaurantProductDTO $data): RestaurantProduct
+    public function createRestaurantProduct(string $actorUserId, CreateRestaurantProductDTO $data): RestaurantProduct
     {
         $this->validateInput($data->toArray());
 
@@ -67,7 +67,7 @@ class RestaurantProductService implements RestaurantProductServiceInterface
     }
 
     #[Transactional]
-    public function update(string $actorUserId, string $id, UpdateRestaurantProductDTO $data): ?RestaurantProduct
+    public function updateRestaurantProduct(string $actorUserId, string $id, UpdateRestaurantProductDTO $data): ?RestaurantProduct
     {
         $restaurantProduct = RestaurantProduct::query()->find($id);
 

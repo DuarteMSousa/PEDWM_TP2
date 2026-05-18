@@ -7,19 +7,19 @@ use App\Models\Payment;
 
 interface PaymentServiceInterface
 {
-    public function find(string $id): ?Payment;
+    public function getPaymentById(string $id): ?Payment;
 
-    public function forOrder(string $orderId): ?Payment;
+    public function getPaymentByOrderId(string $orderId): ?Payment;
 
-    public function events(string $paymentId);
+    public function getPaymentEvents(string $paymentId);
 
-    public function create(CreatePaymentDTO $data): Payment;
+    public function createPayment(CreatePaymentDTO $data): Payment;
 
-    public function confirm(string $paymentId, ?string $transactionId): Payment;
+    public function confirmPayment(string $paymentId, ?string $transactionId): Payment;
 
-    public function cancel(string $paymentId, ?string $reason): Payment;
+    public function cancelPayment(string $paymentId, ?string $reason): Payment;
 
-    public function fail(string $paymentId, ?string $reason): Payment;
+    public function failPayment(string $paymentId, ?string $reason): Payment;
 
-    public function expire(string $paymentId): Payment;
+    public function expirePayment(string $paymentId): Payment;
 }

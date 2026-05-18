@@ -14,14 +14,14 @@ class CartMutations
 
     public function createClientCart($_, array $args)
     {
-        return $this->cartService->forUser($args['user_id']);
+        return $this->cartService->getCartByUserId($args['user_id']);
     }
 
     public function addClientCartItem($_, array $args)
     {
         $input = $args['input'];
 
-        return $this->cartService->addItem($input['user_id'], new AddCartItemDTO(
+        return $this->cartService->addCartItem($input['user_id'], new AddCartItemDTO(
             restaurant_product_id: $input['restaurant_product_id'],
             quantity: $input['quantity'],
             option_ids: $input['option_ids'] ?? [],
@@ -32,7 +32,7 @@ class CartMutations
     {
         $input = $args['input'];
 
-        return $this->cartService->updateItem($input['user_id'], $args['cart_item_id'], new UpdateCartItemDTO(
+        return $this->cartService->updateCartItem($input['user_id'], $args['cart_item_id'], new UpdateCartItemDTO(
             quantity: $input['quantity'],
             option_ids: $input['option_ids'] ?? null,
         ));
@@ -40,11 +40,11 @@ class CartMutations
 
     public function removeClientCartItem($_, array $args)
     {
-        return $this->cartService->removeItem($args['user_id'], $args['cart_item_id']);
+        return $this->cartService->removeCartItem($args['user_id'], $args['cart_item_id']);
     }
 
     public function clearClientCart($_, array $args): bool
     {
-        return $this->cartService->clear($args['user_id']);
+        return $this->cartService->clearCart($args['user_id']);
     }
 }

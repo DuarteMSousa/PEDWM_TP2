@@ -17,33 +17,33 @@ class MenuQueries
 
     public function restaurantMenu($_, array $args): array
     {
-        return $this->restaurantProductService->menu($args['restaurant_id']);
+        return $this->restaurantProductService->getRestaurantMenu($args['restaurant_id']);
     }
 
     public function restaurantCategories($_, array $args)
     {
-        $menu = $this->restaurantProductService->menu($args['restaurant_id']);
+        $menu = $this->restaurantProductService->getRestaurantMenu($args['restaurant_id']);
 
         return $menu['categories'];
     }
 
     public function chainCategories($_, array $args)
     {
-        return $this->categoryService->forChain($args['chain_id']);
+        return $this->categoryService->getCategoriesByChainId($args['chain_id']);
     }
 
     public function product($_, array $args)
     {
-        return $this->productService->find($args['id']);
+        return $this->productService->getProductById($args['id']);
     }
 
     public function restaurantProduct($_, array $args)
     {
-        return $this->restaurantProductService->find($args['id']);
+        return $this->restaurantProductService->getRestaurantProductById($args['id']);
     }
 
     public function productOptionGroups($_, array $args)
     {
-        return $this->productService->getOptionGroups($args['product_id']);
+        return $this->productService->getProductOptionGroups($args['product_id']);
     }
 }

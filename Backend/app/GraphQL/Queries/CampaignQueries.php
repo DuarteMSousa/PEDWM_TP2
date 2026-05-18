@@ -15,26 +15,26 @@ class CampaignQueries
 
     public function chainPromotions($_, array $args)
     {
-        return $this->promotionService->forChain($args['chain_id']);
+        return $this->promotionService->getPromotionsByChainId($args['chain_id']);
     }
 
     public function promotion($_, array $args)
     {
-        return $this->promotionService->find($args['id']);
+        return $this->promotionService->getPromotionById($args['id']);
     }
 
     public function chainCoupons($_, array $args)
     {
-        return $this->couponService->forChain($args['chain_id']);
+        return $this->couponService->getCouponsByChainId($args['chain_id']);
     }
 
     public function coupon($_, array $args)
     {
-        return $this->couponService->find($args['id']);
+        return $this->couponService->getCouponById($args['id']);
     }
 
     public function couponByCode($_, array $args)
     {
-        return $this->couponService->findByCode($args['code']);
+        return $this->couponService->getCouponByCode($args['code']);
     }
 }

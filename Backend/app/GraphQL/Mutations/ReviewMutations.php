@@ -14,16 +14,16 @@ class ReviewMutations
 
     public function createReview($_, array $args)
     {
-        return $this->reviewService->create(CreateReviewDTO::from($args['input']));
+        return $this->reviewService->createReview(CreateReviewDTO::from($args['input']));
     }
 
     public function updateReview($_, array $args)
     {
-        return $this->reviewService->updateForUser($args['user_id'], $args['review_id'], UpdateReviewDTO::from($args['input']));
+        return $this->reviewService->updateReview($args['user_id'], $args['review_id'], UpdateReviewDTO::from($args['input']));
     }
 
     public function deleteReview($_, array $args): bool
     {
-        return $this->reviewService->deleteForUser($args['user_id'], $args['review_id']);
+        return $this->reviewService->deleteReview($args['user_id'], $args['review_id']);
     }
 }

@@ -12,16 +12,16 @@ class PaymentQueries
 
     public function payment($_, array $args)
     {
-        return $this->paymentService->find($args['id']);
+        return $this->paymentService->getPaymentById($args['id']);
     }
 
     public function orderPayment($_, array $args)
     {
-        return $this->paymentService->forOrder($args['order_id']);
+        return $this->paymentService->getPaymentByOrderId($args['order_id']);
     }
 
     public function paymentEvents($_, array $args)
     {
-        return $this->paymentService->events($args['payment_id']);
+        return $this->paymentService->getPaymentEvents($args['payment_id']);
     }
 }

@@ -11,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 
 class CategoryService implements CategoryServiceInterface
 {
-    public function forChain(string $chainId)
+    public function getCategoriesByChainId(string $chainId)
     {
         return Category::query()
             ->with('products.optionGroups.options')
@@ -20,12 +20,12 @@ class CategoryService implements CategoryServiceInterface
             ->get();
     }
 
-    public function find(string $id): ?Category
+    public function getCategoryById(string $id): ?Category
     {
         return Category::query()->with('products.optionGroups.options')->find($id);
     }
 
-    public function all(?string $chainId = null, int $limit = 100)
+    public function getAllCategories(?string $chainId = null, int $limit = 100)
     {
         $query = Category::query()->with('products.optionGroups.options');
 
@@ -37,7 +37,7 @@ class CategoryService implements CategoryServiceInterface
     }
 
     #[Transactional]
-    public function create(string $actorUserId, CreateCategoryDTO $data): Category
+    public function createCategory(string $actorUserId, CreateCategoryDTO $data): Category
     {
         $this->validateInput($data->toArray());
 
@@ -48,7 +48,7 @@ class CategoryService implements CategoryServiceInterface
     }
 
     #[Transactional]
-    public function update(string $actorUserId, string $id, UpdateCategoryDTO $data): ?Category
+    public function updateCategory(string $actorUserId, string $id, UpdateCategoryDTO $data): ?Category
     {
         $category = Category::query()->find($id);
 
@@ -67,7 +67,7 @@ class CategoryService implements CategoryServiceInterface
     }
 
     #[Transactional]
-    public function delete(string $actorUserId, string $id): bool
+    public function deleteCategory(string $actorUserId, string $id): bool
     {
         return (bool) Category::query()->whereKey($id)->delete();
     }

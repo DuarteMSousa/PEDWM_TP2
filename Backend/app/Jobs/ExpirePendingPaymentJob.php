@@ -29,6 +29,6 @@ class ExpirePendingPaymentJob implements ShouldQueue
             return;
         }
 
-        app(PaymentServiceInterface::class)->expire($payment->id);
+        app(PaymentServiceInterface::class)->expirePayment($payment->id);
     }
 }

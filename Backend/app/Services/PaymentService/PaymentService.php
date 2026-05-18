@@ -14,23 +14,23 @@ use Illuminate\Validation\ValidationException;
 
 class PaymentService implements PaymentServiceInterface
 {
-    public function find(string $id): ?Payment
+    public function getPaymentById(string $id): ?Payment
     {
         return Payment::query()->with('events')->find($id);
     }
 
-    public function forOrder(string $orderId): ?Payment
+    public function getPaymentByOrderId(string $orderId): ?Payment
     {
         return Payment::query()->with('events')->where('order_id', $orderId)->first();
     }
 
-    public function events(string $paymentId)
+    public function getPaymentEvents(string $paymentId)
     {
         return Payment::query()->findOrFail($paymentId)->events()->orderBy('timestamp')->get();
     }
 
     #[Transactional]
-    public function create(CreatePaymentDTO $data): Payment
+    public function createPayment(CreatePaymentDTO $data): Payment
     {
         $payment = Payment::query()->create([
             'order_id' => $data->order_id,
@@ -46,40 +46,40 @@ class PaymentService implements PaymentServiceInterface
     }
 
     #[Transactional]
-    public function confirm(string $paymentId, ?string $transactionId): Payment
+    public function confirmPayment(string $paymentId, ?string $transactionId): Payment
     {
-        return $this->setStatus($paymentId, PaymentStatus::COMPLETED, PaymentEventType::PAYMENT_COMPLETED, [
+        return $this->transitionPaymentStatus($paymentId, PaymentStatus::COMPLETED, PaymentEventType::PAYMENT_COMPLETED, [
             'transaction_id' => $transactionId,
             'paid_at' => now(),
         ]);
     }
 
     #[Transactional]
-    public function cancel(string $paymentId, ?string $reason): Payment
+    public function cancelPayment(string $paymentId, ?string $reason): Payment
     {
-        return $this->setStatus($paymentId, PaymentStatus::CANCELLED, PaymentEventType::PAYMENT_CANCELLED, [
+        return $this->transitionPaymentStatus($paymentId, PaymentStatus::CANCELLED, PaymentEventType::PAYMENT_CANCELLED, [
             'reason' => $reason,
         ]);
     }
 
     #[Transactional]
-    public function fail(string $paymentId, ?string $reason): Payment
+    public function failPayment(string $paymentId, ?string $reason): Payment
     {
-        return $this->setStatus($paymentId, PaymentStatus::FAILED, PaymentEventType::PAYMENT_FAILED, [
+        return $this->transitionPaymentStatus($paymentId, PaymentStatus::FAILED, PaymentEventType::PAYMENT_FAILED, [
             'reason' => $reason,
         ]);
     }
 
     #[Transactional]
-    public function expire(string $paymentId): Payment
+    public function expirePayment(string $paymentId): Payment
     {
-        return $this->setStatus($paymentId, PaymentStatus::FAILED, PaymentEventType::PAYMENT_EXPIRED, [
+        return $this->transitionPaymentStatus($paymentId, PaymentStatus::FAILED, PaymentEventType::PAYMENT_EXPIRED, [
             'reason' => 'PAYMENT_EXPIRED',
             'actor_user_id' => 'payment-expiry',
         ]);
     }
 
-    private function setStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload): Payment
+    private function transitionPaymentStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload): Payment
     {
         $payment = Payment::query()->with('order')->lockForUpdate()->findOrFail($paymentId);
         $this->assertTransition($payment->status, $status);
@@ -95,11 +95,11 @@ class PaymentService implements PaymentServiceInterface
         }
 
         if ($status === PaymentStatus::COMPLETED) {
-            app(OrderServiceInterface::class)->confirmAfterPayment($payment->order, $payload['actor_user_id'] ?? 'payment');
+            app(OrderServiceInterface::class)->confirmOrderAfterPayment($payment->order, $payload['actor_user_id'] ?? 'payment');
         }
 
         if (in_array($status, [PaymentStatus::FAILED, PaymentStatus::CANCELLED], true)) {
-            app(OrderServiceInterface::class)->cancelByClient(
+            app(OrderServiceInterface::class)->cancelOrderByClient(
                 $payment->order->user_id,
                 $payment->order_id,
                 $payload['reason'] ?? $status->value

@@ -20,7 +20,7 @@ class UserService implements UserServiceInterface
 {
     public function __construct(private UserRepositoryInterface $userRepository) {}
 
-    public function getById(string $id)
+    public function getUserById(string $id)
     {
         return $this->userRepository->findById($id);
     }

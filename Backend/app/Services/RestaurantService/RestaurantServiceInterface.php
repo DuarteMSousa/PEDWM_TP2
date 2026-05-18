@@ -9,19 +9,19 @@ use App\Models\Restaurant;
 
 interface RestaurantServiceInterface
 {
-    public function search(SearchRestaurantsDTO $filters);
+    public function searchRestaurants(SearchRestaurantsDTO $filters);
 
-    public function find(string $id): ?Restaurant;
+    public function getRestaurantById(string $id): ?Restaurant;
 
-    public function create(string $actorUserId, CreateRestaurantDTO $data): Restaurant;
+    public function createRestaurant(string $actorUserId, CreateRestaurantDTO $data): Restaurant;
 
-    public function update(string $actorUserId, string $id, UpdateRestaurantDTO $data): ?Restaurant;
+    public function updateRestaurant(string $actorUserId, string $id, UpdateRestaurantDTO $data): ?Restaurant;
 
-    public function delete(string $actorUserId, string $id): bool;
+    public function deleteRestaurant(string $actorUserId, string $id): bool;
 
-    public function forChain(string $chainId);
+    public function getRestaurantsByChainId(string $chainId);
 
-    public function forLocalManager(string $userId): ?Restaurant;
+    public function getRestaurantByLocalManagerUserId(string $userId): ?Restaurant;
 
-    public function forOperator(string $userId): ?Restaurant;
+    public function getRestaurantByOperatorUserId(string $userId): ?Restaurant;
 }

@@ -8,9 +8,9 @@ use App\Models\Promotion;
 
 interface PromotionServiceInterface
 {
-    public function forChain(string $chainId);
+    public function getPromotionsByChainId(string $chainId);
 
-    public function find(string $id): ?Promotion;
+    public function getPromotionById(string $id): ?Promotion;
 
     public function createPromotion(string $actorUserId, CreatePromotionDTO $data): Promotion;
 

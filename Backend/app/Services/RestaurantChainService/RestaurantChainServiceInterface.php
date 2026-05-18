@@ -8,13 +8,13 @@ use App\Models\RestaurantChain;
 
 interface RestaurantChainServiceInterface
 {
-    public function find(string $id): ?RestaurantChain;
+    public function getRestaurantChainById(string $id): ?RestaurantChain;
 
-    public function all(int $limit = 100);
+    public function getAllRestaurantChains(int $limit = 100);
 
-    public function create(string $actorUserId, CreateRestaurantChainDTO $data): RestaurantChain;
+    public function createRestaurantChain(string $actorUserId, CreateRestaurantChainDTO $data): RestaurantChain;
 
-    public function update(string $actorUserId, string $id, UpdateRestaurantChainDTO $data): ?RestaurantChain;
+    public function updateRestaurantChain(string $actorUserId, string $id, UpdateRestaurantChainDTO $data): ?RestaurantChain;
 
-    public function delete(string $actorUserId, string $id): bool;
+    public function deleteRestaurantChain(string $actorUserId, string $id): bool;
 }

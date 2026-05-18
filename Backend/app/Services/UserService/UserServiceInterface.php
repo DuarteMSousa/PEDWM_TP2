@@ -7,7 +7,7 @@ use App\DTOs\User\UpdateUserDTO;
 
 interface UserServiceInterface
 {
-    public function getById(string $id);
+    public function getUserById(string $id);
     public function authenticateByCredentials(string $email, string $password);
 
     public function createUser(CreateUserDTO $data);

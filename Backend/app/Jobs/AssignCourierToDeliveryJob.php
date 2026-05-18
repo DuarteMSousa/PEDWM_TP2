@@ -62,12 +62,12 @@ class AssignCourierToDeliveryJob implements ShouldQueue
             return;
         }
 
-        app(DeliveryServiceInterface::class)->offerToCourier($delivery->id, $courier->user_id);
+        app(DeliveryServiceInterface::class)->createDeliveryOfferForCourier($delivery->id, $courier->user_id);
     }
 
     private function failDeliveryWithoutCourier(Delivery $delivery): void
     {
-        app(DeliveryServiceInterface::class)->markFailedBySystem(
+        app(DeliveryServiceInterface::class)->markDeliveryFailedBySystem(
             $delivery->id,
             'NO_COURIER_AVAILABLE'
         );

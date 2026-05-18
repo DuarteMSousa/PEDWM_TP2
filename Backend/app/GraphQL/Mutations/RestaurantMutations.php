@@ -19,31 +19,31 @@ class RestaurantMutations
 
     public function createRestaurantChain($_, array $args)
     {
-        return $this->restaurantChainService->create($args['actor_user_id'] ?? 'system', CreateRestaurantChainDTO::from($args['input']));
+        return $this->restaurantChainService->createRestaurantChain($args['actor_user_id'] ?? 'system', CreateRestaurantChainDTO::from($args['input']));
     }
 
     public function updateRestaurantChain($_, array $args)
     {
-        return $this->restaurantChainService->update($args['actor_user_id'] ?? 'system', $args['id'], UpdateRestaurantChainDTO::from($args['input']));
+        return $this->restaurantChainService->updateRestaurantChain($args['actor_user_id'] ?? 'system', $args['id'], UpdateRestaurantChainDTO::from($args['input']));
     }
 
     public function deleteRestaurantChain($_, array $args): bool
     {
-        return $this->restaurantChainService->delete($args['actor_user_id'] ?? 'system', $args['id']);
+        return $this->restaurantChainService->deleteRestaurantChain($args['actor_user_id'] ?? 'system', $args['id']);
     }
 
     public function createRestaurant($_, array $args)
     {
-        return $this->restaurantService->create($args['actor_user_id'] ?? 'system', CreateRestaurantDTO::from($args['input']));
+        return $this->restaurantService->createRestaurant($args['actor_user_id'] ?? 'system', CreateRestaurantDTO::from($args['input']));
     }
 
     public function updateRestaurant($_, array $args)
     {
-        return $this->restaurantService->update($args['actor_user_id'] ?? 'system', $args['id'], UpdateRestaurantDTO::from($args['input']));
+        return $this->restaurantService->updateRestaurant($args['actor_user_id'] ?? 'system', $args['id'], UpdateRestaurantDTO::from($args['input']));
     }
 
     public function deleteRestaurant($_, array $args): bool
     {
-        return $this->restaurantService->delete($args['actor_user_id'] ?? 'system', $args['id']);
+        return $this->restaurantService->deleteRestaurant($args['actor_user_id'] ?? 'system', $args['id']);
     }
 }

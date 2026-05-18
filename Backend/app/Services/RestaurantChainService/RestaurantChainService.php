@@ -10,18 +10,18 @@ use Illuminate\Validation\ValidationException;
 
 class RestaurantChainService implements RestaurantChainServiceInterface
 {
-    public function find(string $id): ?RestaurantChain
+    public function getRestaurantChainById(string $id): ?RestaurantChain
     {
         return RestaurantChain::query()->find($id);
     }
 
-    public function all(int $limit = 100)
+    public function getAllRestaurantChains(int $limit = 100)
     {
         return RestaurantChain::query()->orderBy('name')->limit($limit)->get();
     }
 
     #[Transactional]
-    public function create(string $actorUserId, CreateRestaurantChainDTO $data): RestaurantChain
+    public function createRestaurantChain(string $actorUserId, CreateRestaurantChainDTO $data): RestaurantChain
     {
         $this->validateInput($data->toArray());
 
@@ -29,7 +29,7 @@ class RestaurantChainService implements RestaurantChainServiceInterface
     }
 
     #[Transactional]
-    public function update(string $actorUserId, string $id, UpdateRestaurantChainDTO $data): ?RestaurantChain
+    public function updateRestaurantChain(string $actorUserId, string $id, UpdateRestaurantChainDTO $data): ?RestaurantChain
     {
         $chain = RestaurantChain::query()->find($id);
 
@@ -45,7 +45,7 @@ class RestaurantChainService implements RestaurantChainServiceInterface
     }
 
     #[Transactional]
-    public function delete(string $actorUserId, string $id): bool
+    public function deleteRestaurantChain(string $actorUserId, string $id): bool
     {
         return (bool) RestaurantChain::query()->whereKey($id)->delete();
     }

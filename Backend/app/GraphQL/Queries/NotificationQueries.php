@@ -12,7 +12,7 @@ class NotificationQueries
 
     public function clientNotifications($_, array $args)
     {
-        return $this->notificationFeedService->forUser(
+        return $this->notificationFeedService->getNotificationsByUserId(
             $args['user_id'],
             $args['unread_only'] ?? false,
             $args['limit'] ?? 50

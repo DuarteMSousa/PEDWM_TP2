@@ -7,11 +7,11 @@ use App\DTOs\Product\UpdateProductDTO;
 
 interface ProductServiceInterface
 {
-    public function getById(string $id);
+    public function getProductById(string $id);
 
-    public function getByCategoryId(string $categoryId);
+    public function getProductsByCategoryId(string $categoryId);
 
-    public function getOptionGroups(string $productId);
+    public function getProductOptionGroups(string $productId);
 
     public function createProduct(string $actorUserId, CreateProductDTO $data);
 

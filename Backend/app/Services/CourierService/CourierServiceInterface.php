@@ -6,9 +6,9 @@ use App\Models\Courier;
 
 interface CourierServiceInterface
 {
-    public function find(string $userId): ?Courier;
+    public function getCourierByUserId(string $userId): ?Courier;
 
-    public function setStatus(string $userId, string $status): Courier;
+    public function updateCourierStatus(string $userId, string $status): Courier;
 
-    public function updateLocation(string $courierId, float $latitude, float $longitude): Courier;
+    public function updateCourierLocation(string $courierId, float $latitude, float $longitude): Courier;
 }

@@ -22,18 +22,18 @@ class RestaurantService implements RestaurantServiceInterface
 
     public function __construct(private RestaurantRepositoryInterface $restaurantRepository) {}
 
-    public function search(SearchRestaurantsDTO $filters)
+    public function searchRestaurants(SearchRestaurantsDTO $filters)
     {
         return $this->restaurantRepository->searchRestaurants($filters)->items();
     }
 
-    public function find(string $id): ?Restaurant
+    public function getRestaurantById(string $id): ?Restaurant
     {
         return Restaurant::query()->with($this->with)->find($id);
     }
 
     #[Transactional]
-    public function create(string $actorUserId, CreateRestaurantDTO $data): Restaurant
+    public function createRestaurant(string $actorUserId, CreateRestaurantDTO $data): Restaurant
     {
         $this->validateInput($data->toArray());
         $this->validateAddressInput($data);
@@ -57,7 +57,7 @@ class RestaurantService implements RestaurantServiceInterface
     }
 
     #[Transactional]
-    public function update(string $actorUserId, string $id, UpdateRestaurantDTO $data): ?Restaurant
+    public function updateRestaurant(string $actorUserId, string $id, UpdateRestaurantDTO $data): ?Restaurant
     {
         $restaurant = Restaurant::query()->find($id);
 
@@ -82,12 +82,12 @@ class RestaurantService implements RestaurantServiceInterface
     }
 
     #[Transactional]
-    public function delete(string $actorUserId, string $id): bool
+    public function deleteRestaurant(string $actorUserId, string $id): bool
     {
         return (bool) Restaurant::query()->whereKey($id)->delete();
     }
 
-    public function forChain(string $chainId)
+    public function getRestaurantsByChainId(string $chainId)
     {
         return Restaurant::query()
             ->with($this->with)
@@ -96,16 +96,16 @@ class RestaurantService implements RestaurantServiceInterface
             ->get();
     }
 
-    public function forLocalManager(string $userId): ?Restaurant
+    public function getRestaurantByLocalManagerUserId(string $userId): ?Restaurant
     {
         $manager = LocalManager::query()->where('user_id', $userId)->first();
 
         return $manager?->restaurant()->with($this->with)->first();
     }
 
-    public function forOperator(string $userId): ?Restaurant
+    public function getRestaurantByOperatorUserId(string $userId): ?Restaurant
     {
-        $localRestaurant = $this->forLocalManager($userId);
+        $localRestaurant = $this->getRestaurantByLocalManagerUserId($userId);
         if ($localRestaurant) {
             return $localRestaurant;
         }

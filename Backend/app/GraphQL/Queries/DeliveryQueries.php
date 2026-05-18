@@ -15,31 +15,31 @@ class DeliveryQueries
 
     public function courierProfile($_, array $args)
     {
-        return $this->courierService->find($args['user_id']);
+        return $this->courierService->getCourierByUserId($args['user_id']);
     }
 
     public function courierActiveDelivery($_, array $args)
     {
-        return $this->deliveryService->activeForCourier($args['courier_id']);
+        return $this->deliveryService->getActiveDeliveryByCourierId($args['courier_id']);
     }
 
     public function courierDeliveries($_, array $args)
     {
-        return $this->deliveryService->forCourier($args['courier_id'], $args['statuses'] ?? null);
+        return $this->deliveryService->getDeliveriesByCourierId($args['courier_id'], $args['statuses'] ?? null);
     }
 
     public function delivery($_, array $args)
     {
-        return $this->deliveryService->find($args['id']);
+        return $this->deliveryService->getDeliveryById($args['id']);
     }
 
     public function orderDelivery($_, array $args)
     {
-        return $this->deliveryService->forOrder($args['order_id']);
+        return $this->deliveryService->getDeliveryByOrderId($args['order_id']);
     }
 
     public function courierDeliveryOffers($_, array $args)
     {
-        return $this->deliveryService->offersForCourier($args['courier_id']);
+        return $this->deliveryService->getDeliveryOffersByCourierId($args['courier_id']);
     }
 }

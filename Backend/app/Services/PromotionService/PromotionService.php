@@ -14,7 +14,7 @@ class PromotionService implements PromotionServiceInterface
 {
     private array $with = ['promotionItems'];
 
-    public function forChain(string $chainId)
+    public function getPromotionsByChainId(string $chainId)
     {
         return Promotion::query()
             ->with($this->with)
@@ -23,7 +23,7 @@ class PromotionService implements PromotionServiceInterface
             ->get();
     }
 
-    public function find(string $id): ?Promotion
+    public function getPromotionById(string $id): ?Promotion
     {
         return Promotion::query()->with($this->with)->find($id);
     }

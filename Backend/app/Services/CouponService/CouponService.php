@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 
 class CouponService implements CouponServiceInterface
 {
-    public function forChain(string $chainId)
+    public function getCouponsByChainId(string $chainId)
     {
         return Coupon::query()
             ->where('chain_id', $chainId)
@@ -21,12 +21,12 @@ class CouponService implements CouponServiceInterface
             ->get();
     }
 
-    public function findByCode(string $code): ?Coupon
+    public function getCouponByCode(string $code): ?Coupon
     {
         return Coupon::query()->where('code', $code)->first();
     }
 
-    public function find(string $id): ?Coupon
+    public function getCouponById(string $id): ?Coupon
     {
         return Coupon::query()->find($id);
     }
@@ -61,7 +61,7 @@ class CouponService implements CouponServiceInterface
     }
 
     #[Transactional]
-    public function delete(string $id): bool
+    public function deleteCoupon(string $id): bool
     {
         return (bool) Coupon::query()->whereKey($id)->delete();
     }

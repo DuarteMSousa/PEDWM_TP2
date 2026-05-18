@@ -8,43 +8,43 @@ use App\Models\Order;
 
 interface OrderServiceInterface
 {
-    public function clientOrders(string $userId, ?array $statuses = null, int $page = 1, int $perPage = 20);
+    public function getClientOrders(string $userId, ?array $statuses = null, int $page = 1, int $perPage = 20);
 
-    public function clientOrder(string $userId, string $orderId): ?Order;
+    public function getClientOrder(string $userId, string $orderId): ?Order;
 
-    public function restaurantOrders(string $restaurantId, ?array $statuses = null, int $page = 1, int $perPage = 20);
+    public function getRestaurantOrders(string $restaurantId, ?array $statuses = null, int $page = 1, int $perPage = 20);
 
-    public function restaurantActiveOrders(string $restaurantId);
+    public function getActiveRestaurantOrders(string $restaurantId);
 
-    public function restaurantOrder(string $restaurantId, string $orderId): ?Order;
+    public function getRestaurantOrder(string $restaurantId, string $orderId): ?Order;
 
-    public function events(string $orderId);
+    public function getOrderEvents(string $orderId);
 
-    public function checkout(string $clientUserId, CheckoutDTO $data): array;
+    public function checkoutOrder(string $clientUserId, CheckoutDTO $data): array;
 
-    public function cancelByClient(string $userId, string $orderId, ?string $reason): Order;
+    public function cancelOrderByClient(string $userId, string $orderId, ?string $reason): Order;
 
-    public function cancelBySystem(string $orderId, string $reason): Order;
+    public function cancelOrderBySystem(string $orderId, string $reason): Order;
 
-    public function acceptByRestaurant(string $actorUserId, string $orderId): Order;
+    public function acceptOrderByRestaurant(string $actorUserId, string $orderId): Order;
 
-    public function rejectByRestaurant(string $actorUserId, string $orderId, ?string $reason): Order;
+    public function rejectOrderByRestaurant(string $actorUserId, string $orderId, ?string $reason): Order;
 
-    public function startPreparing(string $actorUserId, string $orderId): Order;
+    public function startPreparingOrder(string $actorUserId, string $orderId): Order;
 
-    public function updateItemStatus(string $actorUserId, string $orderItemId, string $status): Order;
+    public function updateOrderItemStatus(string $actorUserId, string $orderItemId, string $status): Order;
 
-    public function markReady(string $actorUserId, string $orderId): Order;
+    public function markOrderReady(string $actorUserId, string $orderId): Order;
 
-    public function repeatOrder(string $userId, string $orderId): Cart;
+    public function repeatClientOrder(string $userId, string $orderId): Cart;
 
-    public function confirmAfterPayment(Order $order, string $actorUserId): Order;
+    public function confirmOrderAfterPayment(Order $order, string $actorUserId): Order;
 
-    public function recordCourierAssigned(Order $order, string $actorUserId): Order;
+    public function recordCourierAssignedToOrder(Order $order, string $actorUserId): Order;
 
-    public function recordPickedUp(Order $order, string $actorUserId): Order;
+    public function recordOrderPickedUp(Order $order, string $actorUserId): Order;
 
-    public function markOutForDelivery(Order $order, string $actorUserId): Order;
+    public function markOrderOutForDelivery(Order $order, string $actorUserId): Order;
 
-    public function markDelivered(Order $order, string $actorUserId): Order;
+    public function markOrderDelivered(Order $order, string $actorUserId): Order;
 }

@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class UserAddressService implements UserAddressServiceInterface
 {
-    public function forUser(string $userId)
+    public function getUserAddressesByUserId(string $userId)
     {
         return UserAddress::query()
             ->where('user_id', $userId)
@@ -20,7 +20,7 @@ class UserAddressService implements UserAddressServiceInterface
     }
 
     #[Transactional]
-    public function createForUser(string $userId, CreateUserAddressDTO $data): UserAddress
+    public function createUserAddress(string $userId, CreateUserAddressDTO $data): UserAddress
     {
         if ($data->is_default === true) {
             $this->clearDefault($userId);
@@ -33,7 +33,7 @@ class UserAddressService implements UserAddressServiceInterface
     }
 
     #[Transactional]
-    public function updateForUser(string $userId, string $addressId, UpdateUserAddressDTO $data): ?UserAddress
+    public function updateUserAddress(string $userId, string $addressId, UpdateUserAddressDTO $data): ?UserAddress
     {
         $address = UserAddress::query()
             ->where('user_id', $userId)
@@ -55,7 +55,7 @@ class UserAddressService implements UserAddressServiceInterface
     }
 
     #[Transactional]
-    public function deleteForUser(string $userId, string $addressId): bool
+    public function deleteUserAddress(string $userId, string $addressId): bool
     {
         return (bool) UserAddress::query()
             ->where('user_id', $userId)
@@ -64,7 +64,7 @@ class UserAddressService implements UserAddressServiceInterface
     }
 
     #[Transactional]
-    public function setDefault(string $userId, string $addressId): ?UserAddress
+    public function setDefaultUserAddress(string $userId, string $addressId): ?UserAddress
     {
         $address = UserAddress::query()
             ->where('user_id', $userId)

@@ -56,7 +56,7 @@ class TrackingService implements TrackingServiceInterface
             ->where('courier_id', $data->courier_id)
             ->findOrFail($data->delivery_id);
 
-        app(CourierServiceInterface::class)->updateLocation(
+        app(CourierServiceInterface::class)->updateCourierLocation(
             $data->courier_id,
             $data->latitude,
             $data->longitude

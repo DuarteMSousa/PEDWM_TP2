@@ -7,13 +7,13 @@ use App\Models\Courier;
 
 class CourierService implements CourierServiceInterface
 {
-    public function find(string $userId): ?Courier
+    public function getCourierByUserId(string $userId): ?Courier
     {
         return Courier::query()->with('user')->find($userId);
     }
 
     #[Transactional]
-    public function setStatus(string $userId, string $status): Courier
+    public function updateCourierStatus(string $userId, string $status): Courier
     {
         $courier = Courier::query()->findOrFail($userId);
         $courier->update(['status' => $status]);
@@ -22,7 +22,7 @@ class CourierService implements CourierServiceInterface
     }
 
     #[Transactional]
-    public function updateLocation(string $courierId, float $latitude, float $longitude): Courier
+    public function updateCourierLocation(string $courierId, float $latitude, float $longitude): Courier
     {
         $courier = Courier::query()->findOrFail($courierId);
         $courier->update([

@@ -9,7 +9,7 @@ use App\Models\UserPushToken;
 
 class NotificationFeedService implements NotificationFeedServiceInterface
 {
-    public function forUser(string $userId, bool $unreadOnly = false, int $limit = 50)
+    public function getNotificationsByUserId(string $userId, bool $unreadOnly = false, int $limit = 50)
     {
         $query = Notification::query()
             ->where('user_id', $userId)
@@ -24,7 +24,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
     }
 
     #[Transactional]
-    public function markRead(string $userId, string $notificationId): array
+    public function markNotificationAsRead(string $userId, string $notificationId): array
     {
         $notification = Notification::query()
             ->where('user_id', $userId)
@@ -39,7 +39,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
     }
 
     #[Transactional]
-    public function markAllRead(string $userId): array
+    public function markAllNotificationsAsRead(string $userId): array
     {
         $affected = Notification::query()
             ->where('user_id', $userId)

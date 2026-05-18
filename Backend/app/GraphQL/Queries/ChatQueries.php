@@ -12,21 +12,21 @@ class ChatQueries
 
     public function orderChats($_, array $args)
     {
-        return $this->chatService->forOrder($args['order_id']);
+        return $this->chatService->getChatsByOrderId($args['order_id']);
     }
 
     public function chat($_, array $args)
     {
-        return $this->chatService->find($args['id']);
+        return $this->chatService->getChatById($args['id']);
     }
 
     public function chatMessages($_, array $args)
     {
-        return $this->chatService->messages($args['chat_id'], $args['page'], $args['per_page']);
+        return $this->chatService->getMessagesByChatId($args['chat_id'], $args['page'], $args['per_page']);
     }
 
     public function chatParticipants($_, array $args)
     {
-        return $this->chatService->participants($args['chat_id']);
+        return $this->chatService->getParticipantsByChatId($args['chat_id']);
     }
 }

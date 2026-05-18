@@ -55,21 +55,21 @@ class UserMutations
 
     public function createClientAddress($_, array $args)
     {
-        return $this->userAddressService->createForUser($args['user_id'], CreateUserAddressDTO::from($args['input']));
+        return $this->userAddressService->createUserAddress($args['user_id'], CreateUserAddressDTO::from($args['input']));
     }
 
     public function updateClientAddress($_, array $args)
     {
-        return $this->userAddressService->updateForUser($args['user_id'], $args['address_id'], UpdateUserAddressDTO::from($args['input']));
+        return $this->userAddressService->updateUserAddress($args['user_id'], $args['address_id'], UpdateUserAddressDTO::from($args['input']));
     }
 
     public function deleteClientAddress($_, array $args): bool
     {
-        return $this->userAddressService->deleteForUser($args['user_id'], $args['address_id']);
+        return $this->userAddressService->deleteUserAddress($args['user_id'], $args['address_id']);
     }
 
     public function setDefaultClientAddress($_, array $args)
     {
-        return $this->userAddressService->setDefault($args['user_id'], $args['address_id']);
+        return $this->userAddressService->setDefaultUserAddress($args['user_id'], $args['address_id']);
     }
 }

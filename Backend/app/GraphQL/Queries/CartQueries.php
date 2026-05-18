@@ -12,11 +12,11 @@ class CartQueries
 
     public function clientCart($_, array $args)
     {
-        return $this->cartService->forUser($args['user_id']);
+        return $this->cartService->getCartByUserId($args['user_id']);
     }
 
     public function clientCartById($_, array $args)
     {
-        return $this->cartService->findForUser($args['user_id'], $args['cart_id']);
+        return $this->cartService->getCartByUserIdAndCartId($args['user_id'], $args['cart_id']);
     }
 }

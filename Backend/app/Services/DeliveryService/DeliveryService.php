@@ -24,17 +24,17 @@ class DeliveryService implements DeliveryServiceInterface
 {
     private array $with = ['order', 'courier.user', 'positionHistory', 'events', 'offers'];
 
-    public function find(string $id): ?Delivery
+    public function getDeliveryById(string $id): ?Delivery
     {
         return Delivery::query()->with($this->with)->find($id);
     }
 
-    public function forOrder(string $orderId): ?Delivery
+    public function getDeliveryByOrderId(string $orderId): ?Delivery
     {
         return Delivery::query()->with($this->with)->where('order_id', $orderId)->first();
     }
 
-    public function activeForCourier(string $courierId): ?Delivery
+    public function getActiveDeliveryByCourierId(string $courierId): ?Delivery
     {
         return Delivery::query()
             ->with($this->with)
@@ -43,7 +43,7 @@ class DeliveryService implements DeliveryServiceInterface
             ->first();
     }
 
-    public function forCourier(string $courierId, ?array $statuses = null)
+    public function getDeliveriesByCourierId(string $courierId, ?array $statuses = null)
     {
         $query = Delivery::query()->with($this->with)->where('courier_id', $courierId);
 
@@ -54,7 +54,7 @@ class DeliveryService implements DeliveryServiceInterface
         return $query->orderByDesc('created_at')->get();
     }
 
-    public function offersForCourier(string $courierId)
+    public function getDeliveryOffersByCourierId(string $courierId)
     {
         return DeliveryOffer::query()
             ->with(['delivery.order', 'delivery.positionHistory', 'courier.user'])
@@ -66,7 +66,7 @@ class DeliveryService implements DeliveryServiceInterface
     }
 
     #[Transactional]
-    public function createForOrder(string $orderId, float $deliveryFee): Delivery
+    public function createDeliveryForOrder(string $orderId, float $deliveryFee): Delivery
     {
         return Delivery::query()->firstOrCreate(
             ['order_id' => $orderId],
@@ -75,7 +75,7 @@ class DeliveryService implements DeliveryServiceInterface
     }
 
     #[Transactional]
-    public function offerToCourier(string $deliveryId, string $courierId, int $ttlSeconds = 30): DeliveryOffer
+    public function createDeliveryOfferForCourier(string $deliveryId, string $courierId, int $ttlSeconds = 30): DeliveryOffer
     {
         $offer = DeliveryOffer::query()->create([
             'delivery_id' => $deliveryId,
@@ -93,7 +93,7 @@ class DeliveryService implements DeliveryServiceInterface
     }
 
     #[Transactional]
-    public function acceptOffer(string $offerId): Delivery
+    public function acceptDeliveryOffer(string $offerId): Delivery
     {
         $offer = DeliveryOffer::query()
             ->with(['delivery.order', 'courier'])
@@ -134,16 +134,16 @@ class DeliveryService implements DeliveryServiceInterface
             ->where('status', DeliveryOfferStatus::PENDING->value)
             ->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
 
-        app(CourierServiceInterface::class)->setStatus($offer->courier_id, CourierStatus::BUSY->value);
+        app(CourierServiceInterface::class)->updateCourierStatus($offer->courier_id, CourierStatus::BUSY->value);
         $this->recordEvent($delivery, DeliveryEventType::DELIVERY_ACCEPTED, $offer->courier_id);
-        app(OrderServiceInterface::class)->recordCourierAssigned($delivery->order, $offer->courier_id);
+        app(OrderServiceInterface::class)->recordCourierAssignedToOrder($delivery->order, $offer->courier_id);
         $this->broadcastJobEvent(DeliveryOfferEventType::JOB_ACCEPTED, $offer);
 
         return $delivery->refresh()->load($this->with);
     }
 
     #[Transactional]
-    public function rejectOffer(string $offerId): bool
+    public function rejectDeliveryOffer(string $offerId): bool
     {
         $offer = DeliveryOffer::query()
             ->with('delivery')
@@ -162,43 +162,43 @@ class DeliveryService implements DeliveryServiceInterface
     }
 
     #[Transactional]
-    public function markPickedUp(string $deliveryId, string $courierId): Delivery
+    public function markDeliveryPickedUp(string $deliveryId, string $courierId): Delivery
     {
-        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::PICKED_UP, ['pickup_time' => now()]);
-        app(OrderServiceInterface::class)->recordPickedUp($delivery->order, $courierId);
+        $delivery = $this->transitionDeliveryStatus($deliveryId, $courierId, DeliveryStatus::PICKED_UP, ['pickup_time' => now()]);
+        app(OrderServiceInterface::class)->recordOrderPickedUp($delivery->order, $courierId);
 
         return $delivery->refresh()->load($this->with);
     }
 
     #[Transactional]
-    public function markInTransit(string $deliveryId, string $courierId): Delivery
+    public function markDeliveryInTransit(string $deliveryId, string $courierId): Delivery
     {
-        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::IN_TRANSIT);
-        app(OrderServiceInterface::class)->markOutForDelivery($delivery->order, $courierId);
+        $delivery = $this->transitionDeliveryStatus($deliveryId, $courierId, DeliveryStatus::IN_TRANSIT);
+        app(OrderServiceInterface::class)->markOrderOutForDelivery($delivery->order, $courierId);
 
         return $delivery->refresh()->load($this->with);
     }
 
     #[Transactional]
-    public function markDelivered(string $deliveryId, string $courierId): Delivery
+    public function markDeliveryDelivered(string $deliveryId, string $courierId): Delivery
     {
-        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::DELIVERED, ['delivery_time' => now()]);
-        app(OrderServiceInterface::class)->markDelivered($delivery->order, $courierId);
-        app(CourierServiceInterface::class)->setStatus($courierId, CourierStatus::AVAILABLE->value);
+        $delivery = $this->transitionDeliveryStatus($deliveryId, $courierId, DeliveryStatus::DELIVERED, ['delivery_time' => now()]);
+        app(OrderServiceInterface::class)->markOrderDelivered($delivery->order, $courierId);
+        app(CourierServiceInterface::class)->updateCourierStatus($courierId, CourierStatus::AVAILABLE->value);
 
         return $delivery->refresh()->load($this->with);
     }
 
     #[Transactional]
-    public function markFailed(string $deliveryId, string $courierId, string $reason): Delivery
+    public function markDeliveryFailed(string $deliveryId, string $courierId, string $reason): Delivery
     {
-        $delivery = $this->setStatus($deliveryId, $courierId, DeliveryStatus::FAILED, ['failure_reason' => $reason]);
+        $delivery = $this->transitionDeliveryStatus($deliveryId, $courierId, DeliveryStatus::FAILED, ['failure_reason' => $reason]);
 
         return $delivery;
     }
 
     #[Transactional]
-    public function markFailedBySystem(string $deliveryId, string $reason): Delivery
+    public function markDeliveryFailedBySystem(string $deliveryId, string $reason): Delivery
     {
         $delivery = Delivery::query()
             ->with('order')
@@ -215,12 +215,12 @@ class DeliveryService implements DeliveryServiceInterface
             'reason' => $reason,
         ]);
 
-        app(OrderServiceInterface::class)->cancelBySystem($delivery->order_id, $reason);
+        app(OrderServiceInterface::class)->cancelOrderBySystem($delivery->order_id, $reason);
 
         return $delivery->refresh()->load($this->with);
     }
 
-    private function setStatus(string $deliveryId, string $courierId, DeliveryStatus $status, array $extra = []): Delivery
+    private function transitionDeliveryStatus(string $deliveryId, string $courierId, DeliveryStatus $status, array $extra = []): Delivery
     {
         $delivery = Delivery::query()
             ->where('courier_id', $courierId)

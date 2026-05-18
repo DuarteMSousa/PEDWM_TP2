@@ -14,17 +14,17 @@ class ProductService implements ProductServiceInterface
 {
     public function __construct(private ProductRepositoryInterface $productRepository) {}
 
-    public function getById(string $id)
+    public function getProductById(string $id)
     {
         return $this->productRepository->findById($id);
     }
 
-    public function getByCategoryId(string $categoryId)
+    public function getProductsByCategoryId(string $categoryId)
     {
         return $this->productRepository->findByCategoryId($categoryId);
     }
 
-    public function getOptionGroups(string $productId)
+    public function getProductOptionGroups(string $productId)
     {
         return Product::query()
             ->with('optionGroups.options')
