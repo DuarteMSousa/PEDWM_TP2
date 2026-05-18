@@ -8,6 +8,7 @@ import { RestaurantOrdersHistoryScreen } from './screens/RestaurantOrdersHistory
 import { RestaurantReviewsScreen } from './screens/RestaurantReviewsScreen'
 import { RestaurantCampaignsScreen } from './screens/RestaurantCampaignsScreen'
 import { RestaurantStatsScreen } from './screens/RestaurantStatsScreen'
+import { RestaurantProfileScreen } from './screens/RestaurantProfileScreen'
 
 export const RESTAURANT_VIEWS = [
   {
@@ -58,6 +59,13 @@ export const RESTAURANT_VIEWS = [
     label: 'Campanhas',
     icon: 'CP',
     Component: RestaurantCampaignsScreen,
+  },
+  {
+    id: 'profile',
+    label: 'Perfil',
+    icon: 'PF',
+    Component: RestaurantProfileScreen,
+    hideFromNav: true,
   },
   {
     id: 'chat',

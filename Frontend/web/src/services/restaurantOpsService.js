@@ -96,6 +96,25 @@ const CREATE_USER_MUTATION = `
   }
 `
 
+const CREATE_RESTAURANT_CHAIN_MUTATION = `
+  mutation CreateRestaurantChain($input: CreateRestaurantChainInput!) {
+    createRestaurantChain(input: $input) {
+      id
+      name
+    }
+  }
+`
+
+const CREATE_RESTAURANT_MUTATION = `
+  mutation CreateRestaurant($input: CreateRestaurantInput!) {
+    createRestaurant(input: $input) {
+      id
+      name
+      chain_id
+    }
+  }
+`
+
 const OPERATOR_RESTAURANT_QUERY = `
   query OperatorRestaurant($userId: ID!) {
     operatorRestaurant(user_id: $userId) {
@@ -388,6 +407,88 @@ const RESTAURANT_QUERY = `
       id
       name
       chain_id
+      opening_hours
+      closing_hours
+      delivery_radius
+      rating_sum
+      rating_count
+      chain { id name }
+      address {
+        street
+        city
+        postal_code
+        country
+        latitude
+        longitude
+      }
+    }
+  }
+`
+
+const RESTAURANT_CHAIN_QUERY = `
+  query RestaurantChain($id: ID!) {
+    restaurantChain(id: $id) {
+      id
+      name
+      created_at
+      updated_at
+    }
+  }
+`
+
+const CHAIN_RESTAURANTS_QUERY = `
+  query ChainManagerRestaurants($chainId: ID!) {
+    chainManagerRestaurants(chain_id: $chainId) {
+      id
+      name
+      chain_id
+      opening_hours
+      closing_hours
+      delivery_radius
+      rating_sum
+      rating_count
+      address {
+        street
+        city
+        postal_code
+        country
+        latitude
+        longitude
+      }
+    }
+  }
+`
+
+const UPDATE_RESTAURANT_MUTATION = `
+  mutation UpdateRestaurant($id: ID!, $input: UpdateRestaurantInput!) {
+    updateRestaurant(id: $id, input: $input) {
+      id
+      name
+      chain_id
+      opening_hours
+      closing_hours
+      delivery_radius
+      rating_sum
+      rating_count
+      chain { id name }
+      address {
+        street
+        city
+        postal_code
+        country
+        latitude
+        longitude
+      }
+    }
+  }
+`
+
+const UPDATE_RESTAURANT_CHAIN_MUTATION = `
+  mutation UpdateRestaurantChain($id: ID!, $input: UpdateRestaurantChainInput!) {
+    updateRestaurantChain(id: $id, input: $input) {
+      id
+      name
+      updated_at
     }
   }
 `
@@ -569,23 +670,21 @@ export async function bootstrapRestaurantSession({
     throw new Error(`Utilizador ${operatorName} nao tem perfil de restaurante.`)
   }
 
-  let resolvedRestaurant = null
-
-  if (trimmedRestaurantId) {
-    const restaurantData = await graphqlRequest({
-      query: RESTAURANT_QUERY,
-      variables: { id: trimmedRestaurantId },
-      ...requestOptions(requestSession),
-    })
-    resolvedRestaurant = restaurantData.restaurant
-  } else {
-    const managerRestaurantData = await graphqlRequest({
-      query: OPERATOR_RESTAURANT_QUERY,
-      variables: { userId: authenticatedUser.id },
-      ...requestOptions(requestSession),
-    })
-    resolvedRestaurant = managerRestaurantData.operatorRestaurant
-  }
+  const resolvedRestaurant = trimmedRestaurantId
+    ? (
+        await graphqlRequest({
+          query: RESTAURANT_QUERY,
+          variables: { id: trimmedRestaurantId },
+          ...requestOptions(requestSession),
+        })
+      ).restaurant
+    : (
+        await graphqlRequest({
+          query: OPERATOR_RESTAURANT_QUERY,
+          variables: { userId: authenticatedUser.id },
+          ...requestOptions(requestSession),
+        })
+      ).operatorRestaurant
 
   if (!resolvedRestaurant?.id) {
     throw new Error('Conta sem restaurante associado. Cria um restaurante ou pede associacao ao administrador.')
@@ -606,20 +705,89 @@ export async function bootstrapRestaurantSession({
 export async function registerRestaurantUser({
   email,
   password,
+  managerName,
+  chainName,
   restaurant,
+  openingHours,
+  closingHours,
+  deliveryRadius,
+  street,
+  city,
+  postalCode,
+  country,
+  latitude,
+  longitude,
   restaurantId,
   token,
 }) {
   const trimmedEmail = String(email ?? '').trim()
   const trimmedPassword = String(password ?? '').trim()
+  const trimmedChainName = String(chainName ?? '').trim()
+  const trimmedRestaurantName = String(restaurant ?? '').trim()
+  const trimmedOpeningHours = String(openingHours ?? '').trim()
+  const trimmedClosingHours = String(closingHours ?? '').trim()
+  const trimmedStreet = String(street ?? '').trim()
+  const trimmedCity = String(city ?? '').trim()
+  const trimmedPostalCode = String(postalCode ?? '').trim()
+  const trimmedCountry = String(country ?? '').trim()
+  const parsedDeliveryRadius = Number(deliveryRadius)
+  const parsedLatitude = Number(latitude)
+  const parsedLongitude = Number(longitude)
 
   if (!trimmedEmail || !trimmedPassword) {
     throw new Error('Preenche email e password.')
   }
 
-  const defaultName = trimmedEmail.split('@')[0] || 'manager'
+  if (!trimmedChainName || !trimmedRestaurantName) {
+    throw new Error('Preenche o nome da cadeia e do restaurante.')
+  }
+
+  if (!trimmedOpeningHours || !trimmedClosingHours || Number.isNaN(parsedDeliveryRadius)) {
+    throw new Error('Preenche horarios e raio de entrega validos.')
+  }
+
+  if (
+    !trimmedStreet ||
+    !trimmedCity ||
+    !trimmedPostalCode ||
+    !trimmedCountry ||
+    Number.isNaN(parsedLatitude) ||
+    Number.isNaN(parsedLongitude)
+  ) {
+    throw new Error('Preenche a morada e coordenadas do restaurante.')
+  }
+
+  const defaultName = String(managerName ?? '').trim() || trimmedEmail.split('@')[0] || 'manager'
 
   try {
+    const chainData = await graphqlRequest({
+      query: CREATE_RESTAURANT_CHAIN_MUTATION,
+      variables: {
+        input: {
+          name: trimmedChainName,
+        },
+      },
+    })
+
+    const restaurantData = await graphqlRequest({
+      query: CREATE_RESTAURANT_MUTATION,
+      variables: {
+        input: {
+          chain_id: chainData.createRestaurantChain.id,
+          name: trimmedRestaurantName,
+          opening_hours: trimmedOpeningHours,
+          closing_hours: trimmedClosingHours,
+          delivery_radius: parsedDeliveryRadius,
+          street: trimmedStreet,
+          city: trimmedCity,
+          postal_code: trimmedPostalCode,
+          country: trimmedCountry,
+          latitude: parsedLatitude,
+          longitude: parsedLongitude,
+        },
+      },
+    })
+
     await graphqlRequest({
       query: CREATE_USER_MUTATION,
       variables: {
@@ -628,6 +796,8 @@ export async function registerRestaurantUser({
           email: trimmedEmail,
           password: trimmedPassword,
           user_type: 'CHAIN_MANAGER',
+          chain_id: chainData.createRestaurantChain.id,
+          restaurant_id: restaurantData.createRestaurant.id,
         },
       },
     })
@@ -641,7 +811,7 @@ export async function registerRestaurantUser({
       message.toLowerCase().includes('duplicate') ||
       message.toLowerCase().includes('already')
     ) {
-      throw new Error('Este email ja esta registado.')
+      throw new Error('Este email ja esta registado.', { cause: error })
     }
 
     throw error
@@ -650,7 +820,7 @@ export async function registerRestaurantUser({
   return bootstrapRestaurantSession({
     email: trimmedEmail,
     password: trimmedPassword,
-    restaurant,
+    restaurant: trimmedRestaurantName,
     restaurantId,
     token,
   })
@@ -1183,6 +1353,69 @@ export async function deleteChainCategory({ session, categoryId }) {
     ...requestOptions(session),
   })
   return { ok: Boolean(data.deleteCategory) }
+}
+
+export async function fetchRestaurantProfile({ session, restaurantId }) {
+  const data = await graphqlRequest({
+    query: RESTAURANT_QUERY,
+    variables: { id: restaurantId ?? session.restaurantId },
+    ...requestOptions(session),
+  })
+
+  return data.restaurant ?? null
+}
+
+export async function fetchRestaurantChainProfile({ session, chainId }) {
+  const data = await graphqlRequest({
+    query: RESTAURANT_CHAIN_QUERY,
+    variables: { id: chainId ?? session.chainId },
+    ...requestOptions(session),
+  })
+
+  return data.restaurantChain ?? null
+}
+
+export async function fetchChainRestaurants({ session, chainId }) {
+  const data = await graphqlRequest({
+    query: CHAIN_RESTAURANTS_QUERY,
+    variables: { chainId: chainId ?? session.chainId },
+    ...requestOptions(session),
+  })
+
+  return data.chainManagerRestaurants ?? []
+}
+
+export async function updateRestaurantProfile({ session, restaurantId, input }) {
+  const payload = {
+    name: input.name?.trim(),
+    opening_hours: input.opening_hours?.trim(),
+    closing_hours: input.closing_hours?.trim(),
+    delivery_radius: Number(input.delivery_radius),
+    street: input.street?.trim(),
+    city: input.city?.trim(),
+    postal_code: input.postal_code?.trim(),
+    country: input.country?.trim(),
+    latitude: Number(input.latitude),
+    longitude: Number(input.longitude),
+  }
+
+  const data = await graphqlRequest({
+    query: UPDATE_RESTAURANT_MUTATION,
+    variables: { id: restaurantId, input: payload },
+    ...requestOptions(session),
+  })
+
+  return data.updateRestaurant
+}
+
+export async function updateRestaurantChainProfile({ session, chainId, name }) {
+  const data = await graphqlRequest({
+    query: UPDATE_RESTAURANT_CHAIN_MUTATION,
+    variables: { id: chainId ?? session.chainId, input: { name: name.trim() } },
+    ...requestOptions(session),
+  })
+
+  return data.updateRestaurantChain
 }
 
 export async function updateRestaurantMenuProductWithOptions({

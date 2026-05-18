@@ -9,12 +9,15 @@ use App\DTOs\Restaurant\UpdateRestaurantDTO;
 use App\Models\ChainManager;
 use App\Models\LocalManager;
 use App\Models\Restaurant;
+use App\Models\RestaurantAddress;
 use App\Models\RestaurantChain;
 use App\Repositories\RestaurantRepository\RestaurantRepositoryInterface;
 use Illuminate\Validation\ValidationException;
 
 class RestaurantService implements RestaurantServiceInterface
 {
+    private const ADDRESS_FIELDS = ['street', 'city', 'postal_code', 'country', 'latitude', 'longitude'];
+
     private array $with = ['chain', 'address'];
 
     public function __construct(private RestaurantRepositoryInterface $restaurantRepository) {}
@@ -33,14 +36,24 @@ class RestaurantService implements RestaurantServiceInterface
     public function create(string $actorUserId, CreateRestaurantDTO $data): Restaurant
     {
         $this->validateInput($data->toArray());
+        $this->validateAddressInput($data);
 
-        return Restaurant::query()->create([
+        $restaurant = Restaurant::query()->create([
             'chain_id' => $data->chain_id,
             'name' => $data->name,
             'opening_hours' => $data->opening_hours,
             'closing_hours' => $data->closing_hours,
             'delivery_radius' => $data->delivery_radius,
-        ])->load($this->with);
+        ]);
+
+        if ($this->hasAddressInput($data)) {
+            RestaurantAddress::query()->create([
+                'restaurant_id' => $restaurant->id,
+                ...$this->addressPayload($data),
+            ]);
+        }
+
+        return $restaurant->load($this->with);
     }
 
     #[Transactional]
@@ -54,6 +67,7 @@ class RestaurantService implements RestaurantServiceInterface
 
         $input = array_filter($data->toArray(), static fn ($value) => $value !== null);
         $this->validateInput([...$restaurant->toArray(), ...$input], true);
+        $this->validateAddressUpdateInput($restaurant, $data);
         $restaurant->update(array_filter([
             'chain_id' => $data->chain_id,
             'name' => $data->name,
@@ -61,6 +75,8 @@ class RestaurantService implements RestaurantServiceInterface
             'closing_hours' => $data->closing_hours,
             'delivery_radius' => $data->delivery_radius,
         ], static fn ($value) => $value !== null));
+
+        $this->updateAddress($restaurant, $data);
 
         return $restaurant->load($this->with);
     }
@@ -127,5 +143,71 @@ class RestaurantService implements RestaurantServiceInterface
         if ($errors !== []) {
             throw ValidationException::withMessages($errors);
         }
+    }
+
+    private function hasAddressInput(object $data): bool
+    {
+        foreach (self::ADDRESS_FIELDS as $field) {
+            if ($data->{$field} !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function validateAddressInput(CreateRestaurantDTO $data): void
+    {
+        if (! $this->hasAddressInput($data)) {
+            return;
+        }
+
+        $this->validateRequiredAddressFields($this->addressPayload($data), 'creating');
+    }
+
+    private function validateAddressUpdateInput(Restaurant $restaurant, UpdateRestaurantDTO $data): void
+    {
+        if (! $this->hasAddressInput($data)) {
+            return;
+        }
+
+        $this->validateRequiredAddressFields($this->addressPayload($data, $restaurant->address), 'updating');
+    }
+
+    private function validateRequiredAddressFields(array $payload, string $action): void
+    {
+        $errors = [];
+        foreach ($payload as $field => $value) {
+            if ($value === null || $value === '') {
+                $errors[$field][] = "{$field} is required when {$action} a restaurant address.";
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    private function updateAddress(Restaurant $restaurant, UpdateRestaurantDTO $data): void
+    {
+        if (! $this->hasAddressInput($data)) {
+            return;
+        }
+
+        RestaurantAddress::query()->updateOrCreate(
+            ['restaurant_id' => $restaurant->id],
+            $this->addressPayload($data, $restaurant->address),
+        );
+    }
+
+    private function addressPayload(object $data, ?RestaurantAddress $fallbackAddress = null): array
+    {
+        $payload = [];
+
+        foreach (self::ADDRESS_FIELDS as $field) {
+            $payload[$field] = $data->{$field} ?? $fallbackAddress?->{$field};
+        }
+
+        return $payload;
     }
 }

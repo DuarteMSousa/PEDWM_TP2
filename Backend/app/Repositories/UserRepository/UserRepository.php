@@ -19,7 +19,12 @@ class UserRepository implements UserRepositoryInterface
     }
     
     public function createUser(CreateUserDTO $data){
-        return User::create($data->toArray());
+        return User::create([
+            'name' => $data->name,
+            'email' => $data->email,
+            'password' => $data->password,
+            'user_type' => $data->user_type,
+        ]);
     }
 
     public function updateUser(string $id, UpdateUserDTO $data){

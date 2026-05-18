@@ -62,7 +62,25 @@ export function RestaurantWebShell() {
   }
 
   return (
-    <PageContainer restaurantUnit={`Unidade ${session.restaurant}`}>
+    <PageContainer
+      restaurantUnit={`Unidade ${session.restaurant}`}
+      topbarActions={
+        <button
+          type="button"
+          className={`rb-store-profile-btn ${activeView.id === 'profile' ? 'active' : ''}`}
+          onClick={() => setActiveViewId('profile')}
+          aria-label="Abrir perfil do restaurante"
+          title="Perfil do restaurante"
+        >
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M4 10h16l-1.1-5.5A1.9 1.9 0 0 0 17 3H7a1.9 1.9 0 0 0-1.9 1.5L4 10Z" />
+            <path d="M5 10v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9" />
+            <path d="M9 21v-7h6v7" />
+            <path d="M4 10c.6 1.3 2.7 1.3 3.3 0 .6 1.3 2.7 1.3 3.3 0 .6 1.3 2.7 1.3 3.3 0 .6 1.3 2.7 1.3 3.3 0 .6 1.3 2.7 1.3 3.3 0" />
+          </svg>
+        </button>
+      }
+    >
       <div className="rb-shell">
         <RestaurantSideNav
           views={RESTAURANT_VIEWS}
@@ -77,6 +95,7 @@ export function RestaurantWebShell() {
             selectedOrderId={selectedOrderId}
             onSelectOrder={setSelectedOrderId}
             onNavigate={setActiveViewId}
+            onSessionChange={setSession}
           />
         </section>
       </div>

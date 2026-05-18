@@ -1,4 +1,9 @@
-export function PageContainer({ children, restaurantName = 'FastBite Restaurant', restaurantUnit }) {
+export function PageContainer({
+  children,
+  restaurantName = 'FastBite Restaurant',
+  restaurantUnit,
+  topbarActions = null,
+}) {
   return (
     <main className="rb-app">
       <header className="rb-topbar">
@@ -9,14 +14,7 @@ export function PageContainer({ children, restaurantName = 'FastBite Restaurant'
             <p className="rb-brand-sub">{restaurantUnit ?? 'Pizzaria do Centro'}</p>
           </div>
         </div>
-        <div className="rb-top-actions">
-          <button type="button" className="rb-icon-btn">
-            Alerts
-          </button>
-          <button type="button" className="rb-icon-btn">
-            Settings
-          </button>
-        </div>
+        {topbarActions ? <div className="rb-top-actions">{topbarActions}</div> : null}
       </header>
       <section className="rb-body">{children}</section>
     </main>

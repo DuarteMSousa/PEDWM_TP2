@@ -93,6 +93,34 @@ body {
   gap: 8px;
 }
 
+.rb-store-profile-btn {
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: #475569;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.rb-store-profile-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rb-store-profile-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .rb-icon-btn {
   border: 1px solid var(--line);
   background: #fff;
@@ -748,7 +776,7 @@ body {
 
 .rb-login-card {
   width: 100%;
-  max-width: 480px;
+  max-width: 620px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: var(--panel);
@@ -780,6 +808,52 @@ body {
 
 .rb-login-form input,
 .rb-login-form select {
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 15px;
+}
+
+.rb-login-form input::placeholder,
+.rb-dialog-body input::placeholder,
+.rb-search::placeholder,
+.rb-chat-compose textarea::placeholder {
+  color: #94a3b8;
+  opacity: 0.72;
+}
+
+.rb-register-fields {
+  display: grid;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.rb-login-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rb-profile-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rb-profile-panel {
+  padding: 16px;
+}
+
+.rb-profile-select {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.rb-profile-select select {
   border: 1px solid #d1d5db;
   border-radius: 10px;
   padding: 10px 12px;
@@ -1149,6 +1223,14 @@ body {
   }
 
   .rb-chat-config {
+    grid-template-columns: 1fr;
+  }
+
+  .rb-login-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rb-profile-grid {
     grid-template-columns: 1fr;
   }
 

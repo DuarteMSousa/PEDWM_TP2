@@ -23,6 +23,12 @@ input CreateRestaurantInput {
   opening_hours: String!
   closing_hours: String!
   delivery_radius: Float!
+  street: String
+  city: String
+  postal_code: String
+  country: String
+  latitude: Float
+  longitude: Float
 }
 
 input UpdateRestaurantInput {
@@ -31,6 +37,12 @@ input UpdateRestaurantInput {
   opening_hours: String
   closing_hours: String
   delivery_radius: Float
+  street: String
+  city: String
+  postal_code: String
+  country: String
+  latitude: Float
+  longitude: Float
 }
 
 extend type Query {

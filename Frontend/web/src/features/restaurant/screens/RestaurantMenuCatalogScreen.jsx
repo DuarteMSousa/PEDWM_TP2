@@ -38,7 +38,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
   const [editOptionGroups, setEditOptionGroups] = useState([])
   const [showOptionsEditor, setShowOptionsEditor] = useState(false)
   const [newProduct, setNewProduct] = useState({
-    category: 'Pizzas',
+    category: '',
     name: '',
     description: '',
     price: '',
@@ -282,7 +282,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
       setInfoText('Prato criado com sucesso.')
       setShowCreateForm(false)
       setNewProduct({
-        category: 'Pizzas',
+        category: '',
         name: '',
         description: '',
         price: '',
@@ -716,6 +716,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
             <input
               value={newProduct.category}
               onChange={(event) => setNewProduct((state) => ({ ...state, category: event.target.value }))}
+              placeholder="Ex: Pizzas"
             />
           </label>
           <label>
@@ -723,6 +724,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
             <input
               value={newProduct.name}
               onChange={(event) => setNewProduct((state) => ({ ...state, name: event.target.value }))}
+              placeholder="Ex: Pizza margherita"
             />
           </label>
           <label>
@@ -733,6 +735,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
               step="0.01"
               value={newProduct.price}
               onChange={(event) => setNewProduct((state) => ({ ...state, price: event.target.value }))}
+              placeholder="Ex: 9.50"
             />
           </label>
           <label>
@@ -744,6 +747,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
               onChange={(event) =>
                 setNewProduct((state) => ({ ...state, estimated_preparation_time_min: event.target.value }))
               }
+              placeholder="Ex: 15"
             />
           </label>
           <label>
@@ -751,6 +755,7 @@ export function RestaurantMenuCatalogScreen({ session }) {
             <input
               value={newProduct.description}
               onChange={(event) => setNewProduct((state) => ({ ...state, description: event.target.value }))}
+              placeholder="Ex: Tomate, mozzarella e manjericao"
             />
           </label>
           <label>

@@ -3,7 +3,7 @@ import { Pressable, SafeAreaView, StyleSheet, Text, TextInput, View } from 'reac
 import { loginMobileUser, registerMobileUser } from '../services/authService'
 
 export function MobileLoginScreen({ onLogin }) {
-  const [email, setEmail] = useState('cliente@fastbite.pt')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState('customer')
   const [loadingAction, setLoadingAction] = useState('')

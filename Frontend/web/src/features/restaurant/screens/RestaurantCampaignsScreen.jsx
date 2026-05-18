@@ -23,7 +23,7 @@ function emptyPromotionDraft() {
     target: 'ORDER',
     start_date: '',
     end_date: '',
-    discount: '10',
+    discount: '',
     product_id: '',
     category_id: '',
   }
@@ -35,7 +35,7 @@ function emptyCouponDraft() {
     description: '',
     type: 'PERCENTAGE',
     target: 'ORDER',
-    discount: '10',
+    discount: '',
     product_id: '',
     category_id: '',
     min_order_total: '',
@@ -283,6 +283,7 @@ export function RestaurantCampaignsScreen({ session }) {
                 onChange={(event) =>
                   setPromotionDraft((current) => ({ ...current, name: event.target.value }))
                 }
+                placeholder="Ex: Almocos de semana"
               />
             </label>
             <label>
@@ -295,6 +296,7 @@ export function RestaurantCampaignsScreen({ session }) {
                     description: event.target.value,
                   }))
                 }
+                placeholder="Ex: Desconto nos pedidos ao almoco"
               />
             </label>
             <label>
@@ -336,6 +338,7 @@ export function RestaurantCampaignsScreen({ session }) {
                 onChange={(event) =>
                   setPromotionDraft((current) => ({ ...current, discount: event.target.value }))
                 }
+                placeholder="Ex: 10"
               />
             </label>
             {promotionDraft.target === 'PRODUCT' ? (
@@ -474,6 +477,7 @@ export function RestaurantCampaignsScreen({ session }) {
                 onChange={(event) =>
                   setCouponDraft((current) => ({ ...current, description: event.target.value }))
                 }
+                placeholder="Ex: Cupao para a hora de almoco"
               />
             </label>
             <label>
@@ -515,6 +519,7 @@ export function RestaurantCampaignsScreen({ session }) {
                 onChange={(event) =>
                   setCouponDraft((current) => ({ ...current, discount: event.target.value }))
                 }
+                placeholder="Ex: 10"
               />
             </label>
             {couponDraft.target === 'PRODUCT' ? (
@@ -565,6 +570,7 @@ export function RestaurantCampaignsScreen({ session }) {
                     min_order_total: event.target.value,
                   }))
                 }
+                placeholder="Ex: 15"
               />
             </label>
             <label>
@@ -579,6 +585,7 @@ export function RestaurantCampaignsScreen({ session }) {
                     max_discount_amount: event.target.value,
                   }))
                 }
+                placeholder="Ex: 5"
               />
             </label>
             <label>
@@ -589,6 +596,7 @@ export function RestaurantCampaignsScreen({ session }) {
                 onChange={(event) =>
                   setCouponDraft((current) => ({ ...current, max_uses: event.target.value }))
                 }
+                placeholder="Ex: 100"
               />
             </label>
             <label>

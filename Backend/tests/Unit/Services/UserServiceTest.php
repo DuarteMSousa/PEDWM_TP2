@@ -4,6 +4,7 @@ namespace Tests\Unit\Services;
 
 use App\DTOs\User\CreateUserDTO;
 use App\DTOs\User\UpdateUserDTO;
+use App\Models\User;
 use App\Repositories\UserRepository\UserRepositoryInterface;
 use App\Services\UserService\UserService;
 use Mockery;
@@ -32,6 +33,17 @@ class UserServiceTest extends TestCase
     public function test_create_user_hashes_password_before_delegating_to_repository(): void
     {
         $repository = Mockery::mock(UserRepositoryInterface::class);
+        $createdUser = new User([
+            'name' => 'Ana',
+            'email' => 'ana@example.test',
+            'user_type' => 'CUSTOMER',
+        ]);
+
+        $repository->shouldReceive('findByEmail')
+            ->once()
+            ->with('ana@example.test')
+            ->andReturn(null);
+
         $repository->shouldReceive('createUser')
             ->once()
             ->with(Mockery::on(function (CreateUserDTO $data): bool {
@@ -40,7 +52,7 @@ class UserServiceTest extends TestCase
                     && $data->password !== 'secret'
                     && password_verify('secret', $data->password);
             }))
-            ->andReturn(['id' => 'user-1']);
+            ->andReturn($createdUser);
 
         $result = (new UserService($repository))->createUser(new CreateUserDTO(
             name: 'Ana',
@@ -48,7 +60,7 @@ class UserServiceTest extends TestCase
             password: 'secret',
         ));
 
-        $this->assertSame(['id' => 'user-1'], $result);
+        $this->assertSame($createdUser, $result);
     }
 
     public function test_update_and_delete_delegate_to_repository(): void
