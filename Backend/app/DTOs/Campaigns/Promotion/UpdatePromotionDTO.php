@@ -17,6 +17,7 @@ class UpdatePromotionDTO extends Data
         public readonly ?string $description = null,
         public readonly ?DiscountType $type = null,
         public readonly ?DiscountTarget $target = null,
+        public readonly ?float $discount = null,
         public readonly ?Carbon $start_date = null,
         public readonly ?Carbon $end_date = null,
         #[DataCollectionOf(PromotionItemInputDTO::class)]

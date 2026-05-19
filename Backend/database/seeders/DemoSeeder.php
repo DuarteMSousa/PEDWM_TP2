@@ -13,7 +13,6 @@ use App\Models\Product;
 use App\Models\ProductOption;
 use App\Models\ProductOptionGroup;
 use App\Models\Promotion;
-use App\Models\PromotionItem;
 use App\Models\Restaurant;
 use App\Models\RestaurantAddress;
 use App\Models\RestaurantChain;
@@ -348,10 +347,6 @@ class DemoSeeder extends Seeder
                 'type' => 'PERCENTAGE',
                 'target' => 'ORDER',
                 'discount' => 10.0,
-                'min_order_total' => 10.0,
-                'max_discount_amount' => 5.0,
-                'max_uses' => 100,
-                'used_count' => 0,
                 'expiry_date' => now()->addDays(60),
             ]);
 
@@ -362,9 +357,6 @@ class DemoSeeder extends Seeder
                 'type' => 'FIXED_AMOUNT',
                 'target' => 'DELIVERY',
                 'discount' => 3.0,
-                'min_order_total' => 15.0,
-                'max_uses' => 50,
-                'used_count' => 0,
                 'expiry_date' => now()->addDays(30),
             ]);
 
@@ -374,14 +366,13 @@ class DemoSeeder extends Seeder
                 'description' => '15% em todas as pizzas durante o fim de semana.',
                 'type' => 'PERCENTAGE',
                 'target' => 'CATEGORY',
+                'discount' => 15.0,
                 'start_date' => now()->subDay(),
                 'end_date' => now()->addDays(7),
             ]);
 
-            PromotionItem::create([
-                'promotion_id' => $pizzaPromo->id,
-                'category_id' => $catPizzas->id,
-                'discount' => 15.0,
+            $pizzaPromo->promotionItems()->create([
+                'item_id' => $catPizzas->id,
             ]);
 
             $this->command?->info('');

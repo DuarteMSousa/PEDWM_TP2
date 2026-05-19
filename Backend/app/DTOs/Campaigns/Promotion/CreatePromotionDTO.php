@@ -18,6 +18,7 @@ class CreatePromotionDTO extends Data
         public readonly ?string $description,
         public readonly DiscountType $type,
         public readonly DiscountTarget $target,
+        public readonly float $discount,
         public readonly ?Carbon $start_date,
         public readonly ?Carbon $end_date,
         #[DataCollectionOf(PromotionItemInputDTO::class)]

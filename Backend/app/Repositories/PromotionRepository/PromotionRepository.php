@@ -15,12 +15,21 @@ class PromotionRepository implements PromotionRepositoryInterface
 
     public function findByChainId(string $chainId)
     {
-        return Promotion::where('chain_id', $chainId)->get();
+        return Promotion::with(['promotionItems'])->where('chain_id', $chainId)->get();
     }
 
     public function createPromotion(CreatePromotionDTO $data)
     {
-        return Promotion::create($data->toArray());
+        return Promotion::create([
+            'chain_id' => $data->chain_id,
+            'name' => $data->name,
+            'description' => $data->description,
+            'type' => $data->type->value,
+            'target' => $data->target->value,
+            'discount' => $data->discount,
+            'start_date' => $data->start_date,
+            'end_date' => $data->end_date,
+        ]);
     }
 
     public function updatePromotion(string $id, UpdatePromotionDTO $data)
@@ -31,7 +40,15 @@ class PromotionRepository implements PromotionRepositoryInterface
             return null;
         }
 
-        $promotion->update($data->toArray());
+        $promotion->update(array_filter([
+            'name' => $data->name,
+            'description' => $data->description,
+            'type' => $data->type?->value,
+            'target' => $data->target?->value,
+            'discount' => $data->discount,
+            'start_date' => $data->start_date,
+            'end_date' => $data->end_date,
+        ], static fn ($value) => $value !== null));
 
         return $promotion;
     }

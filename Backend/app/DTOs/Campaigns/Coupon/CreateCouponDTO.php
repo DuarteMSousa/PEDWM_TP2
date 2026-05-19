@@ -4,7 +4,10 @@ namespace App\DTOs\Campaigns\Coupon;
 
 use App\Enums\DiscountTarget;
 use App\Enums\DiscountType;
+use App\DTOs\Campaigns\PromotionItem\PromotionItemInputDTO;
+use Spatie\LaravelData\Attributes\DataCollectionOf;
 use Spatie\LaravelData\Data;
+use Spatie\LaravelData\DataCollection;
 
 class CreateCouponDTO extends Data
 {
@@ -16,11 +19,8 @@ class CreateCouponDTO extends Data
         public readonly DiscountTarget $target,
         public readonly ?string $expiry_date,
         public readonly float $discount = 0,
-        public readonly ?string $product_id = null,
-        public readonly ?string $category_id = null,
-        public readonly ?float $min_order_total = null,
-        public readonly ?float $max_discount_amount = null,
-        public readonly ?int $max_uses = null,
+        #[DataCollectionOf(PromotionItemInputDTO::class)]
+        public readonly ?DataCollection $items = null,
     ) {}
 
 }

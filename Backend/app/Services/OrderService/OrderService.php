@@ -28,6 +28,7 @@ use App\Services\DeliveryService\DeliveryServiceInterface;
 use App\Services\OrderPricingService;
 use App\Services\OutboxService;
 use App\Services\PaymentService\PaymentServiceInterface;
+use BackedEnum;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -111,7 +112,7 @@ class OrderService implements OrderServiceInterface
         $cart = Cart::query()
             ->with(['items.restaurantProduct.product.category', 'items.options.productOption'])
             ->where('user_id', $clientUserId)
-            ->when($data->cart_id, fn ($query, $cartId) => $query->whereKey($cartId))
+            ->when($data->cart_id, fn($query, $cartId) => $query->whereKey($cartId))
             ->firstOrFail();
 
         if ($cart->items->isEmpty()) {
@@ -214,10 +215,6 @@ class OrderService implements OrderServiceInterface
                 ->delay($payment->expired_at)
                 ->afterCommit();
         }
-        if ($pricing['coupon']) {
-            $pricing['coupon']->increment('used_count');
-        }
-
         $cart->items()->delete();
         $cart->update(['total' => 0]);
 
@@ -306,9 +303,18 @@ class OrderService implements OrderServiceInterface
         $item->update(['status' => $status]);
         $order = $item->order->refresh()->load('items');
 
-        $allReady = OrderItemRules::allNonCancelledReady($order->items->pluck('status'));
+        $statuses = $order->items->pluck('status');
+        $isAllReady = true;
 
-        if ($allReady) {
+        foreach ($statuses as $status) {
+            $value = $status instanceof BackedEnum ? $status->value : $status;
+
+            if ($value !== OrderItemStatus::READY->value) {
+                 $isAllReady = false;
+            }
+        }
+
+        if ($isAllReady) {
             return $this->transition($order, OrderStatus::READY, OrderEventType::ORDER_READY, $actorUserId);
         }
 

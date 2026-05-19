@@ -28,6 +28,6 @@ class Category extends Model
 
     public function promotionItems(): HasMany
     {
-        return $this->hasMany(PromotionItem::class);
+        return $this->hasMany(PromotionItem::class, 'item_id');
     }
 }

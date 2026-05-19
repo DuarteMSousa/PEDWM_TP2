@@ -41,16 +41,5 @@ class PricingCalculatorTest extends TestCase
         $this->assertSame(0.0, PricingCalculator::calculateTotal(5, 0, 9));
     }
 
-    public function test_filters_and_sums_only_positive_discounts(): void
-    {
-        $discounts = PricingCalculator::onlyPositiveDiscounts([
-            ['discount_amount' => 2.25],
-            ['discount_amount' => 0],
-            ['discount_amount' => -1],
-            ['discount_amount' => 1.75],
-        ]);
-
-        $this->assertCount(2, $discounts);
-        $this->assertSame(4.0, PricingCalculator::calculateDiscountTotal($discounts));
-    }
+  
 }

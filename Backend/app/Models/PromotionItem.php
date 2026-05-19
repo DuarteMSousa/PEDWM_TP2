@@ -2,40 +2,41 @@
 
 namespace App\Models;
 
+use App\Enums\PromotionItemParentType;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class PromotionItem extends Model
 {
     use HasUuids;
 
     protected $fillable = [
-        'promotion_id',
-        'product_id',
-        'category_id',
-        'discount',
+        'parent_type',
+        'parent_id',
+        'item_id',
     ];
 
     protected function casts(): array
     {
         return [
-            'discount' => 'float',
+            'parent_type' => PromotionItemParentType::class,
         ];
     }
 
-    public function promotion(): BelongsTo
+    public function parent(): MorphTo
     {
-        return $this->belongsTo(Promotion::class);
+        return $this->morphTo();
     }
 
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class, 'item_id');
     }
 
     public function category(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(Category::class, 'item_id');
     }
 }

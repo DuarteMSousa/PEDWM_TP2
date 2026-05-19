@@ -130,6 +130,11 @@ enum DiscountOriginType {
     COUPON
 }
 
+enum PromotionItemParentType {
+    PROMOTION
+    COUPON
+}
+
 enum ReviewTargetType {
     RESTAURANT
     COURIER
@@ -397,6 +402,7 @@ class Coupon {
     +description: string
     +type: DiscountType
     +target: DiscountTarget
+    +discount: float
     +expiryDate: datetime
 }
 
@@ -406,21 +412,24 @@ class Promotion {
     +description: string
     +type: DiscountType
     +target: DiscountTarget
+    +discount: float
     +startDate: datetime
     +endDate: datetime
 }
 
 class PromotionItem {
     +id: UUID
-    +discount: float
+    +parentType: PromotionItemParentType
+    +parentId: UUID
+    +itemId: UUID
 }
 
 RestaurantChain "1" -- "*" Promotion
 RestaurantChain "1" -- "*" Coupon
 Promotion "1" -- "*" PromotionItem
 Coupon "1" -- "*" PromotionItem
-PromotionItem "*" -- "1" Product
-PromotionItem "*" -- "1" Category
+PromotionItem ..> Product : itemId when target PRODUCT
+PromotionItem ..> Category : itemId when target CATEGORY
 
 Coupon "1" -- "*" OrderDiscount
 Promotion "1" -- "*" OrderDiscount

@@ -43,7 +43,7 @@ class OrderPricingService
         $discounts = [];
 
         foreach ($this->activePromotions((string) $restaurant->chain_id) as $promotion) {
-            foreach ($this->promotionDiscounts($cart, $promotion) as $discount) {
+            foreach ($this->promotionDiscounts($cart, $promotion, $subtotal, $deliveryFee) as $discount) {
                 $discounts[] = $discount;
             }
         }
@@ -54,7 +54,6 @@ class OrderPricingService
             $discounts[] = $this->couponDiscount($cart, $coupon, $subtotal, $deliveryFee);
         }
 
-        $discounts = PricingCalculator::onlyPositiveDiscounts($discounts);
         $discountTotal = PricingCalculator::calculateDiscountTotal($discounts);
         $total = PricingCalculator::calculateTotal($subtotal, $deliveryFee, $discountTotal);
 
@@ -110,15 +109,15 @@ class OrderPricingService
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function promotionDiscounts(Cart $cart, Promotion $promotion): array
+    private function promotionDiscounts(Cart $cart, Promotion $promotion, float $subtotal, float $deliveryFee): array
     {
         $discounts = [];
         $type = DiscountType::from($promotion->type);
         $target = DiscountTarget::from($promotion->target);
 
-        if ($target === DiscountTarget::ORDER) {
-            $base = PricingCalculator::calculateSubtotal($cart->items->pluck('total_price'));
-            $amount = PricingCalculator::discountAmount($base, (float) $this->promotionDiscountValue($promotion), $type);
+        if (in_array($target, [DiscountTarget::ORDER, DiscountTarget::DELIVERY], true)) {
+            $base = $target === DiscountTarget::ORDER ? $subtotal : $deliveryFee;
+            $amount = PricingCalculator::discountAmount($base, (float) $promotion->discount, $type);
 
             return [[
                 'name_snapshot' => $promotion->name,
@@ -136,17 +135,15 @@ class OrderPricingService
             foreach ($cart->items as $cartItem) {
                 $product = $cartItem->restaurantProduct->product;
                 $matchesProduct = $target === DiscountTarget::PRODUCT
-                    && $promotionItem->product_id
-                    && $promotionItem->product_id === $product->id;
+                    && $promotionItem->item_id === $product->id;
                 $matchesCategory = $target === DiscountTarget::CATEGORY
-                    && $promotionItem->category_id
-                    && $promotionItem->category_id === $product->category_id;
+                    && $promotionItem->item_id === $product->category_id;
 
                 if (! $matchesProduct && ! $matchesCategory) {
                     continue;
                 }
 
-                $amount = PricingCalculator::discountAmount((float) $cartItem->total_price, (float) $promotionItem->discount, $type);
+                $amount = PricingCalculator::discountAmount((float) $cartItem->total_price, (float) $promotion->discount, $type);
                 $discounts[] = [
                     'name_snapshot' => $promotion->name,
                     'description_snapshot' => $promotion->description,
@@ -166,6 +163,7 @@ class OrderPricingService
     private function validCoupon(string $chainId, string $code, float $subtotal): Coupon
     {
         $coupon = Coupon::query()
+            ->with('promotionItems')
             ->where('chain_id', $chainId)
             ->where('code', $code)
             ->first();
@@ -176,14 +174,6 @@ class OrderPricingService
 
         if ($coupon->expiry_date && $coupon->expiry_date->isPast()) {
             throw ValidationException::withMessages(['coupon_code' => 'Coupon expired.']);
-        }
-
-        if ($coupon->min_order_total !== null && $subtotal < $coupon->min_order_total) {
-            throw ValidationException::withMessages(['coupon_code' => 'Order total is below coupon minimum.']);
-        }
-
-        if ($coupon->max_uses !== null && $coupon->used_count >= $coupon->max_uses) {
-            throw ValidationException::withMessages(['coupon_code' => 'Coupon usage limit reached.']);
         }
 
         return $coupon;
@@ -204,10 +194,6 @@ class OrderPricingService
 
         $amount = PricingCalculator::discountAmount($base, (float) $coupon->discount, $type);
 
-        if ($coupon->max_discount_amount !== null) {
-            $amount = min($amount, (float) $coupon->max_discount_amount);
-        }
-
         return [
             'name_snapshot' => $coupon->code,
             'description_snapshot' => $coupon->description,
@@ -224,12 +210,17 @@ class OrderPricingService
     {
         return (float) $cart->items->sum(function ($cartItem) use ($coupon, $target): float {
             $product = $cartItem->restaurantProduct->product;
+            $matchesTargetItem = $coupon->promotionItems->contains(
+                fn ($promotionItem) => $promotionItem->item_id === (
+                    $target === DiscountTarget::PRODUCT ? $product->id : $product->category_id
+                )
+            );
 
-            if ($target === DiscountTarget::PRODUCT && $coupon->product_id === $product->id) {
+            if ($target === DiscountTarget::PRODUCT && $matchesTargetItem) {
                 return (float) $cartItem->total_price;
             }
 
-            if ($target === DiscountTarget::CATEGORY && $coupon->category_id === $product->category_id) {
+            if ($target === DiscountTarget::CATEGORY && $matchesTargetItem) {
                 return (float) $cartItem->total_price;
             }
 
@@ -237,8 +228,4 @@ class OrderPricingService
         });
     }
 
-    private function promotionDiscountValue(Promotion $promotion): float
-    {
-        return (float) ($promotion->promotionItems->first()?->discount ?? 0);
-    }
 }

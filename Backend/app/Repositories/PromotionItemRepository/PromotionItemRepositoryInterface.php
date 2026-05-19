@@ -3,12 +3,13 @@
 namespace App\Repositories\PromotionItemRepository;
 
 use App\DTOs\Campaigns\PromotionItem\CreatePromotionItemDTO;
+use App\Enums\PromotionItemParentType;
 
 interface PromotionItemRepositoryInterface
 {
     public function findById(string $id);
 
-    public function findByPromotionId(string $promotionId);
+    public function findByParent(PromotionItemParentType|string $parentType, string $parentId);
 
     public function createPromotionItem(CreatePromotionItemDTO $data);
 

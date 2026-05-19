@@ -53,18 +53,6 @@ final class PricingCalculator
 
     /**
      * @param  array<int, array<string, mixed>>  $discounts
-     * @return array<int, array<string, mixed>>
-     */
-    public static function onlyPositiveDiscounts(array $discounts): array
-    {
-        return array_values(array_filter(
-            $discounts,
-            static fn (array $discount): bool => ($discount['discount_amount'] ?? 0) > 0
-        ));
-    }
-
-    /**
-     * @param  array<int, array<string, mixed>>  $discounts
      */
     public static function calculateDiscountTotal(array $discounts): float
     {

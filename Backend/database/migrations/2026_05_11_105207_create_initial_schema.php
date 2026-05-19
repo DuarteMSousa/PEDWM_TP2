@@ -214,6 +214,7 @@ return new class extends Migration {
             $table->string('description')->nullable();
             $table->enum('type', ['PERCENTAGE', 'FIXED_AMOUNT']);
             $table->enum('target', ['ORDER', 'PRODUCT', 'DELIVERY', 'CATEGORY']);
+            $table->float('discount')->default(0);
             $table->timestamp('expiry_date')->nullable();
             $table->timestamps();
         });
@@ -225,6 +226,7 @@ return new class extends Migration {
             $table->string('description')->nullable();
             $table->enum('type', ['PERCENTAGE', 'FIXED_AMOUNT']);
             $table->enum('target', ['ORDER', 'PRODUCT', 'DELIVERY', 'CATEGORY']);
+            $table->float('discount')->default(0);
             $table->timestamp('start_date')->nullable();
             $table->timestamp('end_date')->nullable();
             $table->timestamps();
@@ -232,11 +234,12 @@ return new class extends Migration {
 
         Schema::create('promotion_items', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('promotion_id')->nullable()->constrained('promotions')->cascadeOnDelete();
-            $table->foreignUuid('product_id')->nullable()->constrained('products')->cascadeOnDelete();
-            $table->foreignUuid('category_id')->nullable()->constrained('categories')->cascadeOnDelete();
-            $table->float('discount');
+            $table->enum('parent_type', ['PROMOTION', 'COUPON']);
+            $table->uuid('parent_id');
+            $table->uuid('item_id');
             $table->timestamps();
+            $table->index(['parent_type', 'parent_id']);
+            $table->index('item_id');
         });
 
         // reviews

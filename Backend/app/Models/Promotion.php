@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Promotion extends Model
 {
@@ -17,6 +18,7 @@ class Promotion extends Model
         'description',
         'type',
         'target',
+        'discount',
         'start_date',
         'end_date',
     ];
@@ -24,6 +26,7 @@ class Promotion extends Model
     protected function casts(): array
     {
         return [
+            'discount' => 'float',
             'start_date' => 'datetime',
             'end_date' => 'datetime',
         ];
@@ -34,9 +37,9 @@ class Promotion extends Model
         return $this->belongsTo(RestaurantChain::class, 'chain_id');
     }
 
-    public function promotionItems(): HasMany
+    public function promotionItems(): MorphMany
     {
-        return $this->hasMany(PromotionItem::class);
+        return $this->morphMany(PromotionItem::class, 'parent');
     }
 
     public function orderDiscounts(): HasMany

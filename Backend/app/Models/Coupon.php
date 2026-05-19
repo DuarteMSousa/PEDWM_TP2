@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Coupon extends Model
 {
@@ -17,13 +18,7 @@ class Coupon extends Model
         'description',
         'type',
         'target',
-        'product_id',
-        'category_id',
         'discount',
-        'min_order_total',
-        'max_discount_amount',
-        'max_uses',
-        'used_count',
         'expiry_date',
     ];
 
@@ -32,10 +27,6 @@ class Coupon extends Model
         return [
             'expiry_date' => 'datetime',
             'discount' => 'float',
-            'min_order_total' => 'float',
-            'max_discount_amount' => 'float',
-            'max_uses' => 'integer',
-            'used_count' => 'integer',
         ];
     }
 
@@ -44,19 +35,9 @@ class Coupon extends Model
         return $this->belongsTo(RestaurantChain::class, 'chain_id');
     }
 
-    public function promotionItems(): HasMany
+    public function promotionItems(): MorphMany
     {
-        return $this->hasMany(PromotionItem::class);
-    }
-
-    public function product(): BelongsTo
-    {
-        return $this->belongsTo(Product::class);
-    }
-
-    public function category(): BelongsTo
-    {
-        return $this->belongsTo(Category::class);
+        return $this->morphMany(PromotionItem::class, 'parent');
     }
 
     public function orderDiscounts(): HasMany

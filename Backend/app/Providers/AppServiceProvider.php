@@ -3,7 +3,10 @@
 namespace App\Providers;
 
 use App\Events\NotificationEventRecorded;
+use App\Enums\PromotionItemParentType;
 use App\Listeners\CreateNotificationFromDomainEvent;
+use App\Models\Coupon;
+use App\Models\Promotion;
 use App\Services\CartService\CartService;
 use App\Services\CartService\CartServiceInterface;
 use App\Services\CategoryService\CategoryService;
@@ -42,6 +45,7 @@ use App\Services\UserAddressService\UserAddressService;
 use App\Services\UserAddressService\UserAddressServiceInterface;
 use App\Services\UserService\UserService;
 use App\Services\UserService\UserServiceInterface;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
@@ -78,6 +82,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Relation::morphMap([
+            PromotionItemParentType::COUPON->value => Coupon::class,
+            PromotionItemParentType::PROMOTION->value => Promotion::class,
+        ]);
+
         Event::listen(NotificationEventRecorded::class, CreateNotificationFromDomainEvent::class);
     }
 }

@@ -2,15 +2,15 @@
 
 namespace App\DTOs\Campaigns\PromotionItem;
 
+use App\Enums\PromotionItemParentType;
 use Spatie\LaravelData\Data;
 
 class CreatePromotionItemDTO extends Data
 {
     public function __construct(
-        public readonly string $promotion_id,
-        public readonly float $discount,
-        public readonly ?string $product_id = null,
-        public readonly ?string $category_id = null,
+        public readonly PromotionItemParentType $parent_type,
+        public readonly string $parent_id,
+        public readonly string $item_id,
     ) {
     }
 }

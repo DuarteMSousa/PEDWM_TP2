@@ -69,6 +69,11 @@ enum DiscountOriginType {
   COUPON
 }
 
+enum PromotionItemParentType {
+  PROMOTION
+  COUPON
+}
+
 enum ReviewTargetTypeInput {
   RESTAURANT
   COURIER
@@ -372,6 +377,7 @@ type Promotion {
   description: String
   type: DiscountType!
   target: DiscountTarget!
+  discount: Float!
   start_date: String
   end_date: String
   promotionItems: [PromotionItem!]
@@ -379,10 +385,9 @@ type Promotion {
 
 type PromotionItem {
   id: ID!
-  promotion_id: ID
-  product_id: ID
-  category_id: ID
-  discount: Float!
+  parent_type: PromotionItemParentType!
+  parent_id: ID!
+  item_id: ID!
 }
 
 type Coupon {
@@ -392,7 +397,9 @@ type Coupon {
   description: String
   type: DiscountType!
   target: DiscountTarget!
+  discount: Float!
   expiry_date: String
+  promotionItems: [PromotionItem!]
 }
 
 type ReviewView {

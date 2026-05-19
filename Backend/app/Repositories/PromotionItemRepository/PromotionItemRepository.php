@@ -3,6 +3,7 @@
 namespace App\Repositories\PromotionItemRepository;
 
 use App\DTOs\Campaigns\PromotionItem\CreatePromotionItemDTO;
+use App\Enums\PromotionItemParentType;
 use App\Models\PromotionItem;
 
 class PromotionItemRepository implements PromotionItemRepositoryInterface
@@ -12,9 +13,13 @@ class PromotionItemRepository implements PromotionItemRepositoryInterface
         return PromotionItem::find($id);
     }
 
-    public function findByPromotionId(string $promotionId)
+    public function findByParent(PromotionItemParentType|string $parentType, string $parentId)
     {
-        return PromotionItem::where('promotion_id', $promotionId)->get();
+        $parentType = $parentType instanceof PromotionItemParentType ? $parentType->value : $parentType;
+
+        return PromotionItem::where('parent_type', $parentType)
+            ->where('parent_id', $parentId)
+            ->get();
     }
 
     public function createPromotionItem(CreatePromotionItemDTO $data)

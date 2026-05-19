@@ -326,6 +326,7 @@ entity coupons {
   description : string
   type : string
   target : string
+  discount : float
   expiry_date : datetime
 }
 
@@ -337,6 +338,7 @@ entity promotions {
   description : string
   type : string
   target : string
+  discount : float
   start_date : datetime
   end_date : datetime
 }
@@ -344,10 +346,9 @@ entity promotions {
 entity promotion_items {
   *id : UUID <<PK>>
   --
-  promotion_id : UUID <<FK>>
-  product_id : UUID <<FK>>
-  category_id : UUID <<FK>>
-  discount : float
+  parent_type : enum
+  parent_id : UUID
+  item_id : UUID
 }
 
 entity order_discounts {
@@ -366,8 +367,12 @@ restaurant_chains ||--o{ coupons
 restaurant_chains ||--o{ promotions
 coupons ||--o{ promotion_items
 promotions ||--o{ promotion_items
-products ||--o{ promotion_items
-categories ||--o{ promotion_items
+
+note right of promotion_items
+  item_id references products.id when parent target is PRODUCT,
+  or categories.id when parent target is CATEGORY.
+end note
+
 orders ||--o{ order_discounts
 order_items ||--o{ order_discounts
 coupons ||--o{ order_discounts

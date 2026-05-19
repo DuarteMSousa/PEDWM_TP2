@@ -9,14 +9,16 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('coupons', function (Blueprint $table): void {
-            if (! Schema::hasColumn('coupons', 'discount')) {
-                $table->float('discount')->default(0)->after('target');
+            foreach (['min_order_total', 'max_discount_amount', 'max_uses', 'used_count'] as $column) {
+                if (Schema::hasColumn('coupons', $column)) {
+                    $table->dropColumn($column);
+                }
             }
         });
     }
 
     public function down(): void
     {
-        // coupons.discount is now part of the base coupons schema.
+        // No-op: these columns are no longer part of the Coupon model.
     }
 };
