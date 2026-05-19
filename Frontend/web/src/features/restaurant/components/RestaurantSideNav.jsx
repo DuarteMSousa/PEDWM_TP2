@@ -1,3 +1,5 @@
+import { NavIcon } from './NavIcon'
+
 export function RestaurantSideNav({ views, activeViewId, onSelect, operatorName, onLogout, session }) {
   const userType = session?.userType ?? null
   const isChainManager = userType === 'CHAIN_MANAGER'
@@ -18,7 +20,9 @@ export function RestaurantSideNav({ views, activeViewId, onSelect, operatorName,
           className={`rb-sidebar-item ${view.id === activeViewId ? 'active' : ''}`}
           onClick={() => onSelect(view.id)}
         >
-          <span className="rb-sidebar-icon">{view.icon}</span>
+          <span className="rb-sidebar-icon">
+            <NavIcon id={view.id} size={20} />
+          </span>
           <span>{view.label}</span>
           {view.badge ? <span className="rb-sidebar-badge">{view.badge}</span> : null}
         </button>

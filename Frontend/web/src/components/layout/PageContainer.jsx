@@ -1,3 +1,5 @@
+import { FastBiteLogo } from '../common/FastBiteLogo'
+
 export function PageContainer({
   children,
   restaurantName = 'FastBite Restaurant',
@@ -8,7 +10,9 @@ export function PageContainer({
     <main className="rb-app">
       <header className="rb-topbar">
         <div className="rb-brand">
-          <div className="rb-brand-mark">FB</div>
+          <div className="rb-brand-mark">
+            <FastBiteLogo size={32} withFrame={false} />
+          </div>
           <div>
             <p className="rb-brand-title">{restaurantName}</p>
             <p className="rb-brand-sub">{restaurantUnit ?? 'Pizzaria do Centro'}</p>
