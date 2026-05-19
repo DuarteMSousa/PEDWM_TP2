@@ -20,11 +20,15 @@ use App\Models\Cart;
 use App\Models\Order;
 use App\Models\OrderEvent;
 use App\Models\OrderItem;
+use App\Models\Payment;
+use App\Models\Restaurant;
 use App\Models\UserAddress;
 use App\Services\CartService\CartServiceInterface;
 use App\Services\DeliveryService\DeliveryServiceInterface;
 use App\Services\OrderPricingService;
 use App\Services\OutboxService;
+use App\Services\PaymentService\PaymentServiceInterface;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -228,7 +232,14 @@ class OrderService implements OrderServiceInterface
     {
         $order = Order::query()->where('user_id', $userId)->findOrFail($orderId);
 
-        return $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, $userId, ['reason' => $reason]);
+        if ($order->status === OrderStatus::CANCELLED) {
+            return $order->load($this->with);
+        }
+
+        $order = $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, $userId, ['reason' => $reason]);
+        $this->cancelPaymentForOrder($order->id, $reason ?? 'order cancelled by client');
+
+        return $order->refresh()->load($this->with);
     }
 
     #[Transactional]
@@ -240,9 +251,12 @@ class OrderService implements OrderServiceInterface
             return $order->load($this->with);
         }
 
-        return $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, 'system', [
+        $order = $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, 'system', [
             'reason' => $reason,
         ]);
+        $this->cancelPaymentForOrder($order->id, $reason);
+
+        return $order->refresh()->load($this->with);
     }
 
     #[Transactional]
@@ -265,8 +279,10 @@ class OrderService implements OrderServiceInterface
         $order = Order::query()->findOrFail($orderId);
 
         $this->recordEvent($order, OrderEventType::ORDER_REJECTED, $actorUserId, ['reason' => $reason]);
+        $order = $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, $actorUserId, ['reason' => $reason]);
+        $this->cancelPaymentForOrder($order->id, $reason ?? 'order rejected by restaurant');
 
-        return $this->transition($order, OrderStatus::CANCELLED, OrderEventType::ORDER_CANCELLED, $actorUserId, ['reason' => $reason]);
+        return $order->refresh()->load($this->with);
     }
 
     #[Transactional]
@@ -418,6 +434,12 @@ class OrderService implements OrderServiceInterface
             ]);
         }
 
+        if (! $this->isRestaurantOpenNow($restaurant)) {
+            throw ValidationException::withMessages([
+                'restaurant_id' => 'Restaurant is closed at this time.',
+            ]);
+        }
+
         $distanceKm = GeoMath::distanceKm(
             (float) $restaurantAddress->latitude,
             (float) $restaurantAddress->longitude,
@@ -430,6 +452,43 @@ class OrderService implements OrderServiceInterface
                 'address_id' => 'Delivery address is outside the restaurant delivery radius.',
             ]);
         }
+    }
+
+    private function cancelPaymentForOrder(string $orderId, string $reason): void
+    {
+        $payment = Payment::query()->where('order_id', $orderId)->first();
+
+        if (! $payment) {
+            return;
+        }
+
+        if (in_array($payment->status, [PaymentStatus::FAILED, PaymentStatus::CANCELLED], true)) {
+            return;
+        }
+
+        app(PaymentServiceInterface::class)->cancelPayment($payment->id, $reason, cascadeToOrder: false);
+    }
+
+    private function isRestaurantOpenNow(Restaurant $restaurant): bool
+    {
+        if (! $restaurant->opening_hours || ! $restaurant->closing_hours) {
+            return true;
+        }
+
+        try {
+            $now = Carbon::now();
+            $today = $now->copy()->startOfDay();
+            $opening = $today->copy()->setTimeFromTimeString($restaurant->opening_hours);
+            $closing = $today->copy()->setTimeFromTimeString($restaurant->closing_hours);
+        } catch (\Throwable) {
+            return true;
+        }
+
+        if ($closing->lessThanOrEqualTo($opening)) {
+            return $now->greaterThanOrEqualTo($opening) || $now->lessThan($closing);
+        }
+
+        return $now->greaterThanOrEqualTo($opening) && $now->lessThan($closing);
     }
 
     private function recordEvent(Order $order, OrderEventType $eventType, string $actorUserId, array $payload = []): void

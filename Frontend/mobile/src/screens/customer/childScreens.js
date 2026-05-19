@@ -26,6 +26,7 @@ export function HomeScreen({
   pushStatus,
   notificationState,
   notificationPreview,
+  availableCouriers,
   onOpenRestaurant,
   onOpenTracking,
   hasActiveOrder,
@@ -38,6 +39,7 @@ export function HomeScreen({
   onApplyFilters,
   onResetFilters,
 }) {
+  const noCouriersAvailable = availableCouriers === 0
   return (
     <View style={styles.screen}>
       <View style={styles.homeHeader}>
@@ -123,6 +125,14 @@ export function HomeScreen({
           </View>
         ) : null}
 
+        {noCouriersAvailable ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              Sem estafetas disponiveis neste momento. Nao e possivel fazer pedidos.
+            </Text>
+          </View>
+        ) : null}
+
         {notificationPreview ? (
           <Pressable style={styles.notificationBanner} onPress={onOpenInbox}>
             <Text style={styles.notificationBannerTitle}>
@@ -194,12 +204,14 @@ export function MenuScreen({
   itemCount,
   total,
   loading,
+  availableCouriers,
   onBack,
   onAdd,
   onOpenCart,
   activeCategory,
   onChangeCategory,
 }) {
+  const noCouriersAvailable = availableCouriers === 0
   const categories = ['Todas', ...Array.from(new Set(items.map((item) => item.category || 'Sem categoria').filter(Boolean)))]
   const visibleItems =
     !activeCategory || activeCategory === 'Todas'
@@ -221,6 +233,14 @@ export function MenuScreen({
         </Pressable>
         <Text style={styles.menuHeaderTitle}>{restaurant?.name ?? 'Restaurante'}</Text>
       </View>
+
+      {noCouriersAvailable ? (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            Sem estafetas disponiveis. Nao e possivel finalizar pedido neste momento.
+          </Text>
+        </View>
+      ) : null}
 
       <ScrollView
         horizontal
@@ -305,6 +325,7 @@ export function CartScreen({
   deliveryFee,
   total,
   loading,
+  availableCouriers,
   onDecrease,
   onIncrease,
   onRemove,
@@ -316,12 +337,21 @@ export function CartScreen({
   onOpenAddressPicker,
   onOpenPaymentPicker,
 }) {
+  const noCouriersAvailable = availableCouriers === 0
   return (
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={[styles.scrollContent, styles.cartScroll]}
         showsVerticalScrollIndicator={false}
       >
+        {noCouriersAvailable ? (
+          <View style={styles.offlineBanner}>
+            <Text style={styles.offlineBannerText}>
+              Sem estafetas disponiveis. Nao podes finalizar o pedido agora.
+            </Text>
+          </View>
+        ) : null}
+
         {items.length === 0 ? <Text style={styles.mutedText}>Carrinho vazio.</Text> : null}
 
         {items.map((item) => (
@@ -396,8 +426,18 @@ export function CartScreen({
           <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
         </View>
 
-        <Pressable style={styles.orderButton} onPress={onPlaceOrder} disabled={loading || items.length === 0}>
-          <Text style={styles.orderButtonText}>{loading ? 'A processar...' : 'Fazer Pedido'}</Text>
+        <Pressable
+          style={styles.orderButton}
+          onPress={onPlaceOrder}
+          disabled={loading || items.length === 0 || noCouriersAvailable}
+        >
+          <Text style={styles.orderButtonText}>
+            {loading
+              ? 'A processar...'
+              : noCouriersAvailable
+                ? 'Sem estafetas disponiveis'
+                : 'Fazer Pedido'}
+          </Text>
         </Pressable>
       </View>
     </View>

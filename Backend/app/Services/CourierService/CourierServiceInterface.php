@@ -11,4 +11,6 @@ interface CourierServiceInterface
     public function updateCourierStatus(string $userId, string $status): Courier;
 
     public function updateCourierLocation(string $courierId, float $latitude, float $longitude): Courier;
+
+    public function countAvailableCouriers(): int;
 }

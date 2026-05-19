@@ -55,19 +55,19 @@ class PaymentService implements PaymentServiceInterface
     }
 
     #[Transactional]
-    public function cancelPayment(string $paymentId, ?string $reason): Payment
+    public function cancelPayment(string $paymentId, ?string $reason, bool $cascadeToOrder = true): Payment
     {
         return $this->transitionPaymentStatus($paymentId, PaymentStatus::CANCELLED, PaymentEventType::PAYMENT_CANCELLED, [
             'reason' => $reason,
-        ]);
+        ], $cascadeToOrder);
     }
 
     #[Transactional]
-    public function failPayment(string $paymentId, ?string $reason): Payment
+    public function failPayment(string $paymentId, ?string $reason, bool $cascadeToOrder = true): Payment
     {
         return $this->transitionPaymentStatus($paymentId, PaymentStatus::FAILED, PaymentEventType::PAYMENT_FAILED, [
             'reason' => $reason,
-        ]);
+        ], $cascadeToOrder);
     }
 
     #[Transactional]
@@ -79,7 +79,7 @@ class PaymentService implements PaymentServiceInterface
         ]);
     }
 
-    private function transitionPaymentStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload): Payment
+    private function transitionPaymentStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload, bool $cascadeToOrder = true): Payment
     {
         $payment = Payment::query()->with('order')->lockForUpdate()->findOrFail($paymentId);
         $this->assertTransition($payment->status, $status);
@@ -98,7 +98,7 @@ class PaymentService implements PaymentServiceInterface
             app(OrderServiceInterface::class)->confirmOrderAfterPayment($payment->order, $payload['actor_user_id'] ?? 'payment');
         }
 
-        if (in_array($status, [PaymentStatus::FAILED, PaymentStatus::CANCELLED], true)) {
+        if ($cascadeToOrder && in_array($status, [PaymentStatus::FAILED, PaymentStatus::CANCELLED], true)) {
             app(OrderServiceInterface::class)->cancelOrderByClient(
                 $payment->order->user_id,
                 $payment->order_id,
@@ -113,7 +113,7 @@ class PaymentService implements PaymentServiceInterface
     {
         $allowed = match ($from) {
             PaymentStatus::PENDING => [PaymentStatus::COMPLETED, PaymentStatus::FAILED, PaymentStatus::CANCELLED],
-            PaymentStatus::COMPLETED => [],
+            PaymentStatus::COMPLETED => [PaymentStatus::CANCELLED],
             PaymentStatus::FAILED, PaymentStatus::CANCELLED => [],
         };
 

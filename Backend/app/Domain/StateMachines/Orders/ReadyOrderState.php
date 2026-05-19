@@ -13,6 +13,6 @@ class ReadyOrderState extends AbstractOrderState
 
     protected function allowedTransitions(): array
     {
-        return [OrderStatus::OUT_FOR_DELIVERY];
+        return [OrderStatus::OUT_FOR_DELIVERY, OrderStatus::CANCELLED];
     }
 }

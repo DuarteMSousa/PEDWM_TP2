@@ -17,9 +17,9 @@ interface PaymentServiceInterface
 
     public function confirmPayment(string $paymentId, ?string $transactionId): Payment;
 
-    public function cancelPayment(string $paymentId, ?string $reason): Payment;
+    public function cancelPayment(string $paymentId, ?string $reason, bool $cascadeToOrder = true): Payment;
 
-    public function failPayment(string $paymentId, ?string $reason): Payment;
+    public function failPayment(string $paymentId, ?string $reason, bool $cascadeToOrder = true): Payment;
 
     public function expirePayment(string $paymentId): Payment;
 }

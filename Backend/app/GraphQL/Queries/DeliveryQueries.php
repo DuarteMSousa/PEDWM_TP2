@@ -13,6 +13,11 @@ class DeliveryQueries
     ) {
     }
 
+    public function availableCouriersCount()
+    {
+        return $this->courierService->countAvailableCouriers();
+    }
+
     public function courierProfile($_, array $args)
     {
         return $this->courierService->getCourierByUserId($args['user_id']);

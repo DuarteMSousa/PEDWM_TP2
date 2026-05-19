@@ -123,6 +123,12 @@ const RESTAURANTS_QUERY = `
   }
 `
 
+const AVAILABLE_COURIERS_COUNT_QUERY = `
+  query AvailableCouriersCount {
+    availableCouriersCount
+  }
+`
+
 const PRODUCT_OPTION_GROUPS_QUERY = `
   query ProductOptionGroups($productId: ID!) {
     productOptionGroups(product_id: $productId) {
@@ -770,6 +776,15 @@ export async function fetchRestaurants(session, filters = {}) {
   })
 
   return (data.restaurants ?? []).map(mapRestaurant)
+}
+
+export async function fetchAvailableCouriersCount(session) {
+  const data = await graphqlRequest({
+    query: AVAILABLE_COURIERS_COUNT_QUERY,
+    ...requestOptions(session),
+  })
+
+  return Number(data?.availableCouriersCount ?? 0)
 }
 
 export async function fetchProductOptionGroups({ session, productId }) {

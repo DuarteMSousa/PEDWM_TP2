@@ -6,10 +6,12 @@ use App\Aspects\Transactional;
 use App\DTOs\Chat\AddChatParticipantDTO;
 use App\DTOs\Chat\CreateOrderChatDTO;
 use App\DTOs\Chat\SendMessageDTO;
+use App\Enums\OrderStatus;
 use App\Models\Chat;
 use App\Models\ChatParticipant;
 use App\Models\Message;
 use App\Models\User;
+use Illuminate\Validation\ValidationException;
 
 class ChatService implements ChatServiceInterface
 {
@@ -93,6 +95,20 @@ class ChatService implements ChatServiceInterface
     #[Transactional]
     public function sendChatMessage(string $senderUserId, SendMessageDTO $data): Message
     {
+        $chat = Chat::query()->with('order')->findOrFail($data->chat_id);
+
+        if ($chat->closed_at !== null) {
+            throw ValidationException::withMessages([
+                'chat_id' => 'Chat is closed.',
+            ]);
+        }
+
+        if ($chat->order && $chat->order->status === OrderStatus::CANCELLED) {
+            throw ValidationException::withMessages([
+                'chat_id' => 'Order was cancelled. Chat is no longer available.',
+            ]);
+        }
+
         $participant = ChatParticipant::query()
             ->where('chat_id', $data->chat_id)
             ->where('user_id', $senderUserId)

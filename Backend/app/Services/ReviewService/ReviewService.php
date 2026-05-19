@@ -5,6 +5,9 @@ namespace App\Services\ReviewService;
 use App\Aspects\Transactional;
 use App\DTOs\Review\CreateReviewDTO;
 use App\DTOs\Review\UpdateReviewDTO;
+use App\Enums\OrderStatus;
+use App\Enums\ReviewTargetType;
+use App\Models\Order;
 use App\Models\Review;
 use Illuminate\Validation\ValidationException;
 
@@ -62,6 +65,8 @@ class ReviewService implements ReviewServiceInterface
     public function createReview(CreateReviewDTO $data): Review
     {
         $this->validateInput($data->toArray());
+        $this->assertUserCanReviewTarget($data);
+        $this->assertNotDuplicate($data);
 
         return Review::query()->create([
             'user_id' => $data->user_id,
@@ -70,6 +75,42 @@ class ReviewService implements ReviewServiceInterface
             'target_type' => $data->target_type->value,
             'target_id' => $data->target_id,
         ]);
+    }
+
+    private function assertUserCanReviewTarget(CreateReviewDTO $data): void
+    {
+        $query = Order::query()
+            ->where('user_id', $data->user_id)
+            ->where('status', OrderStatus::DELIVERED->value);
+
+        if ($data->target_type === ReviewTargetType::RESTAURANT) {
+            $query->where('restaurant_id', $data->target_id);
+        } else {
+            $query->whereHas('delivery', function ($subQuery) use ($data): void {
+                $subQuery->where('courier_id', $data->target_id);
+            });
+        }
+
+        if (! $query->exists()) {
+            throw ValidationException::withMessages([
+                'target_id' => 'You can only review after a delivered order with this target.',
+            ]);
+        }
+    }
+
+    private function assertNotDuplicate(CreateReviewDTO $data): void
+    {
+        $exists = Review::query()
+            ->where('user_id', $data->user_id)
+            ->where('target_type', $data->target_type->value)
+            ->where('target_id', $data->target_id)
+            ->exists();
+
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'target_id' => 'You have already reviewed this target.',
+            ]);
+        }
     }
 
     private function validateInput(array $input): void

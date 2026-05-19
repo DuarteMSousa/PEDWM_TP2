@@ -4,6 +4,8 @@ input OfferDeliveryInput {
 }
 
 extend type Query {
+  availableCouriersCount: Int!
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@availableCouriersCount")
   courierProfile(user_id: ID!): Courier
     @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierProfile")
   courierActiveDelivery(courier_id: ID!): Delivery

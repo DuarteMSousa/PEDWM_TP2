@@ -47,6 +47,7 @@ import {
   markChatRead,
   sendChatMessage,
   updateClientUser,
+  fetchAvailableCouriersCount,
   fetchClientAddresses,
   fetchClientNotifications,
   fetchClientOrderDetail,
@@ -77,6 +78,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
   const [route, setRoute] = useState('home')
   const [restaurants, setRestaurants] = useState([])
   const [restaurantId, setRestaurantId] = useState('')
+  const [availableCouriers, setAvailableCouriers] = useState(null)
   const [menuItems, setMenuItems] = useState([])
   const [cart, setCart] = useState(null)
   const [tracking, setTracking] = useState(null)
@@ -497,7 +499,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
 
     try {
       setLoading(true)
-      const [nextRestaurants, nextCart, activeOrders, notifications, addressList] =
+      const [nextRestaurants, nextCart, activeOrders, notifications, addressList, courierCount] =
         await Promise.all([
           fetchRestaurants(session),
           fetchMyCart(session),
@@ -506,6 +508,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
             () => [],
           ),
           fetchClientAddresses(session).catch(() => []),
+          fetchAvailableCouriersCount(session).catch(() => null),
         ])
 
       setRestaurants(nextRestaurants)
@@ -520,6 +523,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
       }
 
       setInboxItems(notifications)
+      setAvailableCouriers(courierCount)
       setAddresses(addressList)
       const defaultAddress = addressList.find((address) => address.is_default) ?? addressList[0]
       if (defaultAddress) {
@@ -1103,6 +1107,16 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
     }
   }
 
+  async function refreshAvailableCouriers() {
+    try {
+      const count = await fetchAvailableCouriersCount(session)
+      setAvailableCouriers(count)
+      return count
+    } catch {
+      return availableCouriers
+    }
+  }
+
   async function openRestaurant(id) {
     if (!ensureOnline('abrir restaurante')) {
       return
@@ -1111,7 +1125,10 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
     try {
       setLoading(true)
       setRestaurantId(id)
-      const nextMenu = await fetchRestaurantMenu({ session, restaurantId: id })
+      const [nextMenu] = await Promise.all([
+        fetchRestaurantMenu({ session, restaurantId: id }),
+        refreshAvailableCouriers(),
+      ])
       setMenuItems(nextMenu)
       setRoute('menu')
       setErrorText('')
@@ -1311,6 +1328,12 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
       return
     }
 
+    const latestCouriers = await refreshAvailableCouriers()
+    if (latestCouriers === 0) {
+      setErrorText('Sem estafetas disponiveis neste momento. Tenta novamente em breve.')
+      return
+    }
+
     try {
       setLoading(true)
       const result = await checkoutCart(session, {
@@ -1454,6 +1477,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
           pushStatus={pushStatus}
           notificationState={notificationState}
           notificationPreview={notificationPreview}
+          availableCouriers={availableCouriers}
           onOpenRestaurant={openRestaurant}
           onOpenTracking={() => {
             if (activeOrderId) {
@@ -1520,6 +1544,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
           itemCount={itemCount}
           total={total}
           loading={loading || isLoadingOptions}
+          availableCouriers={availableCouriers}
           onBack={back}
           onAdd={handleAddProductWithOptions}
           onOpenCart={() => setRoute('cart')}
@@ -1534,6 +1559,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
           deliveryFee={deliveryFee}
           total={total}
           loading={loading}
+          availableCouriers={availableCouriers}
           onDecrease={decrease}
           onIncrease={increase}
           onRemove={remove}
