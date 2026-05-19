@@ -1,0 +1,84 @@
+@startuml FastBite_Sequencia_AceitarPedido
+title FastBite — Sequencia: Restaurante aceita -> Estafeta recebe oferta
+
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #555
+  LifeLineBorderColor #888
+}
+
+actor "Restaurante" as RestUser
+participant "Web (React)" as Web
+participant "GraphQL API" as GraphQL
+participant "OrderService\n#[Transactional]" as OrderSvc
+participant "OrderPricingService" as Pricing
+participant "DeliveryService" as DeliverySvc
+queue       "Laravel Queue\n(jobs table)" as Queue
+participant "AssignCourier\nToDeliveryJob" as Job
+participant "GeoMath\n(distance calc)" as Geo
+participant "OutboxService" as Outbox
+database    "BD" as DB
+participant "Reverb" as Reverb
+participant "Estafeta\n(Mobile RN)" as Courier
+
+== 1. Restaurante aceita pedido ==
+
+RestUser -> Web: clica "Comecar Preparacao"
+Web -> GraphQL: mutation startPreparingOrder(orderId)
+GraphQL -> OrderSvc: startPreparingOrder(actor, orderId)
+
+OrderSvc -> DB: BEGIN TRANSACTION
+OrderSvc -> OrderSvc: transition(CONFIRMED -> PREPARING)
+OrderSvc -> DB: UPDATE order status=PREPARING
+OrderSvc -> DB: INSERT order_events (ORDER_PREPARING)
+OrderSvc -> Outbox: enqueue ORDER_PREPARING
+
+OrderSvc -> Pricing: deliveryFee(restaurant, address)
+Pricing --> OrderSvc: fee (eur)
+
+OrderSvc -> DeliverySvc: createDeliveryForOrder(orderId, fee)
+DeliverySvc -> DB: firstOrCreate delivery (status=PENDING)
+DeliverySvc --> OrderSvc: delivery
+
+OrderSvc -> Queue: dispatch AssignCourierToDeliveryJob(deliveryId)\n.afterCommit()
+
+OrderSvc -> DB: COMMIT
+OrderSvc --> GraphQL: order atualizado
+GraphQL --> Web: PREPARING confirmado
+
+== 2. Job seleciona estafeta ==
+
+Queue -> Job: handle(deliveryId)
+Job -> DB: SELECT delivery WHERE id=? AND courier_id IS NULL
+Job -> DB: SELECT couriers WHERE status='AVAILABLE'\n   AND user_id NOT IN (offers anteriores)
+
+loop para cada courier
+  Job -> Geo: distanceKm(courier, restaurantAddress)
+  Geo --> Job: km
+end
+
+Job -> Job: courier = couriers.sortBy(distance).first()
+
+alt nao ha couriers disponiveis OU >= MAX_ATTEMPTS (3)
+  Job -> DeliverySvc: markDeliveryFailedBySystem(\n  deliveryId, 'NO_COURIER_AVAILABLE')
+  DeliverySvc -> DB: UPDATE delivery status=FAILED
+  DeliverySvc -> Outbox: enqueue DELIVERY_FAILED
+else estafeta selecionado
+  Job -> DeliverySvc: createDeliveryOfferForCourier(\n  deliveryId, courierId, ttl=30s)
+  DeliverySvc -> DB: INSERT delivery_offer (status=PENDING, expires_at=now+30s)
+  DeliverySvc -> Outbox: enqueue JOB_OFFERED\n  channel: courier.{courierId}.jobs
+  DeliverySvc -> Queue: dispatch ExpireDeliveryOfferJob(delay=30s)
+end
+
+== 3. Estafeta recebe oferta em tempo real ==
+
+Outbox -> Reverb: broadcast JOB_OFFERED
+Reverb --> Courier: evento JOB_OFFERED\n(canal courier.{id}.jobs)
+
+note over Courier #palegreen
+  CourierAppScreen recebe via
+  subscribeToCourierJobsTopic e
+  apresenta cartao "Aceitar / Recusar".
+end note
+
+@enduml

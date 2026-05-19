@@ -1,0 +1,152 @@
+@startuml FastBite_Realtime
+title FastBite — Arquitetura Event-Driven / Comunicacao em Tempo Real
+
+skinparam shadowing false
+skinparam component {
+  BackgroundColor #FAFAFA
+  BorderColor #555
+  ArrowColor #555
+}
+
+' =======================
+' ENUM DE EVENTOS
+' =======================
+
+package "Tipos de Eventos (Backend/app/Enums)" as Enums {
+  enum OrderEventType {
+    ORDER_CREATED
+    ORDER_PAYMENT_COMPLETED
+    ORDER_CONFIRMED
+    ORDER_PREPARING
+    ORDER_READY
+    ORDER_PICKED_UP
+    ORDER_OUT_FOR_DELIVERY
+    ORDER_DELIVERED
+    ORDER_CANCELLED
+    ORDER_COURIER_ASSIGNED
+    ORDER_REJECTED
+  }
+  enum PaymentEventType {
+    PAYMENT_CREATED
+    PAYMENT_COMPLETED
+    PAYMENT_FAILED
+    PAYMENT_EXPIRED
+    PAYMENT_CANCELLED
+  }
+  enum DeliveryEventType {
+    DELIVERY_ACCEPTED
+    DELIVERY_PICKED_UP
+    DELIVERY_IN_TRANSIT
+    DELIVERY_DELIVERED
+    DELIVERY_FAILED
+  }
+  enum DeliveryOfferEventType {
+    JOB_OFFERED
+    JOB_ACCEPTED
+    JOB_REJECTED
+    JOB_EXPIRED
+  }
+}
+
+' =======================
+' BACKEND
+' =======================
+
+package "Backend (Laravel)" as BE {
+  component "OrderService\n#[Transactional]" as OrderSvc
+  component "DeliveryService" as DeliverySvc
+  component "PaymentService" as PaymentSvc
+  database "order_events\npayment_events\ndelivery_events" as EventsTable
+  database "outbox_events" as Outbox
+  component "OutboxEventWorker\n(queue:work)" as Worker
+  component "Reverb\nWebSocket Server" as Reverb
+  component "DomainEventBroadcasted\n(ShouldBroadcast)" as DEB
+}
+
+OrderSvc -down-> EventsTable : persist event\n(audit / event sourcing)
+DeliverySvc -down-> EventsTable : persist event
+PaymentSvc -down-> EventsTable : persist event
+
+OrderSvc -down-> Outbox : enqueue('order', id, type, payload)
+DeliverySvc -down-> Outbox : enqueue('delivery', id, type, payload)
+PaymentSvc -down-> Outbox : enqueue('payment', id, type, payload)
+
+Worker -up-> Outbox : SELECT status=PENDING\nORDER BY next_attempt_at
+Worker -right-> DEB : dispatch
+DEB -down-> Reverb : broadcast(channels)
+
+note left of Outbox #LightYellow
+  Outbox Pattern:
+  garante que evento e
+  publicacao sao
+  atomicos (mesma TX).
+end note
+
+' =======================
+' CANAIS REVERB
+' =======================
+
+package "Canais Reverb" as Channels {
+  rectangle "customer.{userId}.orders" as ChCustomer
+  rectangle "restaurant.{restaurantId}.orders" as ChRest
+  rectangle "order.{orderId}.tracking" as ChTrack
+  rectangle "courier.{courierId}.jobs" as ChJobs
+  rectangle "user.{userId}.notifications" as ChNotif
+  rectangle "chat.{chatId}" as ChChat
+}
+
+Reverb --> ChCustomer
+Reverb --> ChRest
+Reverb --> ChTrack
+Reverb --> ChJobs
+Reverb --> ChNotif
+Reverb --> ChChat
+
+' =======================
+' CLIENTES
+' =======================
+
+package "Frontend Web (React)" as Web {
+  component "Apollo / GraphQL\n(Lighthouse Client)" as ApolloW
+  component "Laravel Echo\n+ pusher-js" as EchoW
+  component "RestaurantOrdersQueue\nRestaurantOrderDetail\nRestaurantChat" as RestUI
+  component "CustomerTracking" as CustomerUI
+}
+
+package "Frontend Mobile (React Native)" as Mobile {
+  component "GraphQL Client\n(fetch wrapper)" as ApolloM
+  component "Laravel Echo\n+ pusher-js" as EchoM
+  component "CustomerAppScreen" as CustApp
+  component "CourierAppScreen\n(JOB_OFFERED listener)" as CourierApp
+}
+
+ChRest --> EchoW : subscribe
+ChCustomer --> EchoM : subscribe
+ChTrack --> EchoM : subscribe
+ChTrack --> EchoW : subscribe (tracking web)
+ChJobs --> EchoM : subscribe (courier)
+ChNotif --> EchoW
+ChNotif --> EchoM
+ChChat --> EchoW
+ChChat --> EchoM
+
+EchoW --> RestUI
+EchoW --> CustomerUI
+EchoM --> CustApp
+EchoM --> CourierApp
+
+ApolloW -.-> BE : queries / mutations\n(HTTP GraphQL)
+ApolloM -.-> BE : queries / mutations\n(HTTP GraphQL)
+
+note right of Worker #LightCyan
+  Padrao Observer aplicado:
+  o EventBus desacopla
+  produtor (Service) de
+  consumidor (Reverb).
+  Permite adicionar novos
+  observadores (push, email,
+  analytics) sem alterar a
+  logica de negocio.
+end note
+
+@enduml

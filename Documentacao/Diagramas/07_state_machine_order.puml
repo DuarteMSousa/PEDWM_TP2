@@ -1,0 +1,47 @@
+@startuml FastBite_StateMachine_Order
+title FastBite — Maquina de Estados de uma Encomenda
+
+skinparam shadowing false
+skinparam state {
+  BackgroundColor #FAFAFA
+  BorderColor #555
+  ArrowColor #555
+}
+
+[*] --> PENDING : checkout()\n[ORDER_CREATED]
+
+PENDING --> CONFIRMED : pagamento aceite\n[PAYMENT_COMPLETED]\n[ORDER_CONFIRMED]
+PENDING --> CANCELLED : pagamento expirado\n[PAYMENT_EXPIRED]
+PENDING --> CANCELLED : cliente cancela
+
+CONFIRMED --> PREPARING : startPreparingOrder()\n[ORDER_PREPARING]\n+ cria Delivery\n+ dispatch AssignCourierToDeliveryJob
+CONFIRMED --> CANCELLED : restaurante rejeita\n[ORDER_REJECTED]
+
+PREPARING --> READY : todos os items prontos\n[ORDER_READY]
+PREPARING --> CANCELLED : cancelamento
+
+READY --> OUT_FOR_DELIVERY : estafeta faz pickup\n[ORDER_PICKED_UP]\n[DELIVERY_PICKED_UP]
+
+OUT_FOR_DELIVERY --> DELIVERED : entrega concluida\n[ORDER_DELIVERED]\n[DELIVERY_DELIVERED]
+OUT_FOR_DELIVERY --> CANCELLED : entrega falhada\n[DELIVERY_FAILED]
+
+DELIVERED --> [*]
+CANCELLED --> [*]
+
+note right of PENDING #LightYellow
+  Padrao **State** implementado em
+  App\Domain\StateMachines\Orders\
+    OrderStateFactory
+  Cada estado define as transicoes
+  validas; tentativas invalidas
+  lancam excecao em transition().
+end note
+
+note bottom of OUT_FOR_DELIVERY
+  Enquanto IN_TRANSIT, o estafeta envia
+  updateCourierLocation periodicamente.
+  Cliente recebe posicao em tempo real
+  no canal "order.{id}.tracking".
+end note
+
+@enduml

@@ -1,0 +1,521 @@
+@startuml FastBite_ClassDiagram
+title FastBite — Diagrama de Classes (Dominio)
+
+skinparam classAttributeIconSize 0
+skinparam roundCorner 6
+skinparam shadowing false
+skinparam linetype ortho
+
+' =======================
+' ENUMS
+' =======================
+
+enum UserType {
+    CUSTOMER
+    COURIER
+    CHAIN_MANAGER
+    LOCAL_MANAGER
+}
+
+enum CourierStatus {
+    AVAILABLE
+    BUSY
+    OFFLINE
+}
+
+enum OrderStatus {
+    PENDING
+    CONFIRMED
+    PREPARING
+    READY
+    OUT_FOR_DELIVERY
+    DELIVERED
+    CANCELLED
+}
+
+enum OrderItemStatus {
+    PENDING
+    PREPARING
+    READY
+    CANCELLED
+}
+
+enum PaymentMethod {
+    CASH
+    CARD
+    MBWAY
+    PAYPAL
+}
+
+enum PaymentStatus {
+    PENDING
+    COMPLETED
+    FAILED
+}
+
+enum DeliveryStatus {
+    PENDING
+    PICKED_UP
+    IN_TRANSIT
+    DELIVERED
+    FAILED
+}
+
+enum DeliveryOfferStatus {
+    PENDING
+    ACCEPTED
+    REJECTED
+    EXPIRED
+}
+
+enum OrderEventType {
+    ORDER_CREATED
+    ORDER_PAYMENT_COMPLETED
+    ORDER_CONFIRMED
+    ORDER_REJECTED
+    ORDER_COURIER_ASSIGNED
+    ORDER_PREPARING
+    ORDER_READY
+    ORDER_PICKED_UP
+    ORDER_OUT_FOR_DELIVERY
+    ORDER_DELIVERED
+    ORDER_CANCELLED
+}
+
+enum PaymentEventType {
+    PAYMENT_CREATED
+    PAYMENT_COMPLETED
+    PAYMENT_FAILED
+    PAYMENT_EXPIRED
+    PAYMENT_CANCELLED
+}
+
+enum DeliveryEventType {
+    DELIVERY_ACCEPTED
+    DELIVERY_PICKED_UP
+    DELIVERY_IN_TRANSIT
+    DELIVERY_DELIVERED
+    DELIVERY_FAILED
+}
+
+enum DeliveryOfferEventType {
+    JOB_OFFERED
+    JOB_ACCEPTED
+    JOB_REJECTED
+    JOB_EXPIRED
+}
+
+enum NotificationType {
+    PAYMENT_UPDATE
+    DELIVERY_UPDATE
+    ORDER_UPDATE
+    PROMOTION
+    SYSTEM
+}
+
+enum DiscountType {
+    PERCENTAGE
+    FIXED_AMOUNT
+}
+
+enum DiscountTarget {
+    ORDER
+    PRODUCT
+    DELIVERY
+    CATEGORY
+}
+
+enum DiscountOriginType {
+    PROMOTION
+    COUPON
+}
+
+enum ReviewTargetType {
+    RESTAURANT
+    COURIER
+}
+
+enum ChatType {
+    CUSTOMER_RESTAURANT
+    CUSTOMER_COURIER
+}
+
+' =======================
+' USERS
+' =======================
+
+class User {
+    +id: UUID
+    +name: string
+    +email: string
+    +password: string
+    +createdAt: datetime
+}
+
+class Customer {}
+
+class RestaurantChain {
+    +id: UUID
+    +name: string
+}
+
+class Restaurant {
+    +id: UUID
+    +name: string
+    +openingHours: string
+    +closingHours: string
+    +deliveryRadius: float
+    +ratingSum: float
+    +ratingCount: int
+}
+
+class ChainManager {
+    +chainId: UUID
+}
+
+class LocalManager {
+    +restaurantId: UUID
+}
+
+class Courier {
+    +status: CourierStatus
+    +currentLocation: Point
+    +lastLocationUpdate: datetime
+    +ratingSum: float
+    +ratingCount: int
+}
+
+User <|-- Customer
+User <|-- Courier
+User <|-- ChainManager
+User <|-- LocalManager
+ChainManager "*" -- "1" RestaurantChain
+LocalManager "*" -- "1" Restaurant
+
+' =======================
+' MENU
+' =======================
+
+class Category {
+    +id: UUID
+    +name: string
+}
+
+class Product {
+    +id: UUID
+    +name: string
+    +price: float
+    +description: string
+}
+
+class ProductOptionGroup {
+    +id: UUID
+    +name: string
+    +maxOptions: int
+    +minOptions: int
+}
+
+class ProductOption {
+    +id: UUID
+    +name: string
+    +extraPrice: float
+    +defaultOption: boolean
+}
+
+class RestaurantProduct {
+    +id: UUID
+    +localPrice: float
+    +isAvailable: boolean
+    +estimatedPreparationTimeMin: int
+}
+
+Product "1" -- "*" ProductOptionGroup
+ProductOptionGroup "1" -- "*" ProductOption
+Category "1" -- "*" Product
+
+RestaurantChain "1" -- "*" Restaurant
+RestaurantChain "1" -- "*" Category
+Restaurant "1" -- "*" RestaurantProduct
+Product "1" -- "*" RestaurantProduct
+
+' =======================
+' CART
+' =======================
+
+class Cart {
+    +id: UUID
+    +total: float
+    +createdAt: datetime
+}
+
+class CartItem {
+    +quantity: int
+    +unitPrice: float
+    +totalPrice: float
+}
+
+class CartItemOption {
+    +extraPrice: float
+}
+
+Customer "1" -- "1" Cart
+Restaurant "1" -- "*" Cart
+Cart "1" -- "*" CartItem
+CartItem "*" -- "1" RestaurantProduct
+CartItem "1" -- "*" CartItemOption
+CartItemOption "1" -- "1" ProductOption
+
+' =======================
+' ORDER
+' =======================
+
+class Order {
+    +id: UUID
+    +status: OrderStatus
+    +total: float
+    +createdAt: datetime
+    +restaurantNameSnapshot: string
+}
+
+class OrderItem {
+    +status: OrderItemStatus
+    +quantity: int
+    +unitPrice: float
+    +productNameSnapshot: string
+    +totalPrice: float
+}
+
+class OrderItemOption {
+    +optionNameSnapshot: string
+    +extraPrice: float
+}
+
+class OrderDiscount {
+    +nameSnapshot: string
+    +descriptionSnapshot: string
+    +discountAmount: float
+    +discountType: DiscountType
+    +discountTarget: DiscountTarget
+    +originType: DiscountOriginType
+    +originId: UUID
+}
+
+class OrderEvent {
+    +id: UUID
+    +type: OrderEventType
+    +timestamp: datetime
+    +payload: JSON
+}
+
+Customer "1" -- "*" Order
+Restaurant "1" -- "*" Order
+Order "1" -- "*" OrderItem
+Order "1" -- "*" OrderEvent
+OrderItem "*" -- "1" RestaurantProduct
+OrderItem "1" -- "*" OrderItemOption
+OrderItemOption "*" -- "1" ProductOption
+
+' =======================
+' PAYMENT
+' =======================
+
+class Payment {
+    +id: UUID
+    +method: PaymentMethod
+    +status: PaymentStatus
+    +transactionId: string
+    +paidAt: datetime
+    +expiredAt: datetime
+    +amount: float
+}
+
+class PaymentEvent {
+    +id: UUID
+    +type: PaymentEventType
+    +payload: JSON
+    +createdAt: datetime
+}
+
+Order "1" -- "1" Payment
+Payment "1" -- "*" PaymentEvent
+
+' =======================
+' DELIVERY  (com DeliveryOffer destacado)
+' =======================
+
+class Delivery {
+    +id: UUID
+    +status: DeliveryStatus
+    +pickupTime: datetime
+    +deliveryTime: datetime
+    +deliveryFee: float
+}
+
+class DeliveryOffer #LightGreen {
+    +id: UUID
+    +status: DeliveryOfferStatus
+    +expiresAt: datetime
+    +acceptedAt: datetime
+    +rejectedAt: datetime
+}
+
+class CourierPositionHistory {
+    +id: UUID
+    +location: Point
+    +timestamp: datetime
+}
+
+class DeliveryEvent {
+    +id: UUID
+    +type: DeliveryEventType
+    +payload: JSON
+    +createdAt: datetime
+}
+
+Order "1" -- "1" Delivery
+Courier "1" -- "*" Delivery
+Delivery "1" -- "*" CourierPositionHistory
+Delivery "1" -- "*" DeliveryEvent
+Delivery "1" -- "*" DeliveryOffer
+Courier "1" -- "*" DeliveryOffer
+
+note right of DeliveryOffer
+  Cada Delivery pode gerar varias
+  ofertas a estafetas diferentes
+  (TTL 30s). O AssignCourierToDeliveryJob
+  re-tenta ate 3 vezes em caso de
+  recusa / expiracao.
+end note
+
+' =======================
+' PROMOTIONS
+' =======================
+
+class Coupon {
+    +id: UUID
+    +code: string
+    +description: string
+    +type: DiscountType
+    +target: DiscountTarget
+    +expiryDate: datetime
+}
+
+class Promotion {
+    +id: UUID
+    +name: string
+    +description: string
+    +type: DiscountType
+    +target: DiscountTarget
+    +startDate: datetime
+    +endDate: datetime
+}
+
+class PromotionItem {
+    +id: UUID
+    +discount: float
+}
+
+RestaurantChain "1" -- "*" Promotion
+RestaurantChain "1" -- "*" Coupon
+Promotion "1" -- "*" PromotionItem
+Coupon "1" -- "*" PromotionItem
+PromotionItem "*" -- "1" Product
+PromotionItem "*" -- "1" Category
+
+Coupon "1" -- "*" OrderDiscount
+Promotion "1" -- "*" OrderDiscount
+OrderDiscount "*" -- "1" Order
+OrderDiscount "*" -- "1" OrderItem
+
+' =======================
+' NOTIFICATIONS / CHAT
+' =======================
+
+class Notification {
+    +id: UUID
+    +type: NotificationType
+    +message: string
+    +sentAt: datetime
+    +readAt: datetime
+}
+
+class UserPushToken {
+    +id: UUID
+    +token: string
+    +provider: string
+    +platform: string
+    +isActive: boolean
+}
+
+class Chat {
+    +id: UUID
+    +type: ChatType
+    +createdAt: datetime
+    +closedAt: datetime
+}
+
+class ChatParticipant {
+    +id: UUID
+    +userType: UserType
+    +joinedAt: datetime
+    +lastReadAt: datetime
+}
+
+class Message {
+    +id: UUID
+    +content: string
+    +timestamp: datetime
+    +readAt: datetime
+}
+
+User "1" -- "*" Notification
+User "1" -- "*" UserPushToken
+User "1" -- "*" ChatParticipant
+Chat "1" -- "*" ChatParticipant
+Chat "1" -- "*" Message
+Chat "*" -- "1" Order
+
+' =======================
+' REVIEWS
+' =======================
+
+class Review {
+    +id: UUID
+    +rating: int
+    +comment: string
+    +createdAt: datetime
+    +targetType: ReviewTargetType
+    +targetId: UUID
+}
+
+Customer "1" -- "*" Review
+Restaurant "1" -- "*" Review
+Courier "1" -- "*" Review
+
+' =======================
+' ADDRESSES
+' =======================
+
+abstract class Address {
+    +id: UUID
+    +street: string
+    +city: string
+    +postalCode: string
+    +country: string
+    +location: Point
+}
+
+class CustomerAddress extends Address {
+    +isDefault: bool
+    +label: string
+}
+
+class OrderAddress extends Address {}
+
+class RestaurantAddress extends Address {}
+
+Customer "1" -- "*" CustomerAddress
+Restaurant "1" -- "*" RestaurantAddress
+Order "1" -- "1" OrderAddress
+
+@enduml

@@ -1,6 +1,9 @@
 import { Platform } from 'react-native'
+import Constants from 'expo-constants'
 import * as Notifications from 'expo-notifications'
 import { buildAuthHeaders, graphqlRequest } from './apiClient'
+
+const isExpoGo = Constants.appOwnership === 'expo'
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -52,6 +55,12 @@ export async function registerDevicePushToken(session) {
   }
 
   await ensureAndroidChannel()
+
+  // Expo Go no Android perdeu suporte para push remoto a partir do SDK 53.
+  // Em iOS, dev build e producao continua a correr normalmente.
+  if (isExpoGo && Platform.OS === 'android') {
+    return null
+  }
 
   const existingPermission = await Notifications.getPermissionsAsync()
   let finalStatus = existingPermission.status

@@ -55,6 +55,8 @@ export function subscribeToRestaurantOrdersTopic({
     'ORDER_REJECTED',
     'ORDER_PREPARING',
     'ORDER_READY',
+    'ORDER_COURIER_ASSIGNED',
+    'ORDER_PICKED_UP',
     'ORDER_OUT_FOR_DELIVERY',
     'ORDER_DELIVERED',
     'ORDER_CANCELLED',

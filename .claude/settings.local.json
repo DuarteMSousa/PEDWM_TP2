@@ -7,7 +7,12 @@
       "Bash(node --check src/screens/CustomerAppScreen.js)",
       "Bash(node --check src/screens/CourierAppScreen.js)",
       "Bash(node --check src/services/commerceService.js)",
-      "Bash(npx --no-install vite build)"
+      "Bash(npx --no-install vite build)",
+      "Bash(cat)",
+      "Bash(sed -n '2580,3372p' Frontend/mobile/src/screens/CustomerAppScreen.js)",
+      "Bash(python3 -)",
+      "Read(//tmp/**)",
+      "PowerShell(docker exec backend-laravel.test-1 sh -c \"rm -rf /var/www/html/storage/framework/cache/ray-aop && mkdir -p /var/www/html/storage/framework/cache/ray-aop && php artisan optimize:clear\" 2>&1)"
     ]
   }
 }

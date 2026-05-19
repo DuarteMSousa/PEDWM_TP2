@@ -137,6 +137,7 @@ const RESTAURANT_ORDER_DETAIL_QUERY = `
       created_at
       updated_at
       user { id name email }
+      restaurant { id name address { latitude longitude street city } }
       address { street city postal_code country latitude longitude }
       payment { id method status amount transaction_id paid_at expired_at }
       delivery {
@@ -146,7 +147,14 @@ const RESTAURANT_ORDER_DETAIL_QUERY = `
         pickup_time
         delivery_time
         delivery_fee
-        courier { user_id status user { name } }
+        courier {
+          user_id
+          status
+          latitude
+          longitude
+          last_location_update
+          user { name }
+        }
       }
       events { event_type timestamp payload }
       items {

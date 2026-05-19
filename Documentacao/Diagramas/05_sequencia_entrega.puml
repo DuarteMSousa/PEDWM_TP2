@@ -1,0 +1,100 @@
+@startuml FastBite_Sequencia_Entrega
+title FastBite — Sequencia: Estafeta aceita -> Pickup -> Entrega
+
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #555
+  LifeLineBorderColor #888
+}
+
+actor "Estafeta" as Courier
+participant "Mobile (RN)" as App
+participant "GraphQL API" as GraphQL
+participant "DeliveryService" as DeliverySvc
+participant "OrderService" as OrderSvc
+participant "OutboxService" as Outbox
+database    "BD" as DB
+participant "Reverb" as Reverb
+participant "Cliente\n(Mobile/Web)" as Client
+
+== 1. Aceitar oferta ==
+
+Courier -> App: clica "Aceitar"
+App -> GraphQL: mutation acceptDeliveryOffer(offerId)
+GraphQL -> DeliverySvc: acceptOffer(offerId, courierId)
+
+DeliverySvc -> DB: BEGIN TX
+DeliverySvc -> DB: SELECT delivery_offer FOR UPDATE
+alt offer expirado / aceite por outro
+  DeliverySvc --> GraphQL: erro OfferUnavailable
+else valida
+  DeliverySvc -> DB: UPDATE offer status=ACCEPTED
+  DeliverySvc -> DB: UPDATE delivery courier_id=?
+  DeliverySvc -> DB: INSERT delivery_events (DELIVERY_ACCEPTED)
+  DeliverySvc -> DB: UPDATE courier status=BUSY
+  DeliverySvc -> Outbox: enqueue DELIVERY_ACCEPTED\n  channels: [order.{orderId}.tracking,\n             courier.{courierId}.jobs]
+  DeliverySvc -> OrderSvc: recordEvent(ORDER_COURIER_ASSIGNED)
+  OrderSvc -> DB: INSERT order_events
+  OrderSvc -> Outbox: enqueue ORDER_COURIER_ASSIGNED
+end
+DeliverySvc -> DB: COMMIT
+DeliverySvc --> GraphQL: delivery (assigned)
+GraphQL --> App: tracking screen
+
+== 2. Pickup no restaurante ==
+
+note over Courier
+  Estafeta chega ao restaurante
+end note
+
+Courier -> App: "Cheguei ao Restaurante"
+App -> GraphQL: mutation markDeliveryPickedUp(deliveryId)
+GraphQL -> DeliverySvc: markPickedUp(deliveryId)
+DeliverySvc -> DB: UPDATE delivery status=PICKED_UP, pickup_time=now
+DeliverySvc -> DB: INSERT delivery_events (DELIVERY_PICKED_UP)
+DeliverySvc -> Outbox: enqueue DELIVERY_PICKED_UP
+DeliverySvc -> OrderSvc: recordEvent(ORDER_PICKED_UP)
+
+Outbox -> Reverb: broadcast (order.{id}.tracking)
+Reverb --> Client: tracking atualiza
+
+== 3. Em transito + posicao em tempo real ==
+
+Courier -> App: marca "Em Transito"
+App -> GraphQL: mutation markDeliveryInTransit
+GraphQL -> DeliverySvc: markInTransit
+DeliverySvc -> DB: status=IN_TRANSIT, delivery_events
+DeliverySvc -> Outbox: enqueue DELIVERY_IN_TRANSIT
+
+loop a cada N segundos enquanto IN_TRANSIT
+  App -> GraphQL: mutation updateCourierLocation(\n   deliveryId, lat, lng)
+  GraphQL -> DeliverySvc: updateLocation
+  DeliverySvc -> DB: INSERT courier_position_history
+  DeliverySvc -> DB: UPDATE couriers.current_location
+  DeliverySvc -> Reverb: CourierPositionUpdated\n  (canal order.{id}.tracking)
+  Reverb --> Client: posicao em tempo real
+  note right of Client
+    Web -> Leaflet
+    Mobile -> react-native-maps
+  end note
+end
+
+== 4. Entrega concluida ==
+
+Courier -> App: "Entregue com Sucesso"
+App -> GraphQL: mutation markDeliveryDelivered
+GraphQL -> DeliverySvc: markDelivered
+DeliverySvc -> DB: BEGIN TX
+DeliverySvc -> DB: UPDATE delivery status=DELIVERED, delivery_time=now
+DeliverySvc -> DB: INSERT delivery_events (DELIVERY_DELIVERED)
+DeliverySvc -> OrderSvc: transition(DELIVERED)
+OrderSvc -> DB: UPDATE order status=DELIVERED
+OrderSvc -> DB: INSERT order_events (ORDER_DELIVERED)
+DeliverySvc -> DB: UPDATE courier status=AVAILABLE
+DeliverySvc -> Outbox: enqueue DELIVERY_DELIVERED\n+ ORDER_DELIVERED
+DeliverySvc -> DB: COMMIT
+
+Outbox -> Reverb: broadcast finais
+Reverb --> Client: ORDER_DELIVERED -> ecra de avaliacao
+
+@enduml

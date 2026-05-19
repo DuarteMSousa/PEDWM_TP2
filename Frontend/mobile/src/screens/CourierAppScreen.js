@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Modal, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native'
+import { Modal, Pressable, SafeAreaView, ScrollView, Text, TextInput, Vibration, View } from 'react-native'
+import { styles } from './courier/styles'
 import * as Location from 'expo-location'
 import NetInfo from '@react-native-community/netinfo'
 import { NativeDeliveryMapCard } from '../components/maps/NativeDeliveryMapCard'
@@ -51,7 +52,7 @@ function distanceMeters(a, b) {
   return earthRadius * (2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value)))
 }
 
-export function CourierAppScreen({ session, pushStatus, onLogout }) {
+export function CourierAppScreen({ session, pushStatus, onLogout, deepLink, onConsumeDeepLink }) {
   const [courierStatus, setCourierStatus] = useState('OFFLINE')
   const [phase, setPhase] = useState('offer')
   const [availableOffers, setAvailableOffers] = useState([])
@@ -264,6 +265,7 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
         onEvent: (eventName, payload) => {
           if (eventName === 'ORDER_CANCELLED') {
             setErrorText('Pedido cancelado pelo cliente ou restaurante.')
+            stopBackgroundLocation().catch(() => {})
             setActiveDelivery(null)
             setTracking(null)
             setPhase('offer')
@@ -271,7 +273,11 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
             return
           }
           if (eventName === 'ORDER_DELIVERED' || eventName === 'DELIVERY_DELIVERED') {
+            stopBackgroundLocation().catch(() => {})
             loadTracking(activeDelivery.order_id)
+          }
+          if (eventName === 'DELIVERY_FAILED') {
+            stopBackgroundLocation().catch(() => {})
           }
           if (eventName === 'ORDER_READY') {
             setToast('Pedido pronto para recolha.')
@@ -458,6 +464,12 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
     if (activeOfferId !== nextOffer.offer_token) {
       setActiveOfferId(nextOffer.offer_token)
       setRejectReason('')
+      // Padrao de vibracao: pausa, vibra, pausa, vibra — chama atencao tipo Uber.
+      try {
+        Vibration.vibrate([0, 400, 200, 400])
+      } catch {
+        // silent — alguns dispositivos podem nao suportar
+      }
     }
   }, [availableOffers, courierStatus, phase, dismissedOfferIds, activeOfferId])
 
@@ -702,6 +714,20 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
       setErrorText(error.message)
     }
   }
+
+  // Deep link de push (ex: JOB_OFFERED) -> mostrar ofertas / abrir tracking.
+  useEffect(() => {
+    if (!deepLink?.orderId) return
+    if (deepLink.target && deepLink.target !== 'tracking' && deepLink.target !== 'jobs') return
+
+    if (deepLink.target === 'jobs') {
+      setPhase('offer')
+    } else if (activeDelivery?.order_id === deepLink.orderId) {
+      loadTracking(deepLink.orderId)
+    }
+
+    if (onConsumeDeepLink) onConsumeDeepLink()
+  }, [deepLink])
 
   async function loadHistory() {
     if (!ensureOnline('carregar historico')) {
@@ -1220,8 +1246,24 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
               </Pressable>
             </View>
 
-            <View style={styles.offerCountdown}>
-              <Text style={styles.offerCountdownLabel}>Tempo restante</Text>
+            <View
+              style={[
+                styles.offerCountdown,
+                offerRemainingSeconds !== null && offerRemainingSeconds <= 10
+                  ? styles.offerCountdownContainerDanger
+                  : null,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.offerCountdownLabel,
+                  offerRemainingSeconds !== null && offerRemainingSeconds <= 10
+                    ? styles.offerCountdownDanger
+                    : null,
+                ]}
+              >
+                Tempo para aceitar
+              </Text>
               <Text
                 style={[
                   styles.offerCountdownValue,
@@ -1234,6 +1276,31 @@ export function CourierAppScreen({ session, pushStatus, onLogout }) {
                   ? '--'
                   : `${String(Math.max(0, offerRemainingSeconds)).padStart(2, '0')}s`}
               </Text>
+            </View>
+
+            <View style={styles.offerCountdownBar}>
+              <View
+                style={[
+                  styles.offerCountdownBarFill,
+                  {
+                    width: `${
+                      offerRemainingSeconds === null
+                        ? 100
+                        : Math.max(
+                            0,
+                            Math.min(
+                              100,
+                              (offerRemainingSeconds / OFFER_EXPIRY_FALLBACK_SECONDS) * 100,
+                            ),
+                          )
+                    }%`,
+                    backgroundColor:
+                      offerRemainingSeconds !== null && offerRemainingSeconds <= 10
+                        ? '#dc2626'
+                        : '#10b981',
+                  },
+                ]}
+              />
             </View>
 
             {activeOffer ? (
@@ -1599,613 +1666,3 @@ function SummaryRow({ label, value }) {
     </View>
   )
 }
-
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#f2f4f7',
-  },
-  screen: {
-    flex: 1,
-    backgroundColor: '#f2f4f7',
-  },
-  header: {
-    backgroundColor: '#07bf4f',
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 16,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-  },
-  toast: {
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    backgroundColor: '#ecfdf5',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 10,
-  },
-  toastText: {
-    color: '#166534',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  brandWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  brandIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 999,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandIconText: {
-    fontSize: 18,
-  },
-  brand: {
-    color: '#fff',
-    fontSize: 34,
-    fontWeight: '900',
-    lineHeight: 36,
-  },
-  brandSub: {
-    color: '#dcfce7',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  onlineBtn: {
-    borderWidth: 1.5,
-    borderColor: '#fff',
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
-  onlineBtnOff: {
-    backgroundColor: 'transparent',
-  },
-  onlineBtnText: {
-    color: '#0b9b3f',
-    fontWeight: '800',
-    fontSize: 16,
-  },
-  onlineBtnTextOff: {
-    color: '#fff',
-  },
-  statusRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  statusChip: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    fontSize: 11,
-    fontWeight: '700',
-    overflow: 'hidden',
-  },
-  statusChipOk: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-  },
-  statusChipWarn: {
-    backgroundColor: '#fef9c3',
-    color: '#854d0e',
-  },
-  content: {
-    paddingHorizontal: 14,
-    paddingTop: 12,
-    paddingBottom: 16,
-  },
-  contentWithBottom: {
-    paddingBottom: 92,
-  },
-  sectionTitle: {
-    fontSize: 29,
-    fontWeight: '800',
-    color: '#0f172a',
-    marginBottom: 12,
-  },
-  warningBox: {
-    borderWidth: 1,
-    borderColor: '#facc15',
-    backgroundColor: '#fef9c3',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 10,
-  },
-  warningText: {
-    color: '#854d0e',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  card: {
-    borderWidth: 1,
-    borderColor: '#e4e7ec',
-    borderRadius: 14,
-    backgroundColor: '#fff',
-    padding: 14,
-    marginBottom: 12,
-  },
-  offerId: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#0f172a',
-  },
-  offerRestaurant: {
-    marginTop: 4,
-    color: '#64748b',
-    fontSize: 14,
-  },
-  input: {
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#d5dce7',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#0f172a',
-    fontSize: 15,
-  },
-  actionsRow: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  rejectBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rejectBtnText: {
-    color: '#0f172a',
-    fontWeight: '700',
-    fontSize: 17,
-  },
-  acceptBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#07bf4f',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  acceptBtnText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 17,
-  },
-  summaryTitle: {
-    color: '#0f172a',
-    fontSize: 17,
-    fontWeight: '800',
-    marginBottom: 8,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 6,
-    gap: 8,
-  },
-  summaryLabel: {
-    color: '#475569',
-    fontSize: 14,
-    flex: 1,
-  },
-  summaryValue: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '700',
-    flex: 1,
-    textAlign: 'right',
-  },
-  errorText: {
-    color: '#991b1b',
-    borderColor: '#fecaca',
-    borderWidth: 1,
-    backgroundColor: '#fef2f2',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontWeight: '700',
-  },
-  bottomBar: {
-    borderTopWidth: 1,
-    borderTopColor: '#d9dee7',
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingTop: 10,
-    paddingBottom: 12,
-  },
-  mainBtn: {
-    borderRadius: 12,
-    height: 48,
-    backgroundColor: '#07bf4f',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mainBtnText: {
-    color: '#fff',
-    fontSize: 19,
-    fontWeight: '900',
-  },
-  secondaryBtn: {
-    borderRadius: 12,
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  secondaryBtnText: {
-    color: '#334155',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  offerModalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    justifyContent: 'flex-end',
-  },
-  offerModalCard: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 22,
-  },
-  offerModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  offerModalTitle: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  offerModalClose: {
-    width: 36,
-    height: 36,
-    borderRadius: 999,
-    backgroundColor: '#f1f5f9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  offerModalCloseText: {
-    color: '#475569',
-    fontSize: 22,
-    lineHeight: 22,
-  },
-  offerCountdown: {
-    marginTop: 14,
-    borderRadius: 14,
-    backgroundColor: '#ecfdf5',
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  offerCountdownLabel: {
-    color: '#065f46',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  offerCountdownValue: {
-    color: '#065f46',
-    fontSize: 32,
-    fontWeight: '900',
-    fontVariant: ['tabular-nums'],
-  },
-  offerCountdownDanger: {
-    color: '#b91c1c',
-  },
-  offerModalBody: {
-    marginTop: 12,
-  },
-  offerReasonLabel: {
-    marginTop: 14,
-    color: '#475569',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  dangerBtn: {
-    marginTop: 12,
-    borderRadius: 12,
-    height: 44,
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    backgroundColor: '#fff5f5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-  },
-  dangerBtnFill: {
-    flex: 1,
-    marginTop: 0,
-    backgroundColor: '#dc2626',
-    borderColor: '#dc2626',
-  },
-  dangerBtnText: {
-    color: '#b91c1c',
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  dangerBtnTextFill: {
-    color: '#fff',
-  },
-  failModalCard: {
-    margin: 16,
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 18,
-  },
-  failModalSubtitle: {
-    color: '#64748b',
-    fontSize: 13,
-    marginTop: 6,
-  },
-  failReasonInput: {
-    minHeight: 72,
-    textAlignVertical: 'top',
-  },
-  confirmSummary: {
-    marginTop: 12,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  offerMeta: {
-    marginTop: 10,
-    color: '#64748b',
-    fontSize: 13,
-  },
-  readyBanner: {
-    marginBottom: 12,
-    backgroundColor: '#fef3c7',
-    borderWidth: 1,
-    borderColor: '#f59e0b',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  readyBannerTitle: {
-    color: '#92400e',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  readyBannerText: {
-    marginTop: 4,
-    color: '#92400e',
-    fontSize: 13,
-  },
-  statusToggleRow: {
-    marginTop: 10,
-    flexDirection: 'row',
-    gap: 6,
-  },
-  statusToggle: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
-    alignItems: 'center',
-  },
-  statusToggleActive: {
-    backgroundColor: '#ffffff',
-    borderColor: '#ffffff',
-  },
-  statusToggleText: {
-    color: '#ffffff',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  statusToggleTextActive: {
-    color: '#0b9b3f',
-  },
-  historyLink: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.35)',
-  },
-  historyLinkText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  historyModalCard: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 18,
-    maxHeight: '92%',
-  },
-  historyStatsRow: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 10,
-  },
-  historyStatCard: {
-    flex: 1,
-    borderRadius: 12,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  historyStatLabel: {
-    color: '#475569',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  historyStatValue: {
-    marginTop: 4,
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  historyFailedNote: {
-    marginTop: 10,
-    color: '#b91c1c',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  historyListHeader: {
-    marginTop: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  historyList: {
-    marginTop: 10,
-    maxHeight: 360,
-  },
-  historyListContent: {
-    paddingBottom: 12,
-  },
-  historyItemCard: {
-    borderWidth: 1,
-    borderColor: '#e4e7ec',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    backgroundColor: '#fff',
-  },
-  historyItemCardFailed: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
-  },
-  historyItemTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  historyItemRestaurant: {
-    color: '#0f172a',
-    fontSize: 15,
-    fontWeight: '800',
-    flex: 1,
-    paddingRight: 8,
-  },
-  historyItemAddress: {
-    marginTop: 4,
-    color: '#475569',
-    fontSize: 12,
-  },
-  historyItemMetaRow: {
-    marginTop: 6,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  historyItemMeta: {
-    color: '#475569',
-    fontSize: 12,
-  },
-  historyItemFee: {
-    color: '#0b9b3f',
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  chatButtonsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginVertical: 10,
-  },
-  chatBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#bfdbfe',
-    backgroundColor: '#eff6ff',
-    alignItems: 'center',
-  },
-  chatBtnText: {
-    color: '#1d4ed8',
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  courierChatList: {
-    marginTop: 12,
-    maxHeight: 400,
-  },
-  courierBubble: {
-    maxWidth: '78%',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  courierBubbleMine: {
-    alignSelf: 'flex-end',
-    backgroundColor: '#07bf4f',
-  },
-  courierBubbleOther: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#f1f5f9',
-  },
-  courierBubbleText: {
-    color: '#0f172a',
-    fontSize: 14,
-  },
-  courierBubbleTime: {
-    color: '#475569',
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'right',
-  },
-  chatComposeRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    marginTop: 10,
-  },
-  chatInputCourier: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#d5dce7',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: '#0f172a',
-    fontSize: 14,
-    minHeight: 44,
-    maxHeight: 100,
-  },
-})

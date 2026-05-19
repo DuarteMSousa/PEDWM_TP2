@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createOrderChat, fetchOrderChats, sendChatMessage } from '../../../services/chatService'
-import { fetchRestaurantActiveOrders } from '../../../services/restaurantOpsService'
+import {
+  fetchRestaurantActiveOrders,
+  fetchRestaurantOrdersHistory,
+} from '../../../services/restaurantOpsService'
 import { subscribeToChatTopic } from '../../../services/realtime/topicsRealtime'
 import { disconnectEchoClient } from '../../../services/realtime/echoClient'
 
@@ -43,11 +46,30 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
 
   const loadOrders = useCallback(async () => {
     try {
-      const nextOrders = await fetchRestaurantActiveOrders(session)
-      setOrders(nextOrders)
+      // Carrega tanto encomendas ativas como historico recente para nao perder o chat
+      // depois da entrega/cancelamento.
+      const [activeOrders, recentHistory] = await Promise.all([
+        fetchRestaurantActiveOrders(session),
+        fetchRestaurantOrdersHistory({
+          session,
+          statuses: ['DELIVERED', 'CANCELLED'],
+          page: 1,
+          perPage: 30,
+        }),
+      ])
+
+      const seen = new Set()
+      const merged = []
+      for (const order of [...activeOrders, ...recentHistory]) {
+        if (!order?.order_id || seen.has(order.order_id)) continue
+        seen.add(order.order_id)
+        merged.push(order)
+      }
+
+      setOrders(merged)
       setErrorText('')
-      if (!effectiveOrderId && nextOrders.length > 0) {
-        const fallbackOrderId = nextOrders[0].order_id
+      if (!effectiveOrderId && merged.length > 0) {
+        const fallbackOrderId = merged[0].order_id
         setOrderId(fallbackOrderId)
         if (onSelectOrder) onSelectOrder(fallbackOrderId)
       }

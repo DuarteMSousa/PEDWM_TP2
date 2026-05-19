@@ -274,7 +274,13 @@ class OrderService implements OrderServiceInterface
     {
         $order = Order::query()->findOrFail($orderId);
 
-        return $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
+        $order = $this->transition($order, OrderStatus::PREPARING, OrderEventType::ORDER_PREPARING, $actorUserId);
+        $order->loadMissing(['restaurant.address', 'address']);
+        $deliveryFee = app(OrderPricingService::class)->deliveryFee($order->restaurant, $order->address);
+        $delivery = app(DeliveryServiceInterface::class)->createDeliveryForOrder($order->id, $deliveryFee);
+        AssignCourierToDeliveryJob::dispatch($delivery->id)->afterCommit();
+
+        return $order;
     }
 
     #[Transactional]

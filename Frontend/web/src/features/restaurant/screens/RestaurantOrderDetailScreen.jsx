@@ -9,6 +9,7 @@ import {
   updateOrderItemStatus,
 } from '../../../services/restaurantOpsService'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
+import { DeliveryLeafletMap } from '../../../components/common/DeliveryLeafletMap'
 import { subscribeToOrderTrackingTopic } from '../../../services/realtime/topicsRealtime'
 
 function statusLabel(status) {
@@ -278,22 +279,9 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
                   <strong>{formatTime(order.delivery.delivery_time)}</strong>
                 </div>
               ) : null}
-              {courierPosition ? (
-                <div className="rb-detail-row">
-                  <span>Posicao courier (live)</span>
-                  <a
-                    href={`https://www.google.com/maps?q=${courierPosition.lat},${courierPosition.lng}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ color: 'var(--blue)' }}
-                  >
-                    {courierPosition.lat.toFixed(5)}, {courierPosition.lng.toFixed(5)}
-                  </a>
-                </div>
-              ) : null}
               {courierPosition?.recorded_at ? (
                 <div className="rb-detail-row">
-                  <span>Atualizado em</span>
+                  <span>Posicao courier (live)</span>
                   <strong>{formatTime(courierPosition.recorded_at)}</strong>
                 </div>
               ) : null}
@@ -301,6 +289,59 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
           ) : null}
         </article>
       </div>
+
+      {(() => {
+        const pickup =
+          order.restaurant?.address &&
+          Number.isFinite(Number(order.restaurant.address.latitude)) &&
+          Number.isFinite(Number(order.restaurant.address.longitude))
+            ? {
+                lat: Number(order.restaurant.address.latitude),
+                lng: Number(order.restaurant.address.longitude),
+                label: order.restaurant?.name ?? 'Pickup',
+              }
+            : null
+
+        const dropoff =
+          order.address &&
+          Number.isFinite(Number(order.address.latitude)) &&
+          Number.isFinite(Number(order.address.longitude))
+            ? {
+                lat: Number(order.address.latitude),
+                lng: Number(order.address.longitude),
+                label: order.user?.name ?? 'Cliente',
+              }
+            : null
+
+        const liveCourier = courierPosition
+          ? { lat: courierPosition.lat, lng: courierPosition.lng }
+          : order.delivery?.courier &&
+              Number.isFinite(Number(order.delivery.courier.latitude)) &&
+              Number.isFinite(Number(order.delivery.courier.longitude))
+            ? {
+                lat: Number(order.delivery.courier.latitude),
+                lng: Number(order.delivery.courier.longitude),
+              }
+            : null
+
+        if (!pickup && !dropoff && !liveCourier) return null
+
+        return (
+          <article className="rb-table-card">
+            <div className="rb-table-head">
+              <h3>Mapa da entrega</h3>
+              <small>
+                {liveCourier
+                  ? courierPosition
+                    ? 'Posicao em tempo real (WebSocket)'
+                    : 'Ultima posicao conhecida'
+                  : 'Pickup e dropoff'}
+              </small>
+            </div>
+            <DeliveryLeafletMap pickup={pickup} dropoff={dropoff} courier={liveCourier} />
+          </article>
+        )
+      })()}
 
       <article className="rb-table-card">
         <div className="rb-table-head">

@@ -24,7 +24,7 @@ class PaymentEvent extends Model
         return [
             'timestamp' => 'datetime',
             'payload' => 'array',
-            'event_type' => \App\Enums\PaymentEventType::class,
+            // event_type fica como string para o GraphQL (schema declara String!).
         ];
     }
 

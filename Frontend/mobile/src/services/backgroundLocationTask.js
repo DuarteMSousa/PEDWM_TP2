@@ -46,7 +46,18 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (locations.length === 0) return
 
   const stored = await readSession()
-  if (!stored?.session || !stored?.deliveryId) return
+  if (!stored?.session || !stored?.deliveryId) {
+    // Sessao limpa: parar a task para nao queimar GPS indefinidamente.
+    try {
+      const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK)
+      if (isRegistered) {
+        await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)
+      }
+    } catch {
+      // ignore
+    }
+    return
+  }
 
   const latest = locations[locations.length - 1]
   try {
@@ -60,8 +71,28 @@ TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
       accuracy: latest.coords.accuracy,
       recordedAt: new Date(latest.timestamp ?? Date.now()).toISOString(),
     })
-  } catch {
-    // Silent — next interval will retry
+  } catch (err) {
+    // Se o servidor disser que a delivery ja nao esta ativa, parar a task.
+    const message = String(err?.message ?? '').toLowerCase()
+    const deliveryClosed =
+      message.includes('not found') ||
+      message.includes('terminal') ||
+      message.includes('delivered') ||
+      message.includes('cancelled') ||
+      message.includes('failed') ||
+      message.includes('inactive')
+    if (deliveryClosed) {
+      try {
+        await clearBackgroundSession()
+        const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK)
+        if (isRegistered) {
+          await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    // restantes erros: proxima iteracao tenta de novo
   }
 })
 

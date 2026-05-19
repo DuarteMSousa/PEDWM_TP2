@@ -80,6 +80,8 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
   const [cancelReason, setCancelReason] = useState('')
   const [dialogLoading, setDialogLoading] = useState(false)
   const [pendingAlerts, setPendingAlerts] = useState([])
+  const [realtimeState, setRealtimeState] = useState('offline')
+  const [readyAnnouncementOrderId, setReadyAnnouncementOrderId] = useState('')
   const beepRef = useRef(null)
 
   const loadOrders = useCallback(async () => {
@@ -99,34 +101,51 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
     queueMicrotask(() => {
       loadOrders()
     })
+  }, [loadOrders])
 
+  // Polling de fallback apenas enquanto o socket nao esta live.
+  useEffect(() => {
+    if (realtimeState === 'live') return undefined
     const timer = setInterval(loadOrders, 30000)
     return () => clearInterval(timer)
-  }, [loadOrders])
+  }, [realtimeState, loadOrders])
 
   useEffect(() => {
     if (!session?.restaurantId) return undefined
     let unsubscribe = null
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setRealtimeState('connecting')
     try {
       unsubscribe = subscribeToRestaurantOrdersTopic({
         restaurantId: session.restaurantId,
         authToken: session.token,
         devUserId: session.devUserId,
         onEvent: (eventName, payload) => {
+          setRealtimeState('live')
+          const orderId = payload?.data?.order_id ?? payload?.orderId ?? null
           if (eventName === 'ORDER_CREATED') {
             playKitchenBeep(beepRef)
-            const orderId = payload?.data?.order_id ?? payload?.orderId ?? null
             setPendingAlerts((current) => {
               if (!orderId || current.includes(orderId)) return current
               return [...current, orderId]
             })
           }
+          if (
+            (eventName === 'ORDER_COURIER_ASSIGNED' || eventName === 'ORDER_OUT_FOR_DELIVERY') &&
+            orderId &&
+            readyAnnouncementOrderId === orderId
+          ) {
+            setReadyAnnouncementOrderId('')
+            setInfoText('Estafeta atribuido e a caminho.')
+          }
           loadOrders()
         },
-        onError: () => {},
+        onError: () => {
+          setRealtimeState('error')
+        },
       })
     } catch {
-      // ignore
+      setRealtimeState('error')
     }
     return () => {
       if (unsubscribe) unsubscribe()
@@ -240,7 +259,8 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
     try {
       setBusyOrderId(order.order_id)
       await markRestaurantOrderReady({ session, orderId: order.order_id })
-      setInfoText('Encomenda marcada como pronta para entrega.')
+      setReadyAnnouncementOrderId(order.order_id)
+      setInfoText('Encomenda marcada como pronta. A procurar estafeta...')
       await loadOrders()
     } catch (error) {
       setErrorText(error.message)
@@ -267,7 +287,15 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
           <p>Gerir encomendas e preparacao de pratos</p>
         </div>
         <div className="rb-toast">
-          <strong>Atualizacao automatica a cada 15s</strong>
+          <strong>
+            {realtimeState === 'live'
+              ? 'Realtime ativo'
+              : realtimeState === 'connecting'
+                ? 'A ligar realtime...'
+                : realtimeState === 'error'
+                  ? 'Realtime offline (fallback 30s)'
+                  : 'Offline (fallback 30s)'}
+          </strong>
           <span>Dados reais do backend com estados por item.</span>
         </div>
       </header>
@@ -282,6 +310,20 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
             onClick={() => setPendingAlerts([])}
           >
             OK, vi
+          </button>
+        </div>
+      ) : null}
+
+      {readyAnnouncementOrderId ? (
+        <div className="rb-pending-alert" style={{ borderColor: '#3479ed', background: '#eaf2ff' }}>
+          <strong>A procurar estafeta para #{String(readyAnnouncementOrderId).slice(0, 8)}</strong>
+          <span>Notificacao enviada por WebSocket. Aguarde atribuicao.</span>
+          <button
+            type="button"
+            className="rb-btn-outline"
+            onClick={() => setReadyAnnouncementOrderId('')}
+          >
+            Dispensar
           </button>
         </div>
       ) : null}

@@ -1,0 +1,89 @@
+@startuml FastBite_Sequencia_CriarEncomenda
+title FastBite — Sequencia: Criar Encomenda (Cliente -> Restaurante notificado)
+
+skinparam shadowing false
+skinparam sequence {
+  ArrowColor #555
+  LifeLineBorderColor #888
+  ActorBorderColor #555
+  ParticipantBorderColor #555
+}
+
+actor "Cliente" as Customer
+participant "Mobile / Web\n(React Native / React)" as Client
+participant "GraphQL API\n(Lighthouse)" as GraphQL
+participant "CartService" as CartSvc
+participant "OrderService\n#[Transactional]" as OrderSvc
+participant "PaymentService" as PaymentSvc
+participant "OutboxService" as Outbox
+database  "BD (SQLite/MySQL)" as DB
+participant "Reverb\n(WebSocket Broker)" as Reverb
+participant "Restaurante (Web)" as Restaurant
+
+== 1. Construir carrinho ==
+
+Customer -> Client: adiciona produtos
+Client -> GraphQL: mutation addToCart(input)
+GraphQL -> CartSvc: addItem(cartId, product, options)
+CartSvc -> DB: persist cart_items
+CartSvc --> GraphQL: Cart atualizado
+GraphQL --> Client: cart total + items
+
+== 2. Checkout ==
+
+Customer -> Client: pressiona "Finalizar Pedido"
+Client -> GraphQL: mutation checkout(CheckoutInput)
+GraphQL -> OrderSvc: checkout(customerId, paymentMethod, address)
+
+OrderSvc -> DB: BEGIN TRANSACTION
+
+OrderSvc -> DB: INSERT order (status=PENDING)
+OrderSvc -> DB: INSERT order_items + order_item_options
+OrderSvc -> DB: INSERT order_address (snapshot)
+
+OrderSvc -> OrderSvc: recordEvent(ORDER_CREATED)
+note right
+  Persiste OrderEvent +
+  enfileira no Outbox
+end note
+OrderSvc -> DB: INSERT order_events (ORDER_CREATED)
+OrderSvc -> Outbox: enqueue('order', id, ORDER_CREATED, payload)
+
+OrderSvc -> PaymentSvc: createPayment(orderId, method, amount)
+PaymentSvc -> DB: INSERT payment (status=PENDING)
+PaymentSvc -> DB: INSERT payment_events (PAYMENT_CREATED)
+
+alt Pagamento aceite imediatamente (CARD/MBWAY mock)
+  PaymentSvc -> DB: UPDATE payment status=COMPLETED
+  PaymentSvc -> DB: INSERT payment_events (PAYMENT_COMPLETED)
+  OrderSvc -> OrderSvc: transition(CONFIRMED, ORDER_CONFIRMED)
+  OrderSvc -> DB: UPDATE order status=CONFIRMED
+  OrderSvc -> DB: INSERT order_events (ORDER_CONFIRMED)
+  OrderSvc -> Outbox: enqueue('order', id, ORDER_CONFIRMED, payload)
+else Pagamento CASH ou pendente
+  OrderSvc -> OrderSvc: order fica em PENDING
+end
+
+OrderSvc -> DB: COMMIT
+OrderSvc --> GraphQL: Order completo
+GraphQL --> Client: redireciona para tracking
+
+== 3. Outbox -> Reverb (event-driven) ==
+
+note over Outbox, Reverb #lightyellow
+  OutboxEventWorker (background job) faz polling
+  e publica os eventos PENDING via Reverb.
+end note
+
+Outbox -> Reverb: broadcast DomainEventBroadcasted\nchannels: [\n  customer.{userId}.orders,\n  restaurant.{rId}.orders,\n  order.{id}.tracking\n]
+
+Reverb --> Client: ORDER_CREATED / ORDER_CONFIRMED\n(canal "customer.{id}.orders")
+Reverb --> Restaurant: ORDER_CONFIRMED\n(canal "restaurant.{id}.orders")
+
+note over Restaurant #palegreen
+  Restaurant Orders Queue
+  atualiza em tempo real
+  sem polling.
+end note
+
+@enduml

@@ -94,9 +94,14 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
     queueMicrotask(() => {
       loadOrders()
     })
+  }, [loadOrders])
+
+  // Polling de fallback apenas enquanto o socket nao esta live.
+  useEffect(() => {
+    if (realtimeState === 'live') return undefined
     const timer = setInterval(loadOrders, 30000)
     return () => clearInterval(timer)
-  }, [loadOrders])
+  }, [realtimeState, loadOrders])
 
   useEffect(() => {
     if (!session?.restaurantId) {

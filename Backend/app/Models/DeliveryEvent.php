@@ -23,7 +23,7 @@ class DeliveryEvent extends Model
     protected function casts(): array
     {
         return [
-            'event_type' => DeliveryEventType::class,
+            // event_type fica como string para o GraphQL (schema declara String!).
             'payload' => 'array',
             'created_at' => 'datetime',
         ];
