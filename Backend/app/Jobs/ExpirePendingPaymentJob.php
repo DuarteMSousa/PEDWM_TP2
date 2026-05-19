@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Enums\PaymentStatus;
-use App\Models\Payment;
 use App\Services\PaymentService\PaymentServiceInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -18,7 +17,8 @@ class ExpirePendingPaymentJob implements ShouldQueue
 
     public function handle(): void
     {
-        $payment = Payment::query()->whereKey($this->paymentId)->first();
+        $paymentService = app(PaymentServiceInterface::class);
+        $payment = $paymentService->getPaymentById($this->paymentId);
 
         if (
             ! $payment
@@ -29,6 +29,6 @@ class ExpirePendingPaymentJob implements ShouldQueue
             return;
         }
 
-        app(PaymentServiceInterface::class)->expirePayment($payment->id);
+        $paymentService->expirePayment($payment->id);
     }
 }

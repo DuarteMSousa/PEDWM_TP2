@@ -4,7 +4,6 @@ namespace App\Services\OrderService;
 
 use App\Aspects\Transactional;
 use App\Domain\Geo\GeoMath;
-use App\Domain\Orders\OrderItemRules;
 use App\Domain\StateMachines\Orders\OrderStateFactory;
 use App\DTOs\Order\CheckoutDTO;
 use App\Enums\OrderEventType;

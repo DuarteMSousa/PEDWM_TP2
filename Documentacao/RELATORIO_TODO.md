@@ -60,7 +60,7 @@ O enunciado exige POA e o código tem-na (`App\Aspects\Transactional` com `#[Tra
 
 Outra promessa do cap. 1 que não está provada no relatório.
 
-- [ ] Mostrar exemplos reais: helpers puros como `OrderItemRules::allNonCancelledReady`, enums imutáveis (`OrderStatus`, `DeliveryStatus`, `PaymentStatus`), composição via `collection->filter->map->sortBy` no `AssignCourierToDeliveryJob`.
+- [ ] Mostrar exemplos reais: helpers puros como , enums imutáveis (`OrderStatus`, `DeliveryStatus`, `PaymentStatus`), composição via `collection->filter->map->sortBy` no `AssignCourierToDeliveryJob`.
 
 ### [ ] 7. Adicionar secção sobre **Event Sourcing / Eventos de Domínio**
 

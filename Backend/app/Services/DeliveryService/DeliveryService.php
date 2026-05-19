@@ -3,7 +3,12 @@
 namespace App\Services\DeliveryService;
 
 use App\Aspects\Transactional;
+use App\Domain\Geo\GeoMath;
 use App\Domain\StateMachines\Deliveries\DeliveryStateFactory;
+use App\DTOs\Delivery\CreateDeliveryEventDTO;
+use App\DTOs\Delivery\CreateDeliveryOfferDTO;
+use App\DTOs\Delivery\UpdateDeliveryDTO;
+use App\DTOs\Delivery\UpdateDeliveryOfferDTO;
 use App\Enums\CourierStatus;
 use App\Enums\DeliveryEventType;
 use App\Enums\DeliveryOfferEventType;
@@ -14,6 +19,8 @@ use App\Jobs\AssignCourierToDeliveryJob;
 use App\Jobs\ExpireDeliveryOfferJob;
 use App\Models\Delivery;
 use App\Models\DeliveryOffer;
+use App\Repositories\CourierRepository\CourierRepositoryInterface;
+use App\Repositories\DeliveryRepository\DeliveryRepositoryInterface;
 use App\Services\CourierService\CourierServiceInterface;
 use App\Services\OrderService\OrderServiceInterface;
 use App\Services\OutboxService;
@@ -22,67 +29,55 @@ use Illuminate\Validation\ValidationException;
 
 class DeliveryService implements DeliveryServiceInterface
 {
-    private array $with = ['order', 'courier.user', 'positionHistory', 'events', 'offers'];
+    private const MAX_ASSIGNMENT_ATTEMPTS = 3;
+
+    public function __construct(
+        private DeliveryRepositoryInterface $deliveries,
+        private CourierRepositoryInterface $couriers,
+    ) {}
 
     public function getDeliveryById(string $id): ?Delivery
     {
-        return Delivery::query()->with($this->with)->find($id);
+        return $this->deliveries->getById($id);
     }
 
     public function getDeliveryByOrderId(string $orderId): ?Delivery
     {
-        return Delivery::query()->with($this->with)->where('order_id', $orderId)->first();
+        return $this->deliveries->getByOrderId($orderId);
     }
 
     public function getActiveDeliveryByCourierId(string $courierId): ?Delivery
     {
-        return Delivery::query()
-            ->with($this->with)
-            ->where('courier_id', $courierId)
-            ->whereNotIn('status', [DeliveryStatus::DELIVERED->value, DeliveryStatus::FAILED->value])
-            ->first();
+        return $this->deliveries->getActiveByCourierId($courierId);
     }
 
     public function getDeliveriesByCourierId(string $courierId, ?array $statuses = null)
     {
-        $query = Delivery::query()->with($this->with)->where('courier_id', $courierId);
-
-        if ($statuses) {
-            $query->whereIn('status', $statuses);
-        }
-
-        return $query->orderByDesc('created_at')->get();
+        return $this->deliveries->getByCourierId($courierId, $statuses);
     }
 
     public function getDeliveryOffersByCourierId(string $courierId)
     {
-        return DeliveryOffer::query()
-            ->with(['delivery.order', 'delivery.positionHistory', 'courier.user'])
-            ->where('courier_id', $courierId)
-            ->where('status', DeliveryOfferStatus::PENDING->value)
-            ->where('expires_at', '>', now())
-            ->orderBy('expires_at')
-            ->get();
+        return $this->deliveries->getPendingOffersByCourierId($courierId);
     }
 
     #[Transactional]
     public function createDeliveryForOrder(string $orderId, float $deliveryFee): Delivery
     {
-        return Delivery::query()->firstOrCreate(
-            ['order_id' => $orderId],
-            ['status' => DeliveryStatus::PENDING->value, 'delivery_fee' => $deliveryFee]
-        )->load($this->with);
+        $delivery = $this->deliveries->getOrCreateByOrderId($orderId, $deliveryFee);
+
+        return $this->reloadDelivery($delivery);
     }
 
     #[Transactional]
     public function createDeliveryOfferForCourier(string $deliveryId, string $courierId, int $ttlSeconds = 30): DeliveryOffer
     {
-        $offer = DeliveryOffer::query()->create([
-            'delivery_id' => $deliveryId,
-            'courier_id' => $courierId,
-            'status' => DeliveryOfferStatus::PENDING->value,
-            'expires_at' => now()->addSeconds($ttlSeconds),
-        ]);
+        $offer = $this->deliveries->createOffer(new CreateDeliveryOfferDTO(
+            deliveryId: $deliveryId,
+            courierId: $courierId,
+            status: DeliveryOfferStatus::PENDING,
+            expiresAt: now()->addSeconds($ttlSeconds),
+        ));
 
         $this->broadcastJobEvent(DeliveryOfferEventType::JOB_OFFERED, $offer);
         ExpireDeliveryOfferJob::dispatch($offer->id)
@@ -92,27 +87,81 @@ class DeliveryService implements DeliveryServiceInterface
         return $offer->load(['delivery.order', 'courier.user']);
     }
 
+    public function assignCourierToDelivery(string $deliveryId): void
+    {
+        $delivery = $this->deliveries->getAssignmentCandidate($deliveryId);
+
+        if (! $delivery || $delivery->courier_id !== null) {
+            return;
+        }
+
+        $attemptedCourierIds = $delivery->offers->pluck('courier_id')->all();
+        $restaurantAddress = $delivery->order?->restaurant?->address;
+
+        if (count($attemptedCourierIds) >= self::MAX_ASSIGNMENT_ATTEMPTS) {
+            $this->failDeliveryWithoutCourier($delivery);
+
+            return;
+        }
+
+        $courier = $this->couriers
+            ->getAvailableExceptUserIds($attemptedCourierIds)
+            ->sortBy(function ($courier) use ($restaurantAddress): float {
+                if (! $restaurantAddress || $courier->latitude === null || $courier->longitude === null) {
+                    return PHP_FLOAT_MAX;
+                }
+
+                return GeoMath::distanceKm(
+                    (float) $courier->latitude,
+                    (float) $courier->longitude,
+                    (float) $restaurantAddress->latitude,
+                    (float) $restaurantAddress->longitude
+                );
+            })
+            ->first();
+
+        if (! $courier) {
+            $this->failDeliveryWithoutCourier($delivery);
+
+            return;
+        }
+
+        $this->createDeliveryOfferForCourier($delivery->id, $courier->user_id);
+    }
+
+    #[Transactional]
+    public function expireOfferByJob(string $offerId): void
+    {
+        $offer = $this->deliveries->getOfferById($offerId);
+
+        if (! $offer || $offer->status !== DeliveryOfferStatus::PENDING || $offer->expires_at->isFuture()) {
+            return;
+        }
+
+        $this->deliveries->updateOffer($offer, new UpdateDeliveryOfferDTO(status: DeliveryOfferStatus::EXPIRED));
+        $this->broadcastJobEvent(DeliveryOfferEventType::JOB_EXPIRED, $offer);
+
+        AssignCourierToDeliveryJob::dispatch($offer->delivery_id);
+    }
+
     #[Transactional]
     public function acceptDeliveryOffer(string $offerId): Delivery
     {
-        $offer = DeliveryOffer::query()
-            ->with(['delivery.order', 'courier'])
-            ->whereKey($offerId)
-            ->lockForUpdate()
-            ->firstOrFail();
+        $offer = $this->deliveries->getOfferByIdOrFail($offerId, lock: true);
+        $offer->load(['delivery.order', 'courier']);
 
         if ($offer->status !== DeliveryOfferStatus::PENDING) {
             throw ValidationException::withMessages(['offer_id' => 'Offer is not pending.']);
         }
 
         if ($offer->expires_at->isPast()) {
-            $offer->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
+            $this->deliveries->updateOffer($offer, new UpdateDeliveryOfferDTO(status: DeliveryOfferStatus::EXPIRED));
             $this->broadcastJobEvent(DeliveryOfferEventType::JOB_EXPIRED, $offer);
 
             throw ValidationException::withMessages(['offer_id' => 'Offer expired.']);
         }
 
-        $delivery = Delivery::query()->whereKey($offer->delivery_id)->lockForUpdate()->firstOrFail();
+        $delivery = $this->deliveries->getByIdOrFail($offer->delivery_id, lock: true);
 
         if ($delivery->courier_id !== null && $delivery->courier_id !== $offer->courier_id) {
             throw ValidationException::withMessages(['delivery_id' => 'Delivery already assigned.']);
@@ -122,39 +171,32 @@ class DeliveryService implements DeliveryServiceInterface
             throw ValidationException::withMessages(['courier_id' => 'Courier is not available.']);
         }
 
-        $offer->update([
-            'status' => DeliveryOfferStatus::ACCEPTED->value,
-            'accepted_at' => now(),
-        ]);
+        $this->deliveries->updateOffer($offer, new UpdateDeliveryOfferDTO(
+            status: DeliveryOfferStatus::ACCEPTED,
+            acceptedAt: now(),
+        ));
 
-        $delivery->update(['courier_id' => $offer->courier_id]);
-        DeliveryOffer::query()
-            ->where('delivery_id', $delivery->id)
-            ->where('id', '!=', $offer->id)
-            ->where('status', DeliveryOfferStatus::PENDING->value)
-            ->update(['status' => DeliveryOfferStatus::EXPIRED->value]);
+        $this->deliveries->updateDelivery($delivery, new UpdateDeliveryDTO(courierId: $offer->courier_id));
+        $this->deliveries->expireOtherPendingOffers($delivery->id, $offer->id);
 
         app(CourierServiceInterface::class)->updateCourierStatus($offer->courier_id, CourierStatus::BUSY->value);
         $this->recordEvent($delivery, DeliveryEventType::DELIVERY_ACCEPTED, $offer->courier_id);
         app(OrderServiceInterface::class)->recordCourierAssignedToOrder($delivery->order, $offer->courier_id);
         $this->broadcastJobEvent(DeliveryOfferEventType::JOB_ACCEPTED, $offer);
 
-        return $delivery->refresh()->load($this->with);
+        return $this->reloadDelivery($delivery);
     }
 
     #[Transactional]
     public function rejectDeliveryOffer(string $offerId): bool
     {
-        $offer = DeliveryOffer::query()
-            ->with('delivery')
-            ->whereKey($offerId)
-            ->where('status', DeliveryOfferStatus::PENDING->value)
-            ->firstOrFail();
+        $offer = $this->deliveries->getPendingOfferByIdOrFail($offerId);
+        $offer->load('delivery');
 
-        $offer->update([
-            'status' => DeliveryOfferStatus::REJECTED->value,
-            'rejected_at' => now(),
-        ]);
+        $this->deliveries->updateOffer($offer, new UpdateDeliveryOfferDTO(
+            status: DeliveryOfferStatus::REJECTED,
+            rejectedAt: now(),
+        ));
         $this->broadcastJobEvent(DeliveryOfferEventType::JOB_REJECTED, $offer);
         AssignCourierToDeliveryJob::dispatch($offer->delivery_id)->afterCommit();
 
@@ -167,7 +209,7 @@ class DeliveryService implements DeliveryServiceInterface
         $delivery = $this->transitionDeliveryStatus($deliveryId, $courierId, DeliveryStatus::PICKED_UP, ['pickup_time' => now()]);
         app(OrderServiceInterface::class)->recordOrderPickedUp($delivery->order, $courierId);
 
-        return $delivery->refresh()->load($this->with);
+        return $this->reloadDelivery($delivery);
     }
 
     #[Transactional]
@@ -176,7 +218,7 @@ class DeliveryService implements DeliveryServiceInterface
         $delivery = $this->transitionDeliveryStatus($deliveryId, $courierId, DeliveryStatus::IN_TRANSIT);
         app(OrderServiceInterface::class)->markOrderOutForDelivery($delivery->order, $courierId);
 
-        return $delivery->refresh()->load($this->with);
+        return $this->reloadDelivery($delivery);
     }
 
     #[Transactional]
@@ -186,7 +228,7 @@ class DeliveryService implements DeliveryServiceInterface
         app(OrderServiceInterface::class)->markOrderDelivered($delivery->order, $courierId);
         app(CourierServiceInterface::class)->updateCourierStatus($courierId, CourierStatus::AVAILABLE->value);
 
-        return $delivery->refresh()->load($this->with);
+        return $this->reloadDelivery($delivery);
     }
 
     #[Transactional]
@@ -200,14 +242,11 @@ class DeliveryService implements DeliveryServiceInterface
     #[Transactional]
     public function markDeliveryFailedBySystem(string $deliveryId, string $reason): Delivery
     {
-        $delivery = Delivery::query()
-            ->with('order')
-            ->whereKey($deliveryId)
-            ->lockForUpdate()
-            ->firstOrFail();
+        $delivery = $this->deliveries->getByIdOrFail($deliveryId, lock: true);
+        $delivery->load('order');
 
         if ($delivery->status === DeliveryStatus::FAILED || $delivery->status === DeliveryStatus::DELIVERED) {
-            return $delivery->load($this->with);
+            return $this->reloadDelivery($delivery);
         }
 
         DeliveryStateFactory::from($delivery->status)->transition($delivery, DeliveryStatus::FAILED);
@@ -217,19 +256,16 @@ class DeliveryService implements DeliveryServiceInterface
 
         app(OrderServiceInterface::class)->cancelOrderBySystem($delivery->order_id, $reason);
 
-        return $delivery->refresh()->load($this->with);
+        return $this->reloadDelivery($delivery);
     }
 
     private function transitionDeliveryStatus(string $deliveryId, string $courierId, DeliveryStatus $status, array $extra = []): Delivery
     {
-        $delivery = Delivery::query()
-            ->where('courier_id', $courierId)
-            ->lockForUpdate()
-            ->findOrFail($deliveryId);
+        $delivery = $this->deliveries->getByIdAndCourierIdOrFail($deliveryId, $courierId, lock: true);
         DeliveryStateFactory::from($delivery->status)->transition($delivery, $status, $extra);
         $this->recordEvent($delivery, $this->eventTypeForStatus($status), $courierId, $extra);
 
-        return $delivery->refresh()->load($this->with);
+        return $this->reloadDelivery($delivery);
     }
 
     private function eventTypeForStatus(DeliveryStatus $status): DeliveryEventType
@@ -241,6 +277,11 @@ class DeliveryService implements DeliveryServiceInterface
             DeliveryStatus::FAILED => DeliveryEventType::DELIVERY_FAILED,
             DeliveryStatus::PENDING => DeliveryEventType::DELIVERY_ACCEPTED,
         };
+    }
+
+    private function reloadDelivery(Delivery $delivery): Delivery
+    {
+        return $this->deliveries->getById($delivery->id) ?? $delivery->refresh();
     }
 
     private function recordEvent(Delivery $delivery, DeliveryEventType $eventType, string $actorUserId, array $payload = []): void
@@ -265,14 +306,22 @@ class DeliveryService implements DeliveryServiceInterface
             ])),
         ];
 
-        $delivery->events()->create([
-            'event_type' => $eventType->value,
-            'payload' => $eventPayload,
-            'created_at' => $occurredAt,
-        ]);
+        $this->deliveries->createEvent($delivery, new CreateDeliveryEventDTO(
+            eventType: $eventType,
+            createdAt: $occurredAt,
+            payload: $eventPayload,
+        ));
 
         app(OutboxService::class)->enqueue('delivery', $delivery->id, $eventType->value, $eventPayload);
         NotificationEventRecorded::dispatch($eventType, $eventPayload);
+    }
+
+    private function failDeliveryWithoutCourier(Delivery $delivery): void
+    {
+        $this->markDeliveryFailedBySystem(
+            $delivery->id,
+            'NO_COURIER_AVAILABLE'
+        );
     }
 
     private function broadcastJobEvent(DeliveryOfferEventType $eventType, DeliveryOffer $offer): void

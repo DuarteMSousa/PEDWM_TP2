@@ -7,9 +7,9 @@ use App\Events\CourierPositionUpdated;
 use App\Events\DomainEventBroadcasted;
 use App\Events\UserNotificationCreated;
 use App\Models\OutboxEvent;
+use App\Repositories\OutboxRepository\OutboxRepositoryInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class PublishOutboxEventJob implements ShouldQueue
@@ -23,7 +23,7 @@ class PublishOutboxEventJob implements ShouldQueue
     public function handle(): void
     {
         /** @var OutboxEvent|null $outbox */
-        $outbox = OutboxEvent::query()->whereKey($this->outboxEventId)->first();
+        $outbox = app(OutboxRepositoryInterface::class)->getById($this->outboxEventId);
 
         if (! $outbox) {
             return;
@@ -33,29 +33,15 @@ class PublishOutboxEventJob implements ShouldQueue
             return;
         }
 
-        $outbox->update(['status' => 'PROCESSING']);
+        $outboxRepository = app(OutboxRepositoryInterface::class);
+        $outboxRepository->markProcessing($outbox);
 
         try {
             $this->publish($outbox->event_name, (array) $outbox->payload);
 
-            $outbox->update([
-                'status' => 'PUBLISHED',
-                'published_at' => now(),
-                'last_error' => null,
-            ]);
+            $outboxRepository->markPublished($outbox);
         } catch (Throwable $exception) {
-            DB::transaction(function () use ($outbox, $exception): void {
-                $retryCount = $outbox->retry_count + 1;
-                $maxRetries = 10;
-                $isTerminal = $retryCount >= $maxRetries;
-
-                $outbox->update([
-                    'status' => $isTerminal ? 'FAILED' : 'PENDING',
-                    'retry_count' => $retryCount,
-                    'next_attempt_at' => $isTerminal ? null : now()->addSeconds(min(300, 2 ** $retryCount)),
-                    'last_error' => mb_substr($exception->getMessage(), 0, 2000),
-                ]);
-            });
+            $outboxRepository->markRetryAfterFailure($outbox, $exception);
 
             throw $exception;
         }

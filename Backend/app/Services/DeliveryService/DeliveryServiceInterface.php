@@ -21,6 +21,10 @@ interface DeliveryServiceInterface
 
     public function createDeliveryOfferForCourier(string $deliveryId, string $courierId, int $ttlSeconds = 30): DeliveryOffer;
 
+    public function assignCourierToDelivery(string $deliveryId): void;
+
+    public function expireOfferByJob(string $offerId): void;
+
     public function acceptDeliveryOffer(string $offerId): Delivery;
 
     public function rejectDeliveryOffer(string $offerId): bool;

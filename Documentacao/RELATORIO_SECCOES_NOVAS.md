@@ -190,7 +190,7 @@ Apesar do PHP e do JavaScript serem linguagens predominantemente orientadas a ob
 Exemplos concretos:
 
 - **Enums tipados imutáveis** — `OrderStatus`, `OrderEventType`, `DeliveryStatus`, `PaymentMethod` e os restantes são *backed enums* PHP, garantindo que os estados são tratados como valores opacos sem possibilidade de mutação acidental.
-- **Predicados puros para regras de domínio** — por exemplo, `OrderItemRules::allNonCancelledReady($statuses)` recebe uma coleção de estados e devolve um booleano, sem efeitos colaterais. É facilmente testável de forma isolada e reutilizável noutros pontos do código.
+- **Predicados puros para regras de domínio** — por exemplo,  recebe uma coleção de estados e devolve um booleano, sem efeitos colaterais. É facilmente testável de forma isolada e reutilizável noutros pontos do código.
 - **Composição via *collection pipelines*** — o `AssignCourierToDeliveryJob` filtra estafetas, calcula distâncias e ordena num *pipeline* expressivo de operações encadeadas:
 
 ```php

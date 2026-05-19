@@ -4,32 +4,25 @@ namespace App\Services\NotificationFeedService;
 
 use App\Aspects\Transactional;
 use App\DTOs\Notification\RegisterPushTokenDTO;
-use App\Models\Notification;
-use App\Models\UserPushToken;
+use App\Repositories\NotificationRepository\NotificationRepositoryInterface;
+use App\Repositories\UserPushTokenRepository\UserPushTokenRepositoryInterface;
 
 class NotificationFeedService implements NotificationFeedServiceInterface
 {
+    public function __construct(
+        private NotificationRepositoryInterface $notifications,
+        private UserPushTokenRepositoryInterface $pushTokens,
+    ) {}
+
     public function getNotificationsByUserId(string $userId, bool $unreadOnly = false, int $limit = 50)
     {
-        $query = Notification::query()
-            ->where('user_id', $userId)
-            ->orderByDesc('sent_at')
-            ->limit($limit);
-
-        if ($unreadOnly) {
-            $query->whereNull('read_at');
-        }
-
-        return $query->get();
+        return $this->notifications->getByUserId($userId, $unreadOnly, $limit);
     }
 
     #[Transactional]
     public function markNotificationAsRead(string $userId, string $notificationId): array
     {
-        $notification = Notification::query()
-            ->where('user_id', $userId)
-            ->findOrFail($notificationId);
-        $notification->update(['read_at' => now()]);
+        $notification = $this->notifications->markAsReadByUserId($userId, $notificationId);
 
         return [
             'ok' => true,
@@ -41,10 +34,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
     #[Transactional]
     public function markAllNotificationsAsRead(string $userId): array
     {
-        $affected = Notification::query()
-            ->where('user_id', $userId)
-            ->whereNull('read_at')
-            ->update(['read_at' => now()]);
+        $affected = $this->notifications->markAllAsReadByUserId($userId);
 
         return [
             'ok' => true,
@@ -55,18 +45,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
     #[Transactional]
     public function registerPushToken(string $userId, RegisterPushTokenDTO $data): array
     {
-        $token = UserPushToken::query()->updateOrCreate(
-            [
-                'user_id' => $userId,
-                'token' => $data->token,
-            ],
-            [
-                'provider' => $data->provider,
-                'platform' => $data->platform,
-                'is_active' => true,
-                'last_used_at' => now(),
-            ]
-        );
+        $token = $this->pushTokens->upsertByUserId($userId, $data);
 
         return [
             'ok' => true,
@@ -78,10 +57,7 @@ class NotificationFeedService implements NotificationFeedServiceInterface
     #[Transactional]
     public function unregisterPushToken(string $userId, string $token): array
     {
-        UserPushToken::query()
-            ->where('user_id', $userId)
-            ->where('token', $token)
-            ->update(['is_active' => false]);
+        $this->pushTokens->deactivateByUserIdAndToken($userId, $token);
 
         return ['ok' => true];
     }

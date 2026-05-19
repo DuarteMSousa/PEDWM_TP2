@@ -3,46 +3,46 @@
 namespace App\Services\PaymentService;
 
 use App\Aspects\Transactional;
+use App\Domain\StateMachines\Payments\PaymentStateFactory;
 use App\DTOs\Payment\CreatePaymentDTO;
+use App\DTOs\Payment\CreatePaymentEventDTO;
+use App\DTOs\Payment\UpdatePaymentDTO;
 use App\Enums\PaymentEventType;
 use App\Enums\PaymentStatus;
 use App\Models\Payment;
+use App\Repositories\PaymentRepository\PaymentRepositoryInterface;
 use App\Services\OrderService\OrderServiceInterface;
 use App\Services\OutboxService;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 
 class PaymentService implements PaymentServiceInterface
 {
+    public function __construct(private PaymentRepositoryInterface $payments) {}
+
     public function getPaymentById(string $id): ?Payment
     {
-        return Payment::query()->with('events')->find($id);
+        return $this->payments->getById($id);
     }
 
     public function getPaymentByOrderId(string $orderId): ?Payment
     {
-        return Payment::query()->with('events')->where('order_id', $orderId)->first();
+        return $this->payments->getByOrderId($orderId);
     }
 
     public function getPaymentEvents(string $paymentId)
     {
-        return Payment::query()->findOrFail($paymentId)->events()->orderBy('timestamp')->get();
+        return $this->payments->getEvents($paymentId);
     }
 
     #[Transactional]
     public function createPayment(CreatePaymentDTO $data): Payment
     {
-        $payment = Payment::query()->create([
-            'order_id' => $data->order_id,
-            'method' => $data->method->value,
-            'amount' => $data->amount,
-            'status' => PaymentStatus::PENDING->value,
-        ]);
+        $payment = $this->payments->createPayment($data);
 
         $payment->load('order');
         $this->recordEvent($payment, PaymentEventType::PAYMENT_CREATED, []);
 
-        return $payment->refresh()->load('events');
+        return $this->payments->reload($payment);
     }
 
     #[Transactional]
@@ -81,14 +81,17 @@ class PaymentService implements PaymentServiceInterface
 
     private function transitionPaymentStatus(string $paymentId, PaymentStatus $status, ?PaymentEventType $eventType, array $payload, bool $cascadeToOrder = true): Payment
     {
-        $payment = Payment::query()->with('order')->lockForUpdate()->findOrFail($paymentId);
-        $this->assertTransition($payment->status, $status);
-        $payment->fill([
-            'status' => $status->value,
+        $payment = $this->payments->getByIdOrFail($paymentId, lock: true);
+        $payment->load('order');
+        PaymentStateFactory::from($payment->status)->transition($payment, $status, [
             'transaction_id' => $payload['transaction_id'] ?? $payment->transaction_id,
             'paid_at' => $payload['paid_at'] ?? $payment->paid_at,
         ]);
-        $payment->save();
+        $this->payments->updatePayment($payment, new UpdatePaymentDTO(
+            status: $status,
+            transactionId: $payload['transaction_id'] ?? $payment->transaction_id,
+            paidAt: $payload['paid_at'] ?? $payment->paid_at,
+        ));
 
         if ($eventType) {
             $this->recordEvent($payment, $eventType, $payload);
@@ -106,22 +109,7 @@ class PaymentService implements PaymentServiceInterface
             );
         }
 
-        return $payment->refresh()->load('events');
-    }
-
-    private function assertTransition(PaymentStatus $from, PaymentStatus $to): void
-    {
-        $allowed = match ($from) {
-            PaymentStatus::PENDING => [PaymentStatus::COMPLETED, PaymentStatus::FAILED, PaymentStatus::CANCELLED],
-            PaymentStatus::COMPLETED => [PaymentStatus::CANCELLED],
-            PaymentStatus::FAILED, PaymentStatus::CANCELLED => [],
-        };
-
-        if (! in_array($to, $allowed, true)) {
-            throw ValidationException::withMessages([
-                'status' => "Invalid payment transition from {$from->value} to {$to->value}.",
-            ]);
-        }
+        return $this->payments->reload($payment);
     }
 
     private function recordEvent(Payment $payment, PaymentEventType $eventType, array $payload): void
@@ -143,11 +131,11 @@ class PaymentService implements PaymentServiceInterface
             ],
         ];
 
-        $payment->events()->create([
-            'event_type' => $eventType->value,
-            'timestamp' => $occurredAt,
-            'payload' => $eventPayload,
-        ]);
+        $this->payments->createEvent($payment, new CreatePaymentEventDTO(
+            eventType: $eventType,
+            timestamp: $occurredAt,
+            payload: $eventPayload,
+        ));
 
         app(OutboxService::class)->enqueue('payment', $payment->id, $eventType->value, $eventPayload);
     }

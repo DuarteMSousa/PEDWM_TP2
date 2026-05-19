@@ -2,11 +2,15 @@
 
 namespace App\Services;
 
+use App\DTOs\Outbox\CreateOutboxEventDTO;
 use App\Jobs\PublishOutboxEventJob;
 use App\Models\OutboxEvent;
+use App\Repositories\OutboxRepository\OutboxRepositoryInterface;
 
 class OutboxService
 {
+    public function __construct(private OutboxRepositoryInterface $outboxEvents) {}
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -17,15 +21,12 @@ class OutboxService
         array $payload,
         bool $dispatchNow = true
     ): OutboxEvent {
-        $outbox = OutboxEvent::query()->create([
-            'aggregate_type' => $aggregateType,
-            'aggregate_id' => $aggregateId,
-            'event_name' => $eventName,
-            'payload' => $payload,
-            'status' => 'PENDING',
-            'retry_count' => 0,
-            'next_attempt_at' => now(),
-        ]);
+        $outbox = $this->outboxEvents->createOutboxEvent(new CreateOutboxEventDTO(
+            aggregateType: $aggregateType,
+            aggregateId: $aggregateId,
+            eventName: $eventName,
+            payload: $payload,
+        ));
 
         if ($dispatchNow) {
             PublishOutboxEventJob::dispatch($outbox->id)->afterCommit();

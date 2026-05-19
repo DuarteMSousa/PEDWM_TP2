@@ -12,7 +12,7 @@ class DeliveryServiceMappingTest extends TestCase
 {
     public function test_maps_delivery_status_to_event_type(): void
     {
-        $service = new DeliveryService();
+        $service = app(DeliveryService::class);
 
         $this->assertSame(
             DeliveryEventType::DELIVERY_PICKED_UP,
