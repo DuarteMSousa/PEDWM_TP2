@@ -24,9 +24,6 @@ class OrderEvent extends Model
         return [
             'timestamp' => 'datetime',
             'payload' => 'array',
-            // event_type fica como string para o GraphQL (schema declara String!).
-            // O writeRecordEvent ja escreve $eventType->value, e nenhum codigo
-            // compara o atributo com a enum diretamente.
         ];
     }
 

@@ -27,7 +27,7 @@ class RestaurantProductRepository implements RestaurantProductRepositoryInterfac
             'restaurant_id' => $data->restaurant_id,
             'product_id' => $data->product_id,
             'local_price' => $data->local_price,
-            'is_available' => $data->isAvailable,
+            'is_available' => $data->is_available,
             'estimated_preparation_time_min' => $data->estimated_preparation_time_min,
         ]);
     }
@@ -42,7 +42,7 @@ class RestaurantProductRepository implements RestaurantProductRepositoryInterfac
 
         $restaurantProduct->update([
             'local_price' => $data->local_price,
-            'is_available' => $data->isAvailable,
+            'is_available' => $data->is_available,
             'estimated_preparation_time_min' => $data->estimated_preparation_time_min,
         ]);
 

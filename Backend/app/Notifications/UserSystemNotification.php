@@ -34,9 +34,7 @@ class UserSystemNotification extends Notification implements ShouldQueue
 
         return (new MailMessage())
             ->subject("[FastBite] {$title}")
-            ->greeting("Ola {$notifiable->name},")
             ->line($message)
-            ->line("Tipo: {$type}")
             ->line('Esta mensagem foi enviada automaticamente pelo sistema FastBite.');
     }
 }
