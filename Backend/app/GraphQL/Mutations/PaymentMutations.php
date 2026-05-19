@@ -6,9 +6,7 @@ use App\Services\PaymentService\PaymentServiceInterface;
 
 class PaymentMutations
 {
-    public function __construct(private PaymentServiceInterface $paymentService)
-    {
-    }
+    public function __construct(private PaymentServiceInterface $paymentService) {}
 
     public function confirmPayment($_, array $args)
     {

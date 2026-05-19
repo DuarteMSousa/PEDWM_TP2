@@ -10,40 +10,39 @@ class DeliveryQueries
     public function __construct(
         private CourierServiceInterface $courierService,
         private DeliveryServiceInterface $deliveryService,
-    ) {
-    }
+    ) {}
 
-    public function availableCouriersCount()
+    public function countAvailableCouriers()
     {
         return $this->courierService->countAvailableCouriers();
     }
 
-    public function courierProfile($_, array $args)
+    public function getCourierByUserId($_, array $args)
     {
         return $this->courierService->getCourierByUserId($args['user_id']);
     }
 
-    public function courierActiveDelivery($_, array $args)
+    public function getActiveDeliveryByCourierId($_, array $args)
     {
         return $this->deliveryService->getActiveDeliveryByCourierId($args['courier_id']);
     }
 
-    public function courierDeliveries($_, array $args)
+    public function getDeliveriesByCourierId($_, array $args)
     {
         return $this->deliveryService->getDeliveriesByCourierId($args['courier_id'], $args['statuses'] ?? null);
     }
 
-    public function delivery($_, array $args)
+    public function getDeliveryById($_, array $args)
     {
         return $this->deliveryService->getDeliveryById($args['id']);
     }
 
-    public function orderDelivery($_, array $args)
+    public function getDeliveryByOrderId($_, array $args)
     {
         return $this->deliveryService->getDeliveryByOrderId($args['order_id']);
     }
 
-    public function courierDeliveryOffers($_, array $args)
+    public function getDeliveryOffersByCourierId($_, array $args)
     {
         return $this->deliveryService->getDeliveryOffersByCourierId($args['courier_id']);
     }

@@ -46,18 +46,18 @@ input UpdateRestaurantInput {
 }
 
 extend type Query {
-  restaurants(input: SearchRestaurantsInput): [Restaurant!]!
-    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurants")
-  restaurant(id: ID!): Restaurant
-    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurant")
-  restaurantChains: [RestaurantChain!]!
-    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurantChains")
-  restaurantChain(id: ID!): RestaurantChain
-    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@restaurantChain")
-  chainManagerRestaurants(chain_id: ID!): [Restaurant!]!
-    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@chainManagerRestaurants")
-  localManagerRestaurant(user_id: ID!): Restaurant
-    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@localManagerRestaurant")
+  searchRestaurants(input: SearchRestaurantsInput): [Restaurant!]!
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@searchRestaurants")
+  getRestaurantById(id: ID!): Restaurant
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@getRestaurantById")
+  getAllRestaurantChains: [RestaurantChain!]!
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@getAllRestaurantChains")
+  getRestaurantChainById(id: ID!): RestaurantChain
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@getRestaurantChainById")
+  getRestaurantsByChainId(chain_id: ID!): [Restaurant!]!
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@getRestaurantsByChainId")
+  getRestaurantByLocalManagerUserId(user_id: ID!): Restaurant
+    @field(resolver: "App\\GraphQL\\Queries\\RestaurantQueries@getRestaurantByLocalManagerUserId")
 }
 
 extend type Mutation {

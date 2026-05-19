@@ -84,6 +84,12 @@ enum ChatType {
   CUSTOMER_COURIER
 }
 
+enum NotificationType {
+  ORDER_UPDATE
+  PROMOTION
+  SYSTEM
+}
+
 enum UserType {
   CUSTOMER
   COURIER
@@ -416,7 +422,7 @@ type ReviewView {
 type UserNotification {
   id: ID!
   user_id: ID!
-  type: String!
+  type: NotificationType!
   title: String!
   message: String!
   sent_at: String

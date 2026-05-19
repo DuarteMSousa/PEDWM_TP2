@@ -56,7 +56,7 @@ class NotificationsGraphQLTest extends TestCase
 
         $query = <<<'GRAPHQL'
 query Notifications($unreadOnly: Boolean!, $limit: Int!) {
-  userNotifications(unread_only: $unreadOnly, limit: $limit) {
+  getNotificationsByUserId(user_id: "%s", unread_only: $unreadOnly, limit: $limit) {
     id
     type
     title
@@ -64,6 +64,7 @@ query Notifications($unreadOnly: Boolean!, $limit: Int!) {
   }
 }
 GRAPHQL;
+        $query = sprintf($query, $user->id);
 
         $allResponse = $this
             ->actingAs($user)
@@ -77,7 +78,7 @@ GRAPHQL;
 
         $allResponse
             ->assertOk()
-            ->assertJsonCount(2, 'data.userNotifications');
+            ->assertJsonCount(2, 'data.getNotificationsByUserId');
 
         $unreadResponse = $this
             ->actingAs($user)
@@ -91,10 +92,10 @@ GRAPHQL;
 
         $unreadResponse
             ->assertOk()
-            ->assertJsonCount(1, 'data.userNotifications')
-            ->assertJsonPath('data.userNotifications.0.type', 'ORDER_UPDATE')
-            ->assertJsonPath('data.userNotifications.0.title', 'Pedido confirmado')
-            ->assertJsonPath('data.userNotifications.0.read_at', null);
+            ->assertJsonCount(1, 'data.getNotificationsByUserId')
+            ->assertJsonPath('data.getNotificationsByUserId.0.type', 'ORDER_UPDATE')
+            ->assertJsonPath('data.getNotificationsByUserId.0.title', 'Pedido confirmado')
+            ->assertJsonPath('data.getNotificationsByUserId.0.read_at', null);
     }
 
     public function test_user_can_mark_single_notification_as_read(): void
@@ -116,8 +117,8 @@ GRAPHQL;
         ]);
 
         $mutation = <<<'GRAPHQL'
-mutation MarkOne($input: MarkNotificationReadInput!) {
-  markNotificationRead(input: $input) {
+mutation MarkOne($user_id: ID!, $notification_id: ID!) {
+  markNotificationAsRead(user_id: $user_id, notification_id: $notification_id) {
     ok
     notification_id
     read_at
@@ -130,14 +131,15 @@ GRAPHQL;
             ->postJson('/graphql', [
                 'query' => $mutation,
                 'variables' => [
-                    'input' => ['notification_id' => $notification->id],
+                    'user_id' => $user->id,
+                    'notification_id' => $notification->id,
                 ],
             ]);
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.markNotificationRead.ok', true)
-            ->assertJsonPath('data.markNotificationRead.notification_id', $notification->id);
+            ->assertJsonPath('data.markNotificationAsRead.ok', true)
+            ->assertJsonPath('data.markNotificationAsRead.notification_id', $notification->id);
 
         $notification->refresh();
         $this->assertNotNull($notification->read_at);
@@ -181,12 +183,13 @@ GRAPHQL;
 
         $mutation = <<<'GRAPHQL'
 mutation MarkAll {
-  markAllNotificationsRead {
+  markAllNotificationsAsRead(user_id: "%s") {
     ok
     affected_count
   }
 }
 GRAPHQL;
+        $mutation = sprintf($mutation, $user->id);
 
         $response = $this
             ->actingAs($user)
@@ -194,8 +197,8 @@ GRAPHQL;
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.markAllNotificationsRead.ok', true)
-            ->assertJsonPath('data.markAllNotificationsRead.affected_count', 2);
+            ->assertJsonPath('data.markAllNotificationsAsRead.ok', true)
+            ->assertJsonPath('data.markAllNotificationsAsRead.affected_count', 2);
 
         $unreadCount = Notification::query()
             ->where('user_id', $user->id)
@@ -205,4 +208,3 @@ GRAPHQL;
         $this->assertSame(0, $unreadCount);
     }
 }
-

@@ -12,21 +12,21 @@ input UpdateCartItemInput {
 }
 
 extend type Query {
-  clientCart(user_id: ID!): Cart
-    @field(resolver: "App\\GraphQL\\Queries\\CartQueries@clientCart")
-  clientCartById(user_id: ID!, cart_id: ID!): Cart
-    @field(resolver: "App\\GraphQL\\Queries\\CartQueries@clientCartById")
+  getCartByUserId(user_id: ID!): Cart
+    @field(resolver: "App\\GraphQL\\Queries\\CartQueries@getCartByUserId")
+  getCartByUserIdAndCartId(user_id: ID!, cart_id: ID!): Cart
+    @field(resolver: "App\\GraphQL\\Queries\\CartQueries@getCartByUserIdAndCartId")
 }
 
 extend type Mutation {
-  createClientCart(user_id: ID!): Cart!
-    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@createClientCart")
-  addClientCartItem(input: AddCartItemInput!): Cart!
-    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@addClientCartItem")
-  updateClientCartItem(cart_item_id: ID!, input: UpdateCartItemInput!): Cart!
-    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@updateClientCartItem")
-  removeClientCartItem(user_id: ID!, cart_item_id: ID!): Cart!
-    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@removeClientCartItem")
-  clearClientCart(user_id: ID!): Boolean!
-    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@clearClientCart")
+  getCartByUserId(user_id: ID!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@getCartByUserId")
+  addCartItem(input: AddCartItemInput!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@addCartItem")
+  updateCartItem(cart_item_id: ID!, input: UpdateCartItemInput!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@updateCartItem")
+  removeCartItem(user_id: ID!, cart_item_id: ID!): Cart!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@removeCartItem")
+  clearCart(user_id: ID!): Boolean!
+    @field(resolver: "App\\GraphQL\\Mutations\\CartMutations@clearCart")
 }

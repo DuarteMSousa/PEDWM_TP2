@@ -8,9 +8,7 @@ use App\Services\ReviewService\ReviewServiceInterface;
 
 class ReviewMutations
 {
-    public function __construct(private ReviewServiceInterface $reviewService)
-    {
-    }
+    public function __construct(private ReviewServiceInterface $reviewService) {}
 
     public function createReview($_, array $args)
     {

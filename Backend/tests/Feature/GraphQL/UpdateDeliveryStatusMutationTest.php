@@ -61,14 +61,14 @@ class UpdateDeliveryStatusMutationTest extends TestCase
         ]);
 
         $mutation = <<<'GRAPHQL'
-mutation UpdateDeliveryStatus($input: UpdateDeliveryStatusInput!) {
-  updateDeliveryStatus(input: $input) {
-    ok
-    delivery_id
+mutation MarkDeliveryDelivered($delivery_id: ID!, $courier_id: ID!) {
+  markDeliveryDelivered(delivery_id: $delivery_id, courier_id: $courier_id) {
+    id
     order_id
-    delivery_status
-    order_status
-    recorded_at
+    status
+    order {
+      status
+    }
   }
 }
 GRAPHQL;
@@ -78,20 +78,17 @@ GRAPHQL;
             ->postJson('/graphql', [
                 'query' => $mutation,
                 'variables' => [
-                    'input' => [
-                        'delivery_id' => $delivery->id,
-                        'status' => 'DELIVERED',
-                    ],
+                    'delivery_id' => $delivery->id,
+                    'courier_id' => $courierUser->id,
                 ],
             ]);
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.updateDeliveryStatus.ok', true)
-            ->assertJsonPath('data.updateDeliveryStatus.delivery_id', $delivery->id)
-            ->assertJsonPath('data.updateDeliveryStatus.order_id', $order->id)
-            ->assertJsonPath('data.updateDeliveryStatus.delivery_status', 'DELIVERED')
-            ->assertJsonPath('data.updateDeliveryStatus.order_status', 'DELIVERED');
+            ->assertJsonPath('data.markDeliveryDelivered.id', $delivery->id)
+            ->assertJsonPath('data.markDeliveryDelivered.order_id', $order->id)
+            ->assertJsonPath('data.markDeliveryDelivered.status', 'DELIVERED')
+            ->assertJsonPath('data.markDeliveryDelivered.order.status', 'DELIVERED');
 
         $delivery->refresh();
         $order->refresh();
@@ -102,7 +99,7 @@ GRAPHQL;
 
         $this->assertDatabaseHas('order_events', [
             'order_id' => $order->id,
-            'event_type' => 'ORDER_COMPLETED',
+            'event_type' => 'ORDER_DELIVERED',
         ]);
     }
 
@@ -152,10 +149,10 @@ GRAPHQL;
         ]);
 
         $mutation = <<<'GRAPHQL'
-mutation UpdateDeliveryStatus($input: UpdateDeliveryStatusInput!) {
-  updateDeliveryStatus(input: $input) {
-    ok
-    delivery_status
+mutation MarkDeliveryDelivered($delivery_id: ID!, $courier_id: ID!) {
+  markDeliveryDelivered(delivery_id: $delivery_id, courier_id: $courier_id) {
+    id
+    status
   }
 }
 GRAPHQL;
@@ -165,19 +162,17 @@ GRAPHQL;
             ->postJson('/graphql', [
                 'query' => $mutation,
                 'variables' => [
-                    'input' => [
-                        'delivery_id' => $delivery->id,
-                        'status' => 'DELIVERED',
-                    ],
+                    'delivery_id' => $delivery->id,
+                    'courier_id' => $courierUser->id,
                 ],
             ]);
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.updateDeliveryStatus', null);
+            ->assertJsonPath('data.markDeliveryDelivered', null);
 
         $this->assertStringContainsString(
-            'Invalid delivery status transition',
+            'Invalid delivery transition from PENDING to DELIVERED.',
             $response->json('errors.0.message')
         );
 
@@ -188,4 +183,3 @@ GRAPHQL;
         $this->assertSame('READY', $order->status->value);
     }
 }
-

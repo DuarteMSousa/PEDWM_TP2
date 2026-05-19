@@ -6,26 +6,24 @@ use App\Services\ChatService\ChatServiceInterface;
 
 class ChatQueries
 {
-    public function __construct(private ChatServiceInterface $chatService)
-    {
-    }
+    public function __construct(private ChatServiceInterface $chatService) {}
 
-    public function orderChats($_, array $args)
+    public function getChatsByOrderId($_, array $args)
     {
         return $this->chatService->getChatsByOrderId($args['order_id']);
     }
 
-    public function chat($_, array $args)
+    public function getChatById($_, array $args)
     {
         return $this->chatService->getChatById($args['id']);
     }
 
-    public function chatMessages($_, array $args)
+    public function getMessagesByChatId($_, array $args)
     {
         return $this->chatService->getMessagesByChatId($args['chat_id'], $args['page'], $args['per_page']);
     }
 
-    public function chatParticipants($_, array $args)
+    public function getParticipantsByChatId($_, array $args)
     {
         return $this->chatService->getParticipantsByChatId($args['chat_id']);
     }

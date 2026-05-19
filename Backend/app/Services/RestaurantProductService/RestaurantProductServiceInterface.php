@@ -12,6 +12,8 @@ interface RestaurantProductServiceInterface
 
     public function getRestaurantProductsByRestaurantId(string $restaurantId);
 
+    public function getRestaurantCategoriesByRestaurantId(string $restaurantId);
+
     public function getRestaurantMenu(string $restaurantId): array;
 
     public function setRestaurantProductAvailability(string $id, bool $isAvailable): ?RestaurantProduct;

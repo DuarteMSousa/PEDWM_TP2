@@ -7,16 +7,14 @@ use App\Services\NotificationFeedService\NotificationFeedServiceInterface;
 
 class NotificationMutations
 {
-    public function __construct(private NotificationFeedServiceInterface $notificationFeedService)
-    {
-    }
+    public function __construct(private NotificationFeedServiceInterface $notificationFeedService) {}
 
-    public function markNotificationRead($_, array $args): array
+    public function markNotificationAsRead($_, array $args): array
     {
         return $this->notificationFeedService->markNotificationAsRead($args['user_id'], $args['notification_id']);
     }
 
-    public function markAllClientNotificationsRead($_, array $args): array
+    public function markAllNotificationsAsRead($_, array $args): array
     {
         return $this->notificationFeedService->markAllNotificationsAsRead($args['user_id']);
     }

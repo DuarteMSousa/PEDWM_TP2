@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Services\CourierService\CourierServiceInterface;
 use App\Services\OutboxService;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class TrackingService implements TrackingServiceInterface
 {
@@ -18,7 +19,14 @@ class TrackingService implements TrackingServiceInterface
         $order = Order::query()
             ->with(['delivery.courier', 'delivery.positionHistory'])
             ->where('user_id', $userId)
-            ->findOrFail($orderId);
+            ->find($orderId);
+
+        if (! $order) {
+            throw ValidationException::withMessages([
+                'order_id' => 'Not authorized to access this order tracking.',
+            ]);
+        }
+
         $delivery = $order->delivery;
 
         return [

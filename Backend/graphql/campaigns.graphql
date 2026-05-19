@@ -48,16 +48,16 @@ input UpdateCouponInput {
 }
 
 extend type Query {
-  chainPromotions(chain_id: ID!): [Promotion!]!
-    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@chainPromotions")
-  promotion(id: ID!): Promotion
-    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@promotion")
-  chainCoupons(chain_id: ID!): [Coupon!]!
-    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@chainCoupons")
-  coupon(id: ID!): Coupon
-    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@coupon")
-  couponByCode(code: String!): Coupon
-    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@couponByCode")
+  getPromotionsByChainId(chain_id: ID!): [Promotion!]!
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@getPromotionsByChainId")
+  getPromotionById(id: ID!): Promotion
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@getPromotionById")
+  getCouponsByChainId(chain_id: ID!): [Coupon!]!
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@getCouponsByChainId")
+  getCouponById(id: ID!): Coupon
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@getCouponById")
+  getCouponByCode(code: String!): Coupon
+    @field(resolver: "App\\GraphQL\\Queries\\CampaignQueries@getCouponByCode")
 }
 
 extend type Mutation {

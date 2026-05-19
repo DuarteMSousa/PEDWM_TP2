@@ -1,23 +1,23 @@
 extend type Query {
-  availableCouriersCount: Int!
-    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@availableCouriersCount")
-  courierProfile(user_id: ID!): Courier
-    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierProfile")
-  courierActiveDelivery(courier_id: ID!): Delivery
-    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierActiveDelivery")
-  courierDeliveries(courier_id: ID!, statuses: [DeliveryStatus!]): [Delivery!]!
-    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierDeliveries")
-  delivery(id: ID!): Delivery
-    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@delivery")
-  orderDelivery(order_id: ID!): Delivery
-    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@orderDelivery")
-  courierDeliveryOffers(courier_id: ID!): [DeliveryOffer!]!
-    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@courierDeliveryOffers")
+  countAvailableCouriers: Int!
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@countAvailableCouriers")
+  getCourierByUserId(user_id: ID!): Courier
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@getCourierByUserId")
+  getActiveDeliveryByCourierId(courier_id: ID!): Delivery
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@getActiveDeliveryByCourierId")
+  getDeliveriesByCourierId(courier_id: ID!, statuses: [DeliveryStatus!]): [Delivery!]!
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@getDeliveriesByCourierId")
+  getDeliveryById(id: ID!): Delivery
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@getDeliveryById")
+  getDeliveryByOrderId(order_id: ID!): Delivery
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@getDeliveryByOrderId")
+  getDeliveryOffersByCourierId(courier_id: ID!): [DeliveryOffer!]!
+    @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@getDeliveryOffersByCourierId")
 }
 
 extend type Mutation {
-  setCourierStatus(user_id: ID!, status: CourierStatus!): Courier!
-    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@setCourierStatus")
+  updateCourierStatus(user_id: ID!, status: CourierStatus!): Courier!
+    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@updateCourierStatus")
   acceptDeliveryOffer(offer_id: ID!): Delivery!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@acceptDeliveryOffer")
   rejectDeliveryOffer(offer_id: ID!, reason: String): Boolean!

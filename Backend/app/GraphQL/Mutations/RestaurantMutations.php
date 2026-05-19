@@ -14,8 +14,7 @@ class RestaurantMutations
     public function __construct(
         private RestaurantServiceInterface $restaurantService,
         private RestaurantChainServiceInterface $restaurantChainService,
-    ) {
-    }
+    ) {}
 
     public function createRestaurantChain($_, array $args)
     {

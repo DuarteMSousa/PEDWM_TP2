@@ -28,6 +28,11 @@ class RestaurantProductService implements RestaurantProductServiceInterface
             ->get();
     }
 
+    public function getRestaurantCategoriesByRestaurantId(string $restaurantId)
+    {
+        return $this->getRestaurantMenu($restaurantId)['categories'];
+    }
+
     public function getRestaurantMenu(string $restaurantId): array
     {
         $restaurant = Restaurant::query()->with(['chain', 'address'])->findOrFail($restaurantId);

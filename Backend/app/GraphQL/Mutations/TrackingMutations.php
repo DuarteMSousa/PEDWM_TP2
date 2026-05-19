@@ -7,9 +7,7 @@ use App\Services\TrackingService\TrackingServiceInterface;
 
 class TrackingMutations
 {
-    public function __construct(private TrackingServiceInterface $trackingService)
-    {
-    }
+    public function __construct(private TrackingServiceInterface $trackingService) {}
 
     public function updateCourierLocation($_, array $args): array
     {

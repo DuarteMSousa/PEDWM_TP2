@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
+use App\Enums\CampaignMorphType;
 use App\Events\NotificationEventRecorded;
-use App\Enums\PromotionItemParentType;
 use App\Listeners\CreateNotificationFromDomainEvent;
 use App\Models\Coupon;
 use App\Models\Promotion;
@@ -83,8 +83,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Relation::morphMap([
-            PromotionItemParentType::COUPON->value => Coupon::class,
-            PromotionItemParentType::PROMOTION->value => Promotion::class,
+            CampaignMorphType::COUPON->value => Coupon::class,
+            CampaignMorphType::PROMOTION->value => Promotion::class,
         ]);
 
         Event::listen(NotificationEventRecorded::class, CreateNotificationFromDomainEvent::class);

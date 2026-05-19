@@ -4,6 +4,7 @@ namespace Tests\Feature\GraphQL;
 
 use App\Models\Courier;
 use App\Models\Delivery;
+use App\Models\DeliveryOffer;
 use App\Models\Order;
 use App\Models\Restaurant;
 use App\Models\RestaurantChain;
@@ -30,10 +31,9 @@ class CourierOperationsMutationTest extends TestCase
         ]);
 
         $mutation = <<<'GRAPHQL'
-mutation ToggleAvailability($input: ToggleCourierAvailabilityInput!) {
-  toggleCourierAvailability(input: $input) {
-    ok
-    courier_id
+mutation ToggleAvailability($user_id: ID!, $status: CourierStatus!) {
+  updateCourierStatus(user_id: $user_id, status: $status) {
+    user_id
     status
   }
 }
@@ -43,14 +43,13 @@ GRAPHQL;
             ->actingAs($courierUser)
             ->postJson('/graphql', [
                 'query' => $mutation,
-                'variables' => ['input' => ['status' => 'OFFLINE']],
+                'variables' => ['user_id' => $courierUser->id, 'status' => 'OFFLINE'],
             ]);
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.toggleCourierAvailability.ok', true)
-            ->assertJsonPath('data.toggleCourierAvailability.courier_id', $courierUser->id)
-            ->assertJsonPath('data.toggleCourierAvailability.status', 'OFFLINE');
+            ->assertJsonPath('data.updateCourierStatus.user_id', $courierUser->id)
+            ->assertJsonPath('data.updateCourierStatus.status', 'OFFLINE');
 
         $this->assertDatabaseHas('couriers', [
             'user_id' => $courierUser->id,
@@ -103,14 +102,20 @@ GRAPHQL;
             'delivery_fee' => 2.5,
         ]);
 
+        $offer = DeliveryOffer::query()->create([
+            'delivery_id' => $delivery->id,
+            'courier_id' => $courierUser->id,
+            'status' => 'PENDING',
+            'expires_at' => now()->addMinute(),
+        ]);
+
         $mutation = <<<'GRAPHQL'
-mutation AcceptDeliveryJob($input: AcceptDeliveryJobInput!) {
-  acceptDeliveryJob(input: $input) {
-    ok
-    delivery_id
+mutation AcceptDeliveryJob($offer_id: ID!) {
+  acceptDeliveryOffer(offer_id: $offer_id) {
+    id
     order_id
     courier_id
-    delivery_status
+    status
   }
 }
 GRAPHQL;
@@ -119,16 +124,15 @@ GRAPHQL;
             ->actingAs($courierUser)
             ->postJson('/graphql', [
                 'query' => $mutation,
-                'variables' => ['input' => ['delivery_id' => $delivery->id]],
+                'variables' => ['offer_id' => $offer->id],
             ]);
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.acceptDeliveryJob.ok', true)
-            ->assertJsonPath('data.acceptDeliveryJob.delivery_id', $delivery->id)
-            ->assertJsonPath('data.acceptDeliveryJob.order_id', $order->id)
-            ->assertJsonPath('data.acceptDeliveryJob.courier_id', $courierUser->id)
-            ->assertJsonPath('data.acceptDeliveryJob.delivery_status', 'PENDING');
+            ->assertJsonPath('data.acceptDeliveryOffer.id', $delivery->id)
+            ->assertJsonPath('data.acceptDeliveryOffer.order_id', $order->id)
+            ->assertJsonPath('data.acceptDeliveryOffer.courier_id', $courierUser->id)
+            ->assertJsonPath('data.acceptDeliveryOffer.status', 'PENDING');
 
         $this->assertDatabaseHas('deliveries', [
             'id' => $delivery->id,
@@ -147,4 +151,3 @@ GRAPHQL;
         ]);
     }
 }
-

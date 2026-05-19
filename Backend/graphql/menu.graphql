@@ -55,18 +55,18 @@ input ProductOptionInput {
 }
 
 extend type Query {
-  restaurantMenu(restaurant_id: ID!): RestaurantMenu!
-    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@restaurantMenu")
-  restaurantCategories(restaurant_id: ID!): [Category!]!
-    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@restaurantCategories")
-  chainCategories(chain_id: ID!): [Category!]!
-    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@chainCategories")
-  product(id: ID!): Product
-    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@product")
-  restaurantProduct(id: ID!): RestaurantProduct
-    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@restaurantProduct")
-  productOptionGroups(product_id: ID!): [ProductOptionGroup!]!
-    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@productOptionGroups")
+  getRestaurantMenu(restaurant_id: ID!): RestaurantMenu!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@getRestaurantMenu")
+  getRestaurantCategoriesByRestaurantId(restaurant_id: ID!): [Category!]!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@getRestaurantCategoriesByRestaurantId")
+  getCategoriesByChainId(chain_id: ID!): [Category!]!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@getCategoriesByChainId")
+  getProductById(id: ID!): Product
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@getProductById")
+  getRestaurantProductById(id: ID!): RestaurantProduct
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@getRestaurantProductById")
+  getProductOptionGroups(product_id: ID!): [ProductOptionGroup!]!
+    @field(resolver: "App\\GraphQL\\Queries\\MenuQueries@getProductOptionGroups")
 }
 
 extend type Mutation {

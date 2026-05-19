@@ -30,16 +30,16 @@ type UnregisterPushTokenPayload {
 }
 
 extend type Query {
-  clientNotifications(user_id: ID!, unread_only: Boolean = false, limit: Int = 50): [UserNotification!]!
-    @field(resolver: "App\\GraphQL\\Queries\\NotificationQueries@clientNotifications")
+  getNotificationsByUserId(user_id: ID!, unread_only: Boolean = false, limit: Int = 50): [UserNotification!]!
+    @field(resolver: "App\\GraphQL\\Queries\\NotificationQueries@getNotificationsByUserId")
 }
 
 extend type Mutation {
-  markNotificationRead(user_id: ID!, notification_id: ID!): MarkNotificationReadPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@markNotificationRead")
+  markNotificationAsRead(user_id: ID!, notification_id: ID!): MarkNotificationReadPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@markNotificationAsRead")
 
-  markAllClientNotificationsRead(user_id: ID!): MarkAllNotificationsReadPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@markAllClientNotificationsRead")
+  markAllNotificationsAsRead(user_id: ID!): MarkAllNotificationsReadPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@markAllNotificationsAsRead")
 
   registerPushToken(user_id: ID!, input: RegisterPushTokenInput!): RegisterPushTokenPayload!
     @field(resolver: "App\\GraphQL\\Mutations\\NotificationMutations@registerPushToken")

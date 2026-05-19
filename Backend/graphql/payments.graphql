@@ -1,10 +1,10 @@
 extend type Query {
-  payment(id: ID!): Payment
-    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@payment")
-  orderPayment(order_id: ID!): Payment
-    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@orderPayment")
-  paymentEvents(payment_id: ID!): [PaymentEvent!]!
-    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@paymentEvents")
+  getPaymentById(id: ID!): Payment
+    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@getPaymentById")
+  getPaymentByOrderId(order_id: ID!): Payment
+    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@getPaymentByOrderId")
+  getPaymentEvents(payment_id: ID!): [PaymentEvent!]!
+    @field(resolver: "App\\GraphQL\\Queries\\PaymentQueries@getPaymentEvents")
 }
 
 extend type Mutation {

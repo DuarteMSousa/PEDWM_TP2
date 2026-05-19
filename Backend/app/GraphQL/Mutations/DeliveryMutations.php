@@ -10,10 +10,9 @@ class DeliveryMutations
     public function __construct(
         private CourierServiceInterface $courierService,
         private DeliveryServiceInterface $deliveryService,
-    ) {
-    }
+    ) {}
 
-    public function setCourierStatus($_, array $args)
+    public function updateCourierStatus($_, array $args)
     {
         return $this->courierService->updateCourierStatus($args['user_id'], $args['status']);
     }

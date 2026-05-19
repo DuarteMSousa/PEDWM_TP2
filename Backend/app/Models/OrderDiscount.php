@@ -2,9 +2,13 @@
 
 namespace App\Models;
 
+use App\Enums\CampaignMorphType;
+use App\Enums\DiscountTarget;
+use App\Enums\DiscountType;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class OrderDiscount extends Model
 {
@@ -26,9 +30,9 @@ class OrderDiscount extends Model
     {
         return [
             'discount_amount' => 'float',
-            'discount_type' => \App\Enums\DiscountType::class,
-            'discount_target' => \App\Enums\DiscountTarget::class,
-            'origin_type' => \App\Enums\DiscountOriginType::class,
+            'discount_type' => DiscountType::class,
+            'discount_target' => DiscountTarget::class,
+            'origin_type' => CampaignMorphType::class,
         ];
     }
 
@@ -40,5 +44,10 @@ class OrderDiscount extends Model
     public function orderItem(): BelongsTo
     {
         return $this->belongsTo(OrderItem::class);
+    }
+
+    public function origin(): MorphTo
+    {
+        return $this->morphTo();
     }
 }

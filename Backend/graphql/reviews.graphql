@@ -12,11 +12,11 @@ input UpdateReviewInput {
 }
 
 extend type Query {
-  clientReviews(user_id: ID!, page: Int = 1, per_page: Int = 20): [ReviewView!]!
-    @field(resolver: "App\\GraphQL\\Queries\\ReviewQueries@clientReviews")
+  getReviewsByUserId(user_id: ID!, page: Int = 1, per_page: Int = 20): [ReviewView!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ReviewQueries@getReviewsByUserId")
 
-  targetReviews(target_type: ReviewTargetTypeInput!, target_id: ID!, page: Int = 1, per_page: Int = 20): [ReviewView!]!
-    @field(resolver: "App\\GraphQL\\Queries\\ReviewQueries@targetReviews")
+  getReviewsByTarget(target_type: ReviewTargetTypeInput!, target_id: ID!, page: Int = 1, per_page: Int = 20): [ReviewView!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ReviewQueries@getReviewsByTarget")
 }
 
 extend type Mutation {

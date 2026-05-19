@@ -3,7 +3,7 @@
 namespace App\Repositories\PromotionItemRepository;
 
 use App\DTOs\Campaigns\PromotionItem\CreatePromotionItemDTO;
-use App\Enums\PromotionItemParentType;
+use App\Enums\CampaignMorphType;
 use App\Models\PromotionItem;
 
 class PromotionItemRepository implements PromotionItemRepositoryInterface
@@ -13,9 +13,9 @@ class PromotionItemRepository implements PromotionItemRepositoryInterface
         return PromotionItem::find($id);
     }
 
-    public function findByParent(PromotionItemParentType|string $parentType, string $parentId)
+    public function findByParent(CampaignMorphType|string $parentType, string $parentId)
     {
-        $parentType = $parentType instanceof PromotionItemParentType ? $parentType->value : $parentType;
+        $parentType = $parentType instanceof CampaignMorphType ? $parentType->value : $parentType;
 
         return PromotionItem::where('parent_type', $parentType)
             ->where('parent_id', $parentId)
@@ -31,7 +31,7 @@ class PromotionItemRepository implements PromotionItemRepositoryInterface
     {
         $promotionItem = PromotionItem::find($id);
 
-        if (!$promotionItem) {
+        if (! $promotionItem) {
             return false;
         }
 

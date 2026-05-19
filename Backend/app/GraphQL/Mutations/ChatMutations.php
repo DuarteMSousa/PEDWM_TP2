@@ -8,16 +8,14 @@ use App\Services\ChatService\ChatServiceInterface;
 
 class ChatMutations
 {
-    public function __construct(private ChatServiceInterface $chatService)
-    {
-    }
+    public function __construct(private ChatServiceInterface $chatService) {}
 
     public function createOrderChat($_, array $args)
     {
         return $this->chatService->createOrderChat($args['actor_user_id'] ?? 'system', CreateOrderChatDTO::from($args['input']));
     }
 
-    public function sendMessage($_, array $args)
+    public function sendChatMessage($_, array $args)
     {
         return $this->chatService->sendChatMessage($args['input']['sender_user_id'], SendMessageDTO::from($args['input']));
     }

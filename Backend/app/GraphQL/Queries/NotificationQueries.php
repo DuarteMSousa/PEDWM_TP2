@@ -6,11 +6,9 @@ use App\Services\NotificationFeedService\NotificationFeedServiceInterface;
 
 class NotificationQueries
 {
-    public function __construct(private NotificationFeedServiceInterface $notificationFeedService)
-    {
-    }
+    public function __construct(private NotificationFeedServiceInterface $notificationFeedService) {}
 
-    public function clientNotifications($_, array $args)
+    public function getNotificationsByUserId($_, array $args)
     {
         return $this->notificationFeedService->getNotificationsByUserId(
             $args['user_id'],

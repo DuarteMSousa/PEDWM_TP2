@@ -15,10 +15,9 @@ class UserMutations
     public function __construct(
         private UserServiceInterface $userService,
         private UserAddressServiceInterface $userAddressService,
-    ) {
-    }
+    ) {}
 
-    public function create($_, array $args)
+    public function createUser($_, array $args)
     {
         $input = $args['input'];
 
@@ -30,7 +29,7 @@ class UserMutations
         ));
     }
 
-    public function login($_, array $args)
+    public function authenticateByCredentials($_, array $args)
     {
         return $this->userService->authenticateByCredentials(
             $args['email'],
@@ -38,7 +37,7 @@ class UserMutations
         );
     }
 
-    public function update($_, array $args)
+    public function updateUser($_, array $args)
     {
         return $this->userService->updateUser($args['id'], new UpdateUserDTO(
             name: $args['input']['name'] ?? null,
@@ -46,27 +45,27 @@ class UserMutations
         ));
     }
 
-    public function delete($_, array $args): bool
+    public function deleteUser($_, array $args): bool
     {
         return $this->userService->deleteUser($args['id']);
     }
 
-    public function createClientAddress($_, array $args)
+    public function createUserAddress($_, array $args)
     {
         return $this->userAddressService->createUserAddress($args['user_id'], CreateUserAddressDTO::from($args['input']));
     }
 
-    public function updateClientAddress($_, array $args)
+    public function updateUserAddress($_, array $args)
     {
         return $this->userAddressService->updateUserAddress($args['user_id'], $args['address_id'], UpdateUserAddressDTO::from($args['input']));
     }
 
-    public function deleteClientAddress($_, array $args): bool
+    public function deleteUserAddress($_, array $args): bool
     {
         return $this->userAddressService->deleteUserAddress($args['user_id'], $args['address_id']);
     }
 
-    public function setDefaultClientAddress($_, array $args)
+    public function setDefaultUserAddress($_, array $args)
     {
         return $this->userAddressService->setDefaultUserAddress($args['user_id'], $args['address_id']);
     }

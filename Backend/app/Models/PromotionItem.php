@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Enums\PromotionItemParentType;
+use App\Enums\CampaignMorphType;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -21,7 +21,7 @@ class PromotionItem extends Model
     protected function casts(): array
     {
         return [
-            'parent_type' => PromotionItemParentType::class,
+            'parent_type' => CampaignMorphType::class,
         ];
     }
 

@@ -14,8 +14,7 @@ class CampaignMutations
     public function __construct(
         private PromotionServiceInterface $promotionService,
         private CouponServiceInterface $couponService,
-    ) {
-    }
+    ) {}
 
     public function createPromotion($_, array $args)
     {
@@ -34,9 +33,23 @@ class CampaignMutations
         );
     }
 
-    public function deletePromotion($_, array $args): bool { return $this->promotionService->deletePromotion($args['actor_user_id'], $args['id']); }
+    public function deletePromotion($_, array $args): bool
+    {
+        return $this->promotionService->deletePromotion($args['actor_user_id'], $args['id']);
+    }
 
-    public function createCoupon($_, array $args) { return $this->couponService->createCoupon(CreateCouponDTO::from($args['input'])); }
-    public function updateCoupon($_, array $args) { return $this->couponService->updateCoupon($args['id'], UpdateCouponDTO::from($args['input'])); }
-    public function deleteCoupon($_, array $args): bool { return $this->couponService->deleteCoupon($args['id']); }
+    public function createCoupon($_, array $args)
+    {
+        return $this->couponService->createCoupon(CreateCouponDTO::from($args['input']));
+    }
+
+    public function updateCoupon($_, array $args)
+    {
+        return $this->couponService->updateCoupon($args['id'], UpdateCouponDTO::from($args['input']));
+    }
+
+    public function deleteCoupon($_, array $args): bool
+    {
+        return $this->couponService->deleteCoupon($args['id']);
+    }
 }

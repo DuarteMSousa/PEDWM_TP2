@@ -6,16 +6,14 @@ use App\Services\CartService\CartServiceInterface;
 
 class CartQueries
 {
-    public function __construct(private CartServiceInterface $cartService)
-    {
-    }
+    public function __construct(private CartServiceInterface $cartService) {}
 
-    public function clientCart($_, array $args)
+    public function getCartByUserId($_, array $args)
     {
         return $this->cartService->getCartByUserId($args['user_id']);
     }
 
-    public function clientCartById($_, array $args)
+    public function getCartByUserIdAndCartId($_, array $args)
     {
         return $this->cartService->getCartByUserIdAndCartId($args['user_id'], $args['cart_id']);
     }

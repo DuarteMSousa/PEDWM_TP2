@@ -5,7 +5,6 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Promotion extends Model
@@ -42,8 +41,8 @@ class Promotion extends Model
         return $this->morphMany(PromotionItem::class, 'parent');
     }
 
-    public function orderDiscounts(): HasMany
+    public function orderDiscounts(): MorphMany
     {
-        return $this->hasMany(OrderDiscount::class, 'origin_id');
+        return $this->morphMany(OrderDiscount::class, 'origin');
     }
 }

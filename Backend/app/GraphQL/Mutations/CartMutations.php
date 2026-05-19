@@ -8,16 +8,14 @@ use App\Services\CartService\CartServiceInterface;
 
 class CartMutations
 {
-    public function __construct(private CartServiceInterface $cartService)
-    {
-    }
+    public function __construct(private CartServiceInterface $cartService) {}
 
-    public function createClientCart($_, array $args)
+    public function getCartByUserId($_, array $args)
     {
         return $this->cartService->getCartByUserId($args['user_id']);
     }
 
-    public function addClientCartItem($_, array $args)
+    public function addCartItem($_, array $args)
     {
         $input = $args['input'];
 
@@ -28,7 +26,7 @@ class CartMutations
         ));
     }
 
-    public function updateClientCartItem($_, array $args)
+    public function updateCartItem($_, array $args)
     {
         $input = $args['input'];
 
@@ -38,12 +36,12 @@ class CartMutations
         ));
     }
 
-    public function removeClientCartItem($_, array $args)
+    public function removeCartItem($_, array $args)
     {
         return $this->cartService->removeCartItem($args['user_id'], $args['cart_item_id']);
     }
 
-    public function clearClientCart($_, array $args): bool
+    public function clearCart($_, array $args): bool
     {
         return $this->cartService->clearCart($args['user_id']);
     }

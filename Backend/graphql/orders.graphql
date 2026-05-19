@@ -24,37 +24,35 @@ input UpdateOrderItemStatusInput {
 }
 
 extend type Query {
-  clientOrders(user_id: ID!, statuses: [OrderStatus!], page: Int = 1, per_page: Int = 20): [Order!]!
-    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@clientOrders")
-  clientOrder(user_id: ID!, order_id: ID!): Order
-    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@clientOrder")
-  restaurantOrders(restaurant_id: ID!, statuses: [OrderStatus!], page: Int = 1, per_page: Int = 20): [Order!]!
-    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@restaurantOrders")
-  restaurantActiveOrders(restaurant_id: ID!): [Order!]!
-    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@restaurantActiveOrders")
-  restaurantOrder(restaurant_id: ID!, order_id: ID!): Order
-    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@restaurantOrder")
-  orderEvents(order_id: ID!): [OrderEvent!]!
-    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@orderEvents")
+  getClientOrders(user_id: ID!, statuses: [OrderStatus!], page: Int = 1, per_page: Int = 20): [Order!]!
+    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@getClientOrders")
+  getClientOrder(user_id: ID!, order_id: ID!): Order
+    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@getClientOrder")
+  getRestaurantOrders(restaurant_id: ID!, statuses: [OrderStatus!], page: Int = 1, per_page: Int = 20): [Order!]!
+    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@getRestaurantOrders")
+  getActiveRestaurantOrders(restaurant_id: ID!): [Order!]!
+    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@getActiveRestaurantOrders")
+  getRestaurantOrder(restaurant_id: ID!, order_id: ID!): Order
+    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@getRestaurantOrder")
+  getOrderEvents(order_id: ID!): [OrderEvent!]!
+    @field(resolver: "App\\GraphQL\\Queries\\OrderQueries@getOrderEvents")
 }
 
 extend type Mutation {
-  checkout(input: CheckoutInput!): CheckoutPayload!
-    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@checkout")
-  cancelClientOrder(user_id: ID!, order_id: ID!, reason: String): Order!
-    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@cancelClientOrder")
-  acceptRestaurantOrder(input: RestaurantOrderDecisionInput!): Order!
-    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@acceptRestaurantOrder")
-  rejectRestaurantOrder(input: RestaurantOrderDecisionInput!): Order!
-    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@rejectRestaurantOrder")
+  checkoutOrder(input: CheckoutInput!): CheckoutPayload!
+    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@checkoutOrder")
+  cancelOrderByClient(user_id: ID!, order_id: ID!, reason: String): Order!
+    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@cancelOrderByClient")
+  acceptOrderByRestaurant(input: RestaurantOrderDecisionInput!): Order!
+    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@acceptOrderByRestaurant")
+  rejectOrderByRestaurant(input: RestaurantOrderDecisionInput!): Order!
+    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@rejectOrderByRestaurant")
   startPreparingOrder(input: RestaurantOrderDecisionInput!): Order!
     @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@startPreparingOrder")
   updateOrderItemStatus(input: UpdateOrderItemStatusInput!): Order!
     @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@updateOrderItemStatus")
   markOrderReady(input: RestaurantOrderDecisionInput!): Order!
     @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@markOrderReady")
-  cancelRestaurantOrder(input: RestaurantOrderDecisionInput!): Order!
-    @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@cancelRestaurantOrder")
   repeatClientOrder(user_id: ID!, order_id: ID!): Cart!
     @field(resolver: "App\\GraphQL\\Mutations\\OrderMutations@repeatClientOrder")
 }

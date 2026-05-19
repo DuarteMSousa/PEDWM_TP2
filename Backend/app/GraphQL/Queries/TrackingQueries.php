@@ -6,9 +6,7 @@ use App\Services\TrackingService\TrackingServiceInterface;
 
 class TrackingQueries
 {
-    public function __construct(private TrackingServiceInterface $trackingService)
-    {
-    }
+    public function __construct(private TrackingServiceInterface $trackingService) {}
 
     public function orderTracking($_, array $args): array
     {

@@ -33,32 +33,32 @@ input UpdateUserAddressInput {
 }
 
 extend type Query {
-    user(id: ID!): User @field(resolver: "App\\GraphQL\\Queries\\UserQueries@getUserById")
-    clientAddresses(user_id: ID!): [UserAddress!]! @field(resolver: "App\\GraphQL\\Queries\\UserQueries@clientAddresses")
+    getUserById(id: ID!): User @field(resolver: "App\\GraphQL\\Queries\\UserQueries@getUserById")
+    getUserAddressesByUserId(user_id: ID!): [UserAddress!]! @field(resolver: "App\\GraphQL\\Queries\\UserQueries@getUserAddressesByUserId")
 }
 
 extend type Mutation {
-    loginUser(email: String!, password: String!): User!
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@login")
+    authenticateByCredentials(email: String!, password: String!): User!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@authenticateByCredentials")
 
     createUser(input: CreateUserInput!): User! 
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@create")
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@createUser")
 
     updateUser(id: ID!, input: UpdateUserInput!): User! 
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@update")
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@updateUser")
 
     deleteUser(id: ID!): Boolean! 
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@delete")
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@deleteUser")
 
-    createClientAddress(user_id: ID!, input: CreateUserAddressInput!): UserAddress!
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@createClientAddress")
+    createUserAddress(user_id: ID!, input: CreateUserAddressInput!): UserAddress!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@createUserAddress")
 
-    updateClientAddress(user_id: ID!, address_id: ID!, input: UpdateUserAddressInput!): UserAddress!
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@updateClientAddress")
+    updateUserAddress(user_id: ID!, address_id: ID!, input: UpdateUserAddressInput!): UserAddress!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@updateUserAddress")
 
-    deleteClientAddress(user_id: ID!, address_id: ID!): Boolean!
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@deleteClientAddress")
+    deleteUserAddress(user_id: ID!, address_id: ID!): Boolean!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@deleteUserAddress")
 
-    setDefaultClientAddress(user_id: ID!, address_id: ID!): UserAddress!
-        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@setDefaultClientAddress")
+    setDefaultUserAddress(user_id: ID!, address_id: ID!): UserAddress!
+        @field(resolver: "App\\GraphQL\\Mutations\\UserMutations@setDefaultUserAddress")
 }

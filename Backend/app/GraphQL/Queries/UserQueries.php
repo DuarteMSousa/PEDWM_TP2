@@ -10,15 +10,14 @@ class UserQueries
     public function __construct(
         private UserServiceInterface $userService,
         private UserAddressServiceInterface $userAddressService,
-    ) {
-    }
+    ) {}
 
     public function getUserById($_, array $args)
     {
         return $this->userService->getUserById($args['id']);
     }
 
-    public function clientAddresses($_, array $args)
+    public function getUserAddressesByUserId($_, array $args)
     {
         return $this->userAddressService->getUserAddressesByUserId($args['user_id']);
     }

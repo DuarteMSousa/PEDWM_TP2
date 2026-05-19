@@ -2,7 +2,7 @@
 
 namespace App\Enums;
 
-enum DiscountOriginType: string
+enum CampaignMorphType: string
 {
     case PROMOTION = 'PROMOTION';
     case COUPON = 'COUPON';

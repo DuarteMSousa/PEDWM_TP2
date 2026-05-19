@@ -87,23 +87,22 @@ class OrderTrackingQueryTest extends TestCase
         ]);
 
         $query = <<<'GRAPHQL'
-query OrderTracking($orderId: ID!) {
-  orderTracking(order_id: $orderId) {
-    order_id
-    order_status
-    delivery_id
-    delivery_status
-    courier_id
-    latest_position {
-      lat
-      lng
+query OrderTracking($userId: ID!, $orderId: ID!) {
+  orderTracking(user_id: $userId, order_id: $orderId) {
+    order {
+      id
+      status
     }
-    positions {
-      lat
-      lng
+    delivery {
+      id
+      status
     }
-    events {
-      event_type
+    courier {
+      user_id
+    }
+    last_position {
+      latitude
+      longitude
     }
   }
 }
@@ -113,20 +112,17 @@ GRAPHQL;
             ->actingAs($customer)
             ->postJson('/graphql', [
                 'query' => $query,
-                'variables' => ['orderId' => $order->id],
+                'variables' => ['userId' => $customer->id, 'orderId' => $order->id],
             ]);
 
         $response
             ->assertOk()
-            ->assertJsonPath('data.orderTracking.order_id', $order->id)
-            ->assertJsonPath('data.orderTracking.order_status', 'OUT_FOR_DELIVERY')
-            ->assertJsonPath('data.orderTracking.delivery_id', $delivery->id)
-            ->assertJsonPath('data.orderTracking.delivery_status', 'IN_TRANSIT')
-            ->assertJsonPath('data.orderTracking.courier_id', $courierUser->id)
-            ->assertJsonPath('data.orderTracking.latest_position.lat', 41.1585)
-            ->assertJsonPath('data.orderTracking.events.0.event_type', 'ORDER_OUT_FOR_DELIVERY');
-
-        $this->assertCount(2, $response->json('data.orderTracking.positions'));
+            ->assertJsonPath('data.orderTracking.order.id', $order->id)
+            ->assertJsonPath('data.orderTracking.order.status', 'OUT_FOR_DELIVERY')
+            ->assertJsonPath('data.orderTracking.delivery.id', $delivery->id)
+            ->assertJsonPath('data.orderTracking.delivery.status', 'IN_TRANSIT')
+            ->assertJsonPath('data.orderTracking.courier.user_id', $courierUser->id)
+            ->assertJsonPath('data.orderTracking.last_position.latitude', 41.1585);
     }
 
     public function test_user_cannot_query_tracking_of_other_customer_order(): void
@@ -182,9 +178,11 @@ GRAPHQL;
         ]);
 
         $query = <<<'GRAPHQL'
-query OrderTracking($orderId: ID!) {
-  orderTracking(order_id: $orderId) {
-    order_id
+query OrderTracking($userId: ID!, $orderId: ID!) {
+  orderTracking(user_id: $userId, order_id: $orderId) {
+    order {
+      id
+    }
   }
 }
 GRAPHQL;
@@ -193,7 +191,7 @@ GRAPHQL;
             ->actingAs($otherCustomer)
             ->postJson('/graphql', [
                 'query' => $query,
-                'variables' => ['orderId' => $order->id],
+                'variables' => ['userId' => $otherCustomer->id, 'orderId' => $order->id],
             ]);
 
         $response
@@ -206,4 +204,3 @@ GRAPHQL;
         );
     }
 }
-

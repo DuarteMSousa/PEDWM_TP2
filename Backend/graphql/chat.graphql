@@ -11,19 +11,19 @@ input SendMessageInput {
 }
 
 extend type Query {
-  orderChats(order_id: ID!): [Chat!]!
-    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@orderChats")
-  chat(id: ID!): Chat
-    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@chat")
-  chatMessages(chat_id: ID!, page: Int = 1, per_page: Int = 50): [Message!]!
-    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@chatMessages")
-  chatParticipants(chat_id: ID!): [ChatParticipant!]!
-    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@chatParticipants")
+  getChatsByOrderId(order_id: ID!): [Chat!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@getChatsByOrderId")
+  getChatById(id: ID!): Chat
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@getChatById")
+  getMessagesByChatId(chat_id: ID!, page: Int = 1, per_page: Int = 50): [Message!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@getMessagesByChatId")
+  getParticipantsByChatId(chat_id: ID!): [ChatParticipant!]!
+    @field(resolver: "App\\GraphQL\\Queries\\ChatQueries@getParticipantsByChatId")
 }
 
 extend type Mutation {
   createOrderChat(input: CreateOrderChatInput!): Chat!
     @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@createOrderChat")
-  sendMessage(input: SendMessageInput!): Message!
-    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@sendMessage")
+  sendChatMessage(input: SendMessageInput!): Message!
+    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@sendChatMessage")
 }

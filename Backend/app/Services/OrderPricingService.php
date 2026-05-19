@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Domain\Geo\GeoMath;
 use App\Domain\Pricing\PricingCalculator;
-use App\Enums\DiscountOriginType;
+use App\Enums\CampaignMorphType;
 use App\Enums\DiscountTarget;
 use App\Enums\DiscountType;
 use App\Models\Cart;
@@ -18,7 +18,9 @@ use Illuminate\Validation\ValidationException;
 class OrderPricingService
 {
     private const DELIVERY_BASE_FEE = 1.50;
+
     private const DELIVERY_FEE_PER_KM = 0.45;
+
     private const DELIVERY_MAX_FEE = 6.00;
 
     /**
@@ -29,10 +31,11 @@ class OrderPricingService
         Restaurant $restaurant,
         UserAddress|OrderAddress|string|null $address = null,
         ?string $couponCode = null
-    ): array
-    {
-        if (! $address instanceof UserAddress && ! $address instanceof OrderAddress) {
+    ): array {
+        if (is_string($address) && $couponCode === null) {
             $couponCode = $address;
+            $address = null;
+        } elseif (! $address instanceof UserAddress && ! $address instanceof OrderAddress) {
             $address = null;
         }
 
@@ -125,7 +128,7 @@ class OrderPricingService
                 'discount_amount' => $amount,
                 'discount_type' => $type->value,
                 'discount_target' => $target->value,
-                'origin_type' => DiscountOriginType::PROMOTION->value,
+                'origin_type' => CampaignMorphType::PROMOTION->value,
                 'origin_id' => $promotion->id,
                 'cart_item_id' => null,
             ]];
@@ -150,7 +153,7 @@ class OrderPricingService
                     'discount_amount' => $amount,
                     'discount_type' => $type->value,
                     'discount_target' => $target->value,
-                    'origin_type' => DiscountOriginType::PROMOTION->value,
+                    'origin_type' => CampaignMorphType::PROMOTION->value,
                     'origin_id' => $promotion->id,
                     'cart_item_id' => $cartItem->id,
                 ];
@@ -200,7 +203,7 @@ class OrderPricingService
             'discount_amount' => $amount,
             'discount_type' => $type->value,
             'discount_target' => $target->value,
-            'origin_type' => DiscountOriginType::COUPON->value,
+            'origin_type' => CampaignMorphType::COUPON->value,
             'origin_id' => $coupon->id,
             'cart_item_id' => null,
         ];
@@ -227,5 +230,4 @@ class OrderPricingService
             return 0.0;
         });
     }
-
 }

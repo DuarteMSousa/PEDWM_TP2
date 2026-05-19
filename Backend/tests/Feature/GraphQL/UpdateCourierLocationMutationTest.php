@@ -72,7 +72,6 @@ mutation UpdateCourierLocation($input: UpdateCourierLocationInput!) {
   updateCourierLocation(input: $input) {
     ok
     delivery_id
-    order_id
     recorded_at
   }
 }
@@ -80,9 +79,10 @@ GRAPHQL;
 
         $variables = [
             'input' => [
+                'courier_id' => $courierUser->id,
                 'delivery_id' => $delivery->id,
-                'lat' => 41.1579,
-                'lng' => -8.6291,
+                'latitude' => 41.1579,
+                'longitude' => -8.6291,
                 'heading' => 120.5,
                 'speed' => 9.2,
                 'accuracy' => 6.1,
@@ -100,8 +100,7 @@ GRAPHQL;
         $response
             ->assertOk()
             ->assertJsonPath('data.updateCourierLocation.ok', true)
-            ->assertJsonPath('data.updateCourierLocation.delivery_id', $delivery->id)
-            ->assertJsonPath('data.updateCourierLocation.order_id', $order->id);
+            ->assertJsonPath('data.updateCourierLocation.delivery_id', $delivery->id);
 
         $this->assertDatabaseHas('couriers', [
             'user_id' => $courierUser->id,
@@ -118,4 +117,3 @@ GRAPHQL;
         Event::assertDispatched(CourierPositionUpdated::class);
     }
 }
-
