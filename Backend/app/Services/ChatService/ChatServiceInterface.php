@@ -2,11 +2,9 @@
 
 namespace App\Services\ChatService;
 
-use App\DTOs\Chat\AddChatParticipantDTO;
 use App\DTOs\Chat\CreateOrderChatDTO;
 use App\DTOs\Chat\SendMessageDTO;
 use App\Models\Chat;
-use App\Models\ChatParticipant;
 use App\Models\Message;
 
 interface ChatServiceInterface
@@ -21,13 +19,5 @@ interface ChatServiceInterface
 
     public function createOrderChat(string $actorUserId, CreateOrderChatDTO $data): Chat;
 
-    public function closeChat(string $chatId): Chat;
-
-    public function addChatParticipant(string $actorUserId, AddChatParticipantDTO $data): ChatParticipant;
-
-    public function removeChatParticipant(string $participantId): bool;
-
     public function sendChatMessage(string $senderUserId, SendMessageDTO $data): Message;
-
-    public function markChatAsRead(string $chatId, string $userId): ChatParticipant;
 }

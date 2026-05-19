@@ -22,6 +22,4 @@ interface RestaurantServiceInterface
     public function getRestaurantsByChainId(string $chainId);
 
     public function getRestaurantByLocalManagerUserId(string $userId): ?Restaurant;
-
-    public function getRestaurantByOperatorUserId(string $userId): ?Restaurant;
 }

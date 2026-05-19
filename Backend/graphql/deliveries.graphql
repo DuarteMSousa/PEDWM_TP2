@@ -1,8 +1,3 @@
-input OfferDeliveryInput {
-  delivery_id: ID!
-  courier_id: ID!
-}
-
 extend type Query {
   availableCouriersCount: Int!
     @field(resolver: "App\\GraphQL\\Queries\\DeliveryQueries@availableCouriersCount")
@@ -23,10 +18,6 @@ extend type Query {
 extend type Mutation {
   setCourierStatus(user_id: ID!, status: CourierStatus!): Courier!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@setCourierStatus")
-  createDeliveryForOrder(order_id: ID!, delivery_fee: Float = 0): Delivery!
-    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@createDeliveryForOrder")
-  offerDeliveryToCourier(input: OfferDeliveryInput!): DeliveryOffer!
-    @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@offerDeliveryToCourier")
   acceptDeliveryOffer(offer_id: ID!): Delivery!
     @field(resolver: "App\\GraphQL\\Mutations\\DeliveryMutations@acceptDeliveryOffer")
   rejectDeliveryOffer(offer_id: ID!, reason: String): Boolean!

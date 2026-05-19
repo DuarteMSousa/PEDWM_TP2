@@ -2,7 +2,6 @@
 
 namespace App\GraphQL\Mutations;
 
-use App\DTOs\Payment\CreatePaymentDTO;
 use App\Services\PaymentService\PaymentServiceInterface;
 
 class PaymentMutations
@@ -11,17 +10,7 @@ class PaymentMutations
     {
     }
 
-    public function createPayment($_, array $args)
-    {
-        return $this->paymentService->createPayment(CreatePaymentDTO::from($args['input']));
-    }
-
     public function confirmPayment($_, array $args)
-    {
-        return $this->paymentService->confirmPayment($args['payment_id'], $args['transaction_id'] ?? null);
-    }
-
-    public function payPayment($_, array $args)
     {
         return $this->paymentService->confirmPayment($args['payment_id'], $args['transaction_id'] ?? null);
     }

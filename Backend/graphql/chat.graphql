@@ -4,12 +4,6 @@ input CreateOrderChatInput {
   participant_user_ids: [ID!]!
 }
 
-input AddChatParticipantInput {
-  chat_id: ID!
-  user_id: ID!
-  user_type: UserType!
-}
-
 input SendMessageInput {
   chat_id: ID!
   sender_user_id: ID!
@@ -30,14 +24,6 @@ extend type Query {
 extend type Mutation {
   createOrderChat(input: CreateOrderChatInput!): Chat!
     @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@createOrderChat")
-  closeChat(chat_id: ID!): Chat!
-    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@closeChat")
-  addChatParticipant(input: AddChatParticipantInput!): ChatParticipant!
-    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@addChatParticipant")
-  removeChatParticipant(participant_id: ID!): Boolean!
-    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@removeChatParticipant")
   sendMessage(input: SendMessageInput!): Message!
     @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@sendMessage")
-  markChatAsRead(chat_id: ID!, user_id: ID!): ChatParticipant!
-    @field(resolver: "App\\GraphQL\\Mutations\\ChatMutations@markChatAsRead")
 }

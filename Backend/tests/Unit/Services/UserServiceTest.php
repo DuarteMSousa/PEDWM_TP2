@@ -27,7 +27,7 @@ class UserServiceTest extends TestCase
             ->with('user-1')
             ->andReturn(['id' => 'user-1']);
 
-        $this->assertSame(['id' => 'user-1'], (new UserService($repository))->getById('user-1'));
+        $this->assertSame(['id' => 'user-1'], (new UserService($repository))->getUserById('user-1'));
     }
 
     public function test_create_user_hashes_password_before_delegating_to_repository(): void

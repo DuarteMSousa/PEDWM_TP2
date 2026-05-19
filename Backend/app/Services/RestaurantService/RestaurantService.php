@@ -6,7 +6,6 @@ use App\Aspects\Transactional;
 use App\DTOs\Restaurant\CreateRestaurantDTO;
 use App\DTOs\Restaurant\SearchRestaurantsDTO;
 use App\DTOs\Restaurant\UpdateRestaurantDTO;
-use App\Models\ChainManager;
 use App\Models\LocalManager;
 use App\Models\Restaurant;
 use App\Models\RestaurantAddress;
@@ -101,25 +100,6 @@ class RestaurantService implements RestaurantServiceInterface
         $manager = LocalManager::query()->where('user_id', $userId)->first();
 
         return $manager?->restaurant()->with($this->with)->first();
-    }
-
-    public function getRestaurantByOperatorUserId(string $userId): ?Restaurant
-    {
-        $localRestaurant = $this->getRestaurantByLocalManagerUserId($userId);
-        if ($localRestaurant) {
-            return $localRestaurant;
-        }
-
-        $chainId = ChainManager::query()->where('user_id', $userId)->value('chain_id');
-        if (! $chainId) {
-            return null;
-        }
-
-        return Restaurant::query()
-            ->with($this->with)
-            ->where('chain_id', $chainId)
-            ->orderBy('name')
-            ->first();
     }
 
     private function validateInput(array $input, bool $isUpdate = false): void

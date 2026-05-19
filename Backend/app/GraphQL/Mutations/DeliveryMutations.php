@@ -18,16 +18,6 @@ class DeliveryMutations
         return $this->courierService->updateCourierStatus($args['user_id'], $args['status']);
     }
 
-    public function createDeliveryForOrder($_, array $args)
-    {
-        return $this->deliveryService->createDeliveryForOrder($args['order_id'], (float) ($args['delivery_fee'] ?? 0));
-    }
-
-    public function offerDeliveryToCourier($_, array $args)
-    {
-        return $this->deliveryService->createDeliveryOfferForCourier($args['input']['delivery_id'], $args['input']['courier_id']);
-    }
-
     public function acceptDeliveryOffer($_, array $args)
     {
         return $this->deliveryService->acceptDeliveryOffer($args['offer_id']);

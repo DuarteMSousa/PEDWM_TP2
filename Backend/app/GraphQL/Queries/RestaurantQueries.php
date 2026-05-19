@@ -16,16 +16,8 @@ class RestaurantQueries
 
     public function restaurants($_, array $args)
     {
-        // Normaliza payloads em que o cliente envia null para campos opcionais
-        // (caso comum em GraphQL): preserva os defaults declarados no DTO.
-        $rawInput = $args['input'] ?? [];
-        $sanitizedInput = array_filter(
-            $rawInput,
-            static fn ($value) => $value !== null,
-        );
-
         return $this->restaurantService->searchRestaurants(
-            SearchRestaurantsDTO::from($sanitizedInput),
+            SearchRestaurantsDTO::from($args['input'] ?? []),
         );
     }
 
@@ -52,10 +44,5 @@ class RestaurantQueries
     public function localManagerRestaurant($_, array $args)
     {
         return $this->restaurantService->getRestaurantByLocalManagerUserId($args['user_id']);
-    }
-
-    public function operatorRestaurant($_, array $args)
-    {
-        return $this->restaurantService->getRestaurantByOperatorUserId($args['user_id']);
     }
 }

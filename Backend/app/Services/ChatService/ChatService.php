@@ -3,7 +3,6 @@
 namespace App\Services\ChatService;
 
 use App\Aspects\Transactional;
-use App\DTOs\Chat\AddChatParticipantDTO;
 use App\DTOs\Chat\CreateOrderChatDTO;
 use App\DTOs\Chat\SendMessageDTO;
 use App\Enums\OrderStatus;
@@ -67,32 +66,6 @@ class ChatService implements ChatServiceInterface
     }
 
     #[Transactional]
-    public function closeChat(string $chatId): Chat
-    {
-        $chat = Chat::query()->findOrFail($chatId);
-        $chat->update(['closed_at' => now()]);
-
-        return $chat->refresh()->load(['participants', 'messages']);
-    }
-
-    #[Transactional]
-    public function addChatParticipant(string $actorUserId, AddChatParticipantDTO $data): ChatParticipant
-    {
-        return ChatParticipant::query()->create([
-            'chat_id' => $data->chat_id,
-            'user_id' => $data->user_id,
-            'user_type' => $data->user_type,
-            'joined_at' => now(),
-        ]);
-    }
-
-    #[Transactional]
-    public function removeChatParticipant(string $participantId): bool
-    {
-        return (bool) ChatParticipant::query()->whereKey($participantId)->delete();
-    }
-
-    #[Transactional]
     public function sendChatMessage(string $senderUserId, SendMessageDTO $data): Message
     {
         $chat = Chat::query()->with('order')->findOrFail($data->chat_id);
@@ -120,17 +93,5 @@ class ChatService implements ChatServiceInterface
             'content' => $data->content,
             'timestamp' => now(),
         ]);
-    }
-
-    #[Transactional]
-    public function markChatAsRead(string $chatId, string $userId): ChatParticipant
-    {
-        $participant = ChatParticipant::query()
-            ->where('chat_id', $chatId)
-            ->where('user_id', $userId)
-            ->firstOrFail();
-        $participant->update(['last_read_at' => now()]);
-
-        return $participant;
     }
 }
