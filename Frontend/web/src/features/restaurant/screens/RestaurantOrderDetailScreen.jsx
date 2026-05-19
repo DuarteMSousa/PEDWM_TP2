@@ -10,7 +10,9 @@ import {
 } from '../../../services/restaurantOpsService'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { DeliveryLeafletMap } from '../../../components/common/DeliveryLeafletMap'
+import { useAutoToast } from '../../../components/common/ToastProvider'
 import { subscribeToOrderTrackingTopic } from '../../../services/realtime/topicsRealtime'
+import { formatEventType } from '../../../utils/orderEventLabel'
 
 function statusLabel(status) {
   if (status === 'PENDING') return 'Pendente'
@@ -30,16 +32,24 @@ function statusTone(status) {
   return 'off'
 }
 
+function paymentStatusLabel(status) {
+  if (status === 'PENDING') return 'Pendente'
+  if (status === 'COMPLETED') return 'Pago'
+  if (status === 'CANCELLED') return 'Reembolsado'
+  if (status === 'FAILED') return 'Falhou'
+  return status ?? '-'
+}
+
+function paymentTone(status) {
+  if (status === 'COMPLETED') return 'done'
+  if (status === 'PENDING') return 'pending'
+  if (status === 'CANCELLED' || status === 'FAILED') return 'off'
+  return 'off'
+}
+
 function formatTime(value) {
   if (!value) return '-'
   return new Date(value).toLocaleString()
-}
-
-function formatEventType(eventType) {
-  return String(eventType ?? '')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/(^\w|\s\w)/g, (match) => match.toUpperCase())
 }
 
 export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelectOrder, onNavigate }) {
@@ -53,6 +63,8 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [courierPosition, setCourierPosition] = useState(null)
+  useAutoToast({ message: infoText, kind: 'success' })
+  useAutoToast({ message: errorText, kind: 'error' })
 
   const loadDetail = useCallback(async () => {
     if (!selectedOrderId) {
@@ -111,8 +123,10 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
       if (message) setInfoText(message)
       setErrorText('')
       await loadDetail()
+      return true
     } catch (error) {
       setErrorText(error.message)
+      return false
     } finally {
       setBusy(false)
     }
@@ -182,7 +196,6 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
         <article className="rb-table-card">
           <div className="rb-table-head">
             <h3>Items</h3>
-            <strong>{Number(order.total).toFixed(2)} EUR</strong>
           </div>
           <div className="rb-prep-lines">
             {(order.items ?? []).map((item) => (
@@ -246,13 +259,28 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
           <div className="rb-detail-row">
             <span>Pagamento</span>
             <strong>
-              {order.payment ? `${order.payment.method} - ${order.payment.status}` : '-'}
+              {order.payment ? (
+                <>
+                  {order.payment.method}{' '}
+                  <span className={`rb-chip ${paymentTone(order.payment.status)}`}>
+                    {paymentStatusLabel(order.payment.status)}
+                  </span>
+                </>
+              ) : (
+                '-'
+              )}
             </strong>
           </div>
           {order.payment?.paid_at ? (
             <div className="rb-detail-row">
               <span>Pago em</span>
               <strong>{formatTime(order.payment.paid_at)}</strong>
+            </div>
+          ) : null}
+          {order.payment?.status === 'CANCELLED' && order.payment?.paid_at ? (
+            <div className="rb-detail-row" style={{ color: '#7c2d12' }}>
+              <span>Reembolso</span>
+              <strong>Pagamento cancelado apos cobranca. Reembolso emitido.</strong>
             </div>
           ) : null}
           {order.delivery ? (
@@ -346,9 +374,6 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
       <article className="rb-table-card">
         <div className="rb-table-head">
           <h3>Timeline de eventos</h3>
-          <button type="button" className="rb-btn-outline" onClick={loadDetail} disabled={loading}>
-            {loading ? 'A atualizar...' : 'Atualizar'}
-          </button>
         </div>
         {(order.events ?? []).length === 0 ? (
           <p className="rb-event-empty">Sem eventos registados.</p>
@@ -424,7 +449,7 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
             Marcar pronto
           </button>
         ) : null}
-        {['CONFIRMED', 'PREPARING'].includes(order.status) ? (
+        {['CONFIRMED', 'PREPARING', 'READY'].includes(order.status) ? (
           <button
             type="button"
             className="rb-btn-outline"

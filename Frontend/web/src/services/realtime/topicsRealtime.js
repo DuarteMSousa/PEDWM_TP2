@@ -1,9 +1,13 @@
 import { getEchoClient } from './echoClient'
 
-export function subscribeToChatTopic({ chatId, authToken, devUserId, onMessage, onError }) {
+export function subscribeToChatTopic({ chatId, authToken, devUserId, onMessage, onError, onSubscribed }) {
   const echo = getEchoClient({ authToken, devUserId })
   const channelName = `chat.${chatId}`
   const channel = echo.private(channelName)
+
+  if (onSubscribed && typeof channel.subscribed === 'function') {
+    channel.subscribed(() => onSubscribed())
+  }
 
   channel.listen('.CHAT_MESSAGE_SENT', (payload) => {
     if (onMessage) onMessage(payload)
@@ -22,10 +26,15 @@ export function subscribeToUserNotificationsTopic({
   devUserId,
   onNotification,
   onError,
+  onSubscribed,
 }) {
   const echo = getEchoClient({ authToken, devUserId })
   const channelName = `user.${userId}.notifications`
   const channel = echo.private(channelName)
+
+  if (onSubscribed && typeof channel.subscribed === 'function') {
+    channel.subscribed(() => onSubscribed())
+  }
 
   channel.listen('.USER_NOTIFICATION_CREATED', (payload) => {
     if (onNotification) onNotification(payload)
@@ -44,10 +53,15 @@ export function subscribeToRestaurantOrdersTopic({
   devUserId,
   onEvent,
   onError,
+  onSubscribed,
 }) {
   const echo = getEchoClient({ authToken, devUserId })
   const channelName = `restaurant.${restaurantId}.orders`
   const channel = echo.private(channelName)
+
+  if (onSubscribed && typeof channel.subscribed === 'function') {
+    channel.subscribed(() => onSubscribed())
+  }
 
   const eventNames = [
     'ORDER_CREATED',
@@ -81,10 +95,15 @@ export function subscribeToOrderTrackingTopic({
   devUserId,
   onPositionUpdated,
   onError,
+  onSubscribed,
 }) {
   const echo = getEchoClient({ authToken, devUserId })
   const channelName = `order.${orderId}.tracking`
   const channel = echo.private(channelName)
+
+  if (onSubscribed && typeof channel.subscribed === 'function') {
+    channel.subscribed(() => onSubscribed())
+  }
 
   channel.listen('.COURIER_POSITION_UPDATED', (payload) => {
     if (onPositionUpdated) onPositionUpdated(payload)

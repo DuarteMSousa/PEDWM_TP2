@@ -23,18 +23,17 @@ export function RestaurantOrdersHistoryScreen({ session, onSelectOrder, onNaviga
   const filter = STATUS_FILTERS[activeFilter]
 
   const load = useCallback(
-    async ({ append = false } = {}) => {
+    async ({ append = false, page: requestedPage = 1 } = {}) => {
       try {
         setLoading(true)
-        const targetPage = append ? page + 1 : 1
         const data = await fetchRestaurantOrdersHistory({
           session,
           statuses: filter.value,
-          page: targetPage,
+          page: requestedPage,
           perPage: PAGE_SIZE,
         })
         setOrders((current) => (append ? [...current, ...data] : data))
-        setPage(targetPage)
+        setPage(requestedPage)
         setHasMore(data.length === PAGE_SIZE)
         setErrorText('')
       } catch (error) {
@@ -43,15 +42,14 @@ export function RestaurantOrdersHistoryScreen({ session, onSelectOrder, onNaviga
         setLoading(false)
       }
     },
-    [session, filter.value, page],
+    [session, filter.value],
   )
 
   useEffect(() => {
     setPage(1)
     setHasMore(true)
-    queueMicrotask(() => load({ append: false }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, activeFilter])
+    queueMicrotask(() => load({ append: false, page: 1 }))
+  }, [session, activeFilter, load])
 
   function handleOpenDetail(orderId) {
     if (onSelectOrder) onSelectOrder(orderId)
@@ -69,10 +67,10 @@ export function RestaurantOrdersHistoryScreen({ session, onSelectOrder, onNaviga
     <section className="rb-page">
       <header className="rb-page-head rb-page-head-row">
         <div>
-          <h2>Histórico de pedidos</h2>
+          <h2>Historico de pedidos</h2>
           <p>Inclui pedidos entregues e cancelados</p>
         </div>
-        <button type="button" className="rb-btn-outline" onClick={() => load({ append: false })}>
+        <button type="button" className="rb-btn-outline" onClick={() => load({ append: false, page: 1 })}>
           {loading ? 'A carregar...' : 'Atualizar'}
         </button>
       </header>
@@ -129,7 +127,7 @@ export function RestaurantOrdersHistoryScreen({ session, onSelectOrder, onNaviga
               <tr>
                 <td colSpan={7}>
                   <div className="rb-empty-state">
-                    <strong>Sem pedidos no histórico.</strong>
+                    <strong>Sem pedidos no historico.</strong>
                   </div>
                 </td>
               </tr>
@@ -165,7 +163,7 @@ export function RestaurantOrdersHistoryScreen({ session, onSelectOrder, onNaviga
             <button
               type="button"
               className="rb-btn-outline"
-              onClick={() => load({ append: true })}
+              onClick={() => load({ append: true, page: page + 1 })}
               disabled={loading}
             >
               {loading ? 'A carregar...' : 'Carregar mais'}

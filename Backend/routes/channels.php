@@ -1,9 +1,12 @@
 <?php
 
 use App\Enums\UserType;
+use App\Models\ChainManager;
 use App\Models\Delivery;
 use App\Models\ChatParticipant;
+use App\Models\LocalManager;
 use App\Models\Order;
+use App\Models\Restaurant;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
 
@@ -113,4 +116,34 @@ Broadcast::channel('user.{userId}.notifications', function (?User $user, string 
     }
 
     return $user->id === $userId;
+});
+
+Broadcast::channel('restaurant.{restaurantId}.orders', function (?User $user, string $restaurantId): bool {
+    $user = resolveBroadcastUser($user);
+
+    if (! $user) {
+        return false;
+    }
+
+    if ($user->user_type === UserType::LOCAL_MANAGER) {
+        return LocalManager::query()
+            ->where('user_id', $user->id)
+            ->where('restaurant_id', $restaurantId)
+            ->exists();
+    }
+
+    if ($user->user_type === UserType::CHAIN_MANAGER) {
+        $chainId = Restaurant::query()->whereKey($restaurantId)->value('chain_id');
+
+        if (! $chainId) {
+            return false;
+        }
+
+        return ChainManager::query()
+            ->where('user_id', $user->id)
+            ->where('chain_id', $chainId)
+            ->exists();
+    }
+
+    return false;
 });

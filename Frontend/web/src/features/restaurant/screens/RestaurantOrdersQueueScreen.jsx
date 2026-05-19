@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   acceptRestaurantOrder,
   cancelRestaurantOrder,
@@ -6,6 +6,7 @@ import {
   rejectRestaurantOrder,
 } from '../../../services/restaurantOpsService'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
+import { useAutoToast } from '../../../components/common/ToastProvider'
 import { subscribeToRestaurantOrdersTopic } from '../../../services/realtime/topicsRealtime'
 
 function statusLabel(status) {
@@ -24,29 +25,6 @@ function statusTone(status) {
   return 'off'
 }
 
-function playBeep(ref) {
-  try {
-    if (typeof window === 'undefined') return
-    const AudioContext = window.AudioContext || window.webkitAudioContext
-    if (!AudioContext) return
-    if (!ref.current) {
-      ref.current = new AudioContext()
-    }
-    const ctx = ref.current
-    const oscillator = ctx.createOscillator()
-    const gain = ctx.createGain()
-    oscillator.connect(gain)
-    gain.connect(ctx.destination)
-    oscillator.frequency.value = 880
-    gain.gain.setValueAtTime(0.2, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
-    oscillator.start()
-    oscillator.stop(ctx.currentTime + 0.35)
-  } catch {
-    // ignore
-  }
-}
-
 export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -59,23 +37,8 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
   const [cancelReason, setCancelReason] = useState('')
   const [dialogLoading, setDialogLoading] = useState(false)
   const [realtimeState, setRealtimeState] = useState('offline')
-  const beepRef = useRef(null)
-  const [soundEnabled, setSoundEnabled] = useState(() => {
-    try {
-      const stored = window.localStorage.getItem('fastbite_sound_enabled')
-      return stored === null ? true : stored === 'true'
-    } catch {
-      return true
-    }
-  })
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('fastbite_sound_enabled', String(soundEnabled))
-    } catch {
-      // ignore
-    }
-  }, [soundEnabled])
+  useAutoToast({ message: infoText, kind: 'success' })
+  useAutoToast({ message: errorText, kind: 'error' })
 
   const loadOrders = useCallback(async () => {
     try {
@@ -96,12 +59,14 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
     })
   }, [loadOrders])
 
-  // Polling de fallback apenas enquanto o socket nao esta live.
+  // Polling de fallback apenas enquanto o socket nao esta live. Bind ao boolean
+  // para evitar reset do interval em cada flutuacao (connecting -> error -> live).
+  const isRealtimeLive = realtimeState === 'live'
   useEffect(() => {
-    if (realtimeState === 'live') return undefined
+    if (isRealtimeLive) return undefined
     const timer = setInterval(loadOrders, 30000)
     return () => clearInterval(timer)
-  }, [realtimeState, loadOrders])
+  }, [isRealtimeLive, loadOrders])
 
   useEffect(() => {
     if (!session?.restaurantId) {
@@ -115,12 +80,10 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
         restaurantId: session.restaurantId,
         authToken: session.token,
         devUserId: session.devUserId,
+        onSubscribed: () => setRealtimeState('live'),
         onEvent: (eventName) => {
           setRealtimeState('live')
           if (eventName === 'ORDER_CREATED') {
-            if (soundEnabled) {
-              playBeep(beepRef)
-            }
             setInfoText('Novo pedido recebido.')
           }
           loadOrders()
@@ -236,27 +199,17 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
           <h2>Dashboard</h2>
           <p>Encomendas ativas em tempo real</p>
         </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13 }}>
-            <input
-              type="checkbox"
-              checked={soundEnabled}
-              onChange={(event) => setSoundEnabled(event.target.checked)}
-            />
-            Som
-          </label>
-          <span
-            className={`badge ${realtimeState === 'live' ? 'ok' : realtimeState === 'error' ? 'danger' : 'warn'}`}
-          >
-            {realtimeState === 'live'
-              ? 'Realtime ativo'
-              : realtimeState === 'connecting'
-                ? 'A ligar'
-                : realtimeState === 'error'
-                  ? 'Realtime erro'
-                  : 'Offline'}
-          </span>
-        </div>
+        <span
+          className={`badge ${realtimeState === 'live' ? 'ok' : realtimeState === 'error' ? 'danger' : 'warn'}`}
+        >
+          {realtimeState === 'live'
+            ? 'Realtime ativo'
+            : realtimeState === 'connecting'
+              ? 'A ligar'
+              : realtimeState === 'error'
+                ? 'Realtime erro'
+                : 'Offline'}
+        </span>
       </header>
 
       <div className="rb-stat-grid">
@@ -274,9 +227,6 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
       <article className="rb-table-card">
         <div className="rb-table-head">
           <h3>Encomendas ativas</h3>
-          <button type="button" className="rb-btn-outline" onClick={loadOrders}>
-            Atualizar
-          </button>
         </div>
         <table className="rb-table">
           <thead>
@@ -305,10 +255,7 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
                     <strong>Sem encomendas ativas.</strong>
                     <p>Quando entrarem novos pedidos, aparecem aqui automaticamente.</p>
                     <div className="rb-empty-actions">
-                      <button type="button" className="rb-notif-filter" onClick={loadOrders}>
-                        Recarregar
-                      </button>
-                      <button type="button" className="rb-notif-filter" onClick={() => onNavigate?.('kitchen')}>
+                            <button type="button" className="rb-notif-filter" onClick={() => onNavigate?.('kitchen')}>
                         Ir para Cozinha
                       </button>
                     </div>
@@ -356,7 +303,7 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
                       </div>
                     ) : (
                       <div className="rb-kitchen-actions">
-                        {['CONFIRMED', 'PREPARING'].includes(order.order_status) ? (
+                        {['CONFIRMED', 'PREPARING', 'READY'].includes(order.order_status) ? (
                           <button
                             type="button"
                             className="rb-btn-outline"

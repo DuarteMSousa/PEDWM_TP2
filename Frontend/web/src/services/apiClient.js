@@ -36,7 +36,19 @@ export async function apiFetch(endpoint, options = {}) {
   })
 
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`)
+    let serverMessage = ''
+    try {
+      const payload = await response.json()
+      serverMessage = payload?.message ?? payload?.error ?? ''
+      if (!serverMessage && payload?.errors && typeof payload.errors === 'object') {
+        const firstKey = Object.keys(payload.errors)[0]
+        const firstList = firstKey ? payload.errors[firstKey] : null
+        serverMessage = Array.isArray(firstList) ? firstList[0] ?? '' : String(firstList ?? '')
+      }
+    } catch {
+      // body nao era JSON; mantemos status apenas
+    }
+    throw new Error(serverMessage || `Request failed with status ${response.status}`)
   }
 
   return response.json()

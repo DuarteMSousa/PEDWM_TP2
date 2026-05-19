@@ -16,23 +16,6 @@
   --red-soft: #fee2e2;
 }
 
-body.rb-dark {
-  --bg: #0f172a;
-  --panel: #1e293b;
-  --line: #334155;
-  --text: #f1f5f9;
-  --muted: #94a3b8;
-}
-
-body.rb-dark .rb-table,
-body.rb-dark .rb-stat-card,
-body.rb-dark .rb-table-card,
-body.rb-dark .rb-search-wrap,
-body.rb-dark .rb-detail-row,
-body.rb-dark .rb-toast {
-  color: var(--text);
-}
-
 * {
   box-sizing: border-box;
 }
@@ -348,13 +331,18 @@ body {
 }
 
 .rb-table-head {
-  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--line);
 }
 
 .rb-table-head h3 {
   margin: 0;
-  font-size: 28px;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .rb-table {
@@ -1508,7 +1496,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  gap: 16px;
+  padding: 10px 20px;
   border-top: 1px solid var(--line);
   font-size: 14px;
   color: #334155;

@@ -5,7 +5,6 @@ import {
   markOperatorNotificationRead,
 } from '../../../services/restaurantOpsService'
 import { subscribeToUserNotificationsTopic } from '../../../services/realtime/topicsRealtime'
-import { disconnectEchoClient } from '../../../services/realtime/echoClient'
 
 const MAX_ITEMS = 40
 
@@ -70,6 +69,7 @@ export function RestaurantNotificationsScreen({ session }) {
       userId: session.userId,
       authToken: session.token,
       devUserId: session.devUserId,
+      onSubscribed: () => setStatus('live'),
       onNotification: (payload) => {
         setStatus('live')
         setErrorText('')
@@ -87,7 +87,6 @@ export function RestaurantNotificationsScreen({ session }) {
 
     return () => {
       unsubscribe()
-      disconnectEchoClient()
     }
   }, [isListening, session.devUserId, session.token, session.userId])
 
@@ -189,9 +188,6 @@ export function RestaurantNotificationsScreen({ session }) {
           >
             {showUnreadOnly ? 'Mostrar todas' : 'Mostrar nao lidas'}
           </button>
-          <button type="button" className="rb-notif-filter" onClick={loadNotifications} disabled={loading}>
-            {loading ? 'A carregar...' : 'Atualizar'}
-          </button>
           <button type="button" className="rb-notif-filter" onClick={handleMarkAllRead} disabled={saving}>
             Marcar tudo como lida
           </button>
@@ -209,7 +205,7 @@ export function RestaurantNotificationsScreen({ session }) {
               </div>
               <p>{item.message}</p>
               <div className="rb-notif-item-foot">
-                <small>{item.timestamp}</small>
+                <small>{item.timestamp ? new Date(item.timestamp).toLocaleString() : '-'}</small>
                 {!item.read ? (
                   <button
                     type="button"

@@ -4,6 +4,7 @@ import { RESTAURANT_VIEWS } from '../../features/restaurant/views'
 import { RestaurantSideNav } from '../../features/restaurant/components/RestaurantSideNav'
 import { RestaurantLoginScreen } from '../../features/restaurant/screens/RestaurantLoginScreen'
 import { ConfirmDialog } from '../../components/common/ConfirmDialog'
+import { disconnectEchoClient } from '../../services/realtime/echoClient'
 
 const SESSION_STORAGE_KEY = 'fastbite_restaurant_session'
 
@@ -22,10 +23,16 @@ export function RestaurantWebShell() {
   const [selectedOrderId, setSelectedOrderId] = useState('')
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
 
-  const activeView = useMemo(
-    () => RESTAURANT_VIEWS.find((view) => view.id === activeViewId) ?? RESTAURANT_VIEWS[0],
-    [activeViewId],
-  )
+  const userType = session?.userType ?? null
+  const isChainManager = userType === 'CHAIN_MANAGER'
+
+  const activeView = useMemo(() => {
+    const fallback = RESTAURANT_VIEWS[0]
+    const candidate = RESTAURANT_VIEWS.find((view) => view.id === activeViewId)
+    if (!candidate) return fallback
+    if (candidate.chainOnly && !isChainManager) return fallback
+    return candidate
+  }, [activeViewId, isChainManager])
   const ActiveScreen = activeView.Component
 
   useEffect(() => {
@@ -48,6 +55,7 @@ export function RestaurantWebShell() {
   }
 
   function confirmLogout() {
+    disconnectEchoClient()
     setSession(null)
     setSelectedOrderId('')
     setLogoutConfirmOpen(false)
@@ -88,6 +96,7 @@ export function RestaurantWebShell() {
           onSelect={setActiveViewId}
           operatorName={session.operatorName}
           onLogout={handleLogout}
+          session={session}
         />
         <section className="rb-main">
           <ActiveScreen

@@ -9,7 +9,9 @@ import {
   updateOrderItemStatus,
 } from '../../../services/restaurantOpsService'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
+import { useAutoToast } from '../../../components/common/ToastProvider'
 import { subscribeToRestaurantOrdersTopic } from '../../../services/realtime/topicsRealtime'
+import { formatEventType } from '../../../utils/orderEventLabel'
 
 function mapOrderTone(status) {
   if (status === 'PENDING') return 'pending'
@@ -60,13 +62,6 @@ function playKitchenBeep(ref) {
   }
 }
 
-function formatEventType(eventType) {
-  return String(eventType ?? '')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/(^\w|\s\w)/g, (match) => match.toUpperCase())
-}
-
 export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavigate }) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
@@ -82,7 +77,14 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
   const [pendingAlerts, setPendingAlerts] = useState([])
   const [realtimeState, setRealtimeState] = useState('offline')
   const [readyAnnouncementOrderId, setReadyAnnouncementOrderId] = useState('')
+  const readyAnnouncementOrderIdRef = useRef('')
   const beepRef = useRef(null)
+  useAutoToast({ message: infoText, kind: 'success' })
+  useAutoToast({ message: errorText, kind: 'error' })
+
+  useEffect(() => {
+    readyAnnouncementOrderIdRef.current = readyAnnouncementOrderId
+  }, [readyAnnouncementOrderId])
 
   const loadOrders = useCallback(async () => {
     try {
@@ -103,12 +105,14 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
     })
   }, [loadOrders])
 
-  // Polling de fallback apenas enquanto o socket nao esta live.
+  // Polling de fallback apenas enquanto o socket nao esta live. Bind ao boolean
+  // para evitar reset do interval em cada flutuacao (connecting -> error -> live).
+  const isRealtimeLive = realtimeState === 'live'
   useEffect(() => {
-    if (realtimeState === 'live') return undefined
+    if (isRealtimeLive) return undefined
     const timer = setInterval(loadOrders, 30000)
     return () => clearInterval(timer)
-  }, [realtimeState, loadOrders])
+  }, [isRealtimeLive, loadOrders])
 
   useEffect(() => {
     if (!session?.restaurantId) return undefined
@@ -120,6 +124,7 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
         restaurantId: session.restaurantId,
         authToken: session.token,
         devUserId: session.devUserId,
+        onSubscribed: () => setRealtimeState('live'),
         onEvent: (eventName, payload) => {
           setRealtimeState('live')
           const orderId = payload?.data?.order_id ?? payload?.orderId ?? null
@@ -133,7 +138,7 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
           if (
             (eventName === 'ORDER_COURIER_ASSIGNED' || eventName === 'ORDER_OUT_FOR_DELIVERY') &&
             orderId &&
-            readyAnnouncementOrderId === orderId
+            readyAnnouncementOrderIdRef.current === orderId
           ) {
             setReadyAnnouncementOrderId('')
             setInfoText('Estafeta atribuido e a caminho.')
@@ -483,14 +488,6 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
           </div>
 
           <footer className="rb-prep-actions">
-            <button
-              type="button"
-              className="rb-btn-outline"
-              onClick={loadOrders}
-              disabled={busyOrderId === order.order_id}
-            >
-              Atualizar
-            </button>
             {order.order_status === 'CONFIRMED' ? (
               <button
                 type="button"
@@ -525,7 +522,7 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
             >
               Detalhe
             </button>
-            {['CONFIRMED', 'PREPARING'].includes(order.order_status) ? (
+            {['CONFIRMED', 'PREPARING', 'READY'].includes(order.order_status) ? (
               <button
                 type="button"
                 className="rb-btn-outline"

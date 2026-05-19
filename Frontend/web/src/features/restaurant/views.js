@@ -59,6 +59,7 @@ export const RESTAURANT_VIEWS = [
     label: 'Campanhas',
     icon: 'CP',
     Component: RestaurantCampaignsScreen,
+    chainOnly: true,
   },
   {
     id: 'profile',

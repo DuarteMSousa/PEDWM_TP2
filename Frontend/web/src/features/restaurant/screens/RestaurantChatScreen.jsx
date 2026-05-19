@@ -5,7 +5,6 @@ import {
   fetchRestaurantOrdersHistory,
 } from '../../../services/restaurantOpsService'
 import { subscribeToChatTopic } from '../../../services/realtime/topicsRealtime'
-import { disconnectEchoClient } from '../../../services/realtime/echoClient'
 
 const MAX_ITEMS = 50
 
@@ -42,39 +41,52 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
     [effectiveOrderId, orders],
   )
 
-  const canSend = useMemo(() => Boolean(chat?.id && messageText.trim()), [chat?.id, messageText])
+  const orderIsCancelled = selectedOrder?.order_status === 'CANCELLED'
+  const canSend = useMemo(
+    () => Boolean(chat?.id && messageText.trim() && !orderIsCancelled),
+    [chat?.id, messageText, orderIsCancelled],
+  )
+
+  function sortMessagesDesc(list) {
+    return [...list].sort((a, b) => {
+      const ta = new Date(a?.timestamp ?? 0).getTime()
+      const tb = new Date(b?.timestamp ?? 0).getTime()
+      return tb - ta
+    })
+  }
 
   const loadOrders = useCallback(async () => {
-    try {
-      // Carrega tanto encomendas ativas como historico recente para nao perder o chat
-      // depois da entrega/cancelamento.
-      const [activeOrders, recentHistory] = await Promise.all([
-        fetchRestaurantActiveOrders(session),
-        fetchRestaurantOrdersHistory({
-          session,
-          statuses: ['DELIVERED', 'CANCELLED'],
-          page: 1,
-          perPage: 30,
-        }),
-      ])
+    // Carrega tanto encomendas ativas como historico recente para nao perder o chat
+    // depois da entrega/cancelamento. Usar allSettled para nao perder um lado
+    // se o outro falhar (ex.: 403 num dos endpoints).
+    const [activeResult, historyResult] = await Promise.allSettled([
+      fetchRestaurantActiveOrders(session),
+      fetchRestaurantOrdersHistory({
+        session,
+        statuses: ['DELIVERED', 'CANCELLED'],
+        page: 1,
+        perPage: 30,
+      }),
+    ])
 
-      const seen = new Set()
-      const merged = []
-      for (const order of [...activeOrders, ...recentHistory]) {
-        if (!order?.order_id || seen.has(order.order_id)) continue
-        seen.add(order.order_id)
-        merged.push(order)
-      }
+    const activeOrders = activeResult.status === 'fulfilled' ? activeResult.value : []
+    const recentHistory = historyResult.status === 'fulfilled' ? historyResult.value : []
+    const firstError = activeResult.status === 'rejected' ? activeResult.reason : historyResult.status === 'rejected' ? historyResult.reason : null
 
-      setOrders(merged)
-      setErrorText('')
-      if (!effectiveOrderId && merged.length > 0) {
-        const fallbackOrderId = merged[0].order_id
-        setOrderId(fallbackOrderId)
-        if (onSelectOrder) onSelectOrder(fallbackOrderId)
-      }
-    } catch (error) {
-      setErrorText(error.message)
+    const seen = new Set()
+    const merged = []
+    for (const order of [...activeOrders, ...recentHistory]) {
+      if (!order?.order_id || seen.has(order.order_id)) continue
+      seen.add(order.order_id)
+      merged.push(order)
+    }
+
+    setOrders(merged)
+    setErrorText(firstError ? firstError.message : '')
+    if (!effectiveOrderId && merged.length > 0) {
+      const fallbackOrderId = merged[0].order_id
+      setOrderId(fallbackOrderId)
+      if (onSelectOrder) onSelectOrder(fallbackOrderId)
     }
   }, [effectiveOrderId, onSelectOrder, session])
 
@@ -91,7 +103,7 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
         const chats = await fetchOrderChats({ session, orderId: targetOrderId })
         const activeChat = chats[0] ?? null
         setChat(activeChat)
-        setMessages((activeChat?.messages ?? []).slice(-MAX_ITEMS))
+        setMessages(sortMessagesDesc(activeChat?.messages ?? []).slice(0, MAX_ITEMS))
         setErrorText('')
       } catch (error) {
         setErrorText(error.message)
@@ -118,6 +130,15 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
     }
   }, [effectiveOrderId, loadOrderChat])
 
+  // Quando o courier e atribuido apos a criacao do chat, recarrega para
+  // sincronizar a lista de participantes.
+  useEffect(() => {
+    if (!chat?.id || !selectedOrder?.courier_id) return
+    const participantIds = new Set((chat.participants ?? []).map((p) => p.user_id))
+    if (participantIds.has(selectedOrder.courier_id)) return
+    loadOrderChat(effectiveOrderId)
+  }, [chat?.id, chat?.participants, selectedOrder?.courier_id, effectiveOrderId, loadOrderChat])
+
   useEffect(() => {
     if (!isListening || !chat?.id) {
       return undefined
@@ -127,10 +148,13 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
       chatId: chat.id,
       authToken: session.token,
       devUserId: session.devUserId,
+      onSubscribed: () => setStatus('live'),
       onMessage: (payload) => {
         setStatus('live')
         setErrorText('')
-        setMessages((current) => [normalizeEventMessage(payload), ...current].slice(0, MAX_ITEMS))
+        setMessages((current) =>
+          sortMessagesDesc([normalizeEventMessage(payload), ...current]).slice(0, MAX_ITEMS),
+        )
       },
       onError: () => {
         setStatus('error')
@@ -140,7 +164,6 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
 
     return () => {
       unsubscribe()
-      disconnectEchoClient()
     }
   }, [chat?.id, isListening, session.devUserId, session.token])
 
@@ -205,7 +228,9 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
       })
 
       setErrorText('')
-      setMessages((current) => [{ ...response, source: 'mutation' }, ...current].slice(0, MAX_ITEMS))
+      setMessages((current) =>
+        sortMessagesDesc([{ ...response, source: 'mutation' }, ...current]).slice(0, MAX_ITEMS),
+      )
     } catch (error) {
       setErrorText(error.message)
       setMessageText(content)
@@ -280,14 +305,6 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
           <button
             type="button"
             className="rb-notif-filter"
-            onClick={() => loadOrderChat(effectiveOrderId)}
-            disabled={loading}
-          >
-            {loading ? 'A carregar...' : 'Atualizar mensagens'}
-          </button>
-          <button
-            type="button"
-            className="rb-notif-filter"
             onClick={handleCreateChat}
             disabled={saving || !effectiveOrderId}
           >
@@ -319,9 +336,15 @@ export function RestaurantChatScreen({ session, selectedOrderId, onSelectOrder }
               rows={3}
               value={messageText}
               onChange={(event) => setMessageText(event.target.value)}
-              placeholder="Escreve aqui a tua mensagem..."
+              placeholder={orderIsCancelled ? 'Chat encerrado: encomenda cancelada.' : 'Escreve aqui a tua mensagem...'}
+              disabled={orderIsCancelled}
             />
           </label>
+          {orderIsCancelled ? (
+            <p className="rb-chat-error" style={{ background: 'transparent' }}>
+              Esta encomenda foi cancelada. Nao e possivel enviar novas mensagens.
+            </p>
+          ) : null}
           <button type="submit" className="rb-primary" disabled={!canSend}>
             Enviar mensagem
           </button>

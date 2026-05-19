@@ -1,9 +1,4 @@
-function formatEventType(eventType) {
-  return String(eventType ?? '')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/(^\w|\s\w)/g, (match) => match.toUpperCase())
-}
+import { formatEventType } from '../../utils/orderEventLabel'
 
 function formatTime(value) {
   if (!value) return '-'

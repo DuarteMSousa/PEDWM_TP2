@@ -115,6 +115,18 @@ const CREATE_RESTAURANT_MUTATION = `
   }
 `
 
+const DELETE_RESTAURANT_MUTATION = `
+  mutation DeleteRestaurant($id: ID!) {
+    deleteRestaurant(id: $id)
+  }
+`
+
+const DELETE_RESTAURANT_CHAIN_MUTATION = `
+  mutation DeleteRestaurantChain($id: ID!) {
+    deleteRestaurantChain(id: $id)
+  }
+`
+
 const OPERATOR_RESTAURANT_QUERY = `
   query OperatorRestaurant($userId: ID!) {
     operatorRestaurant(user_id: $userId) {
@@ -767,6 +779,9 @@ export async function registerRestaurantUser({
 
   const defaultName = String(managerName ?? '').trim() || trimmedEmail.split('@')[0] || 'manager'
 
+  let createdChainId = null
+  let createdRestaurantId = null
+
   try {
     const chainData = await graphqlRequest({
       query: CREATE_RESTAURANT_CHAIN_MUTATION,
@@ -776,12 +791,13 @@ export async function registerRestaurantUser({
         },
       },
     })
+    createdChainId = chainData.createRestaurantChain.id
 
     const restaurantData = await graphqlRequest({
       query: CREATE_RESTAURANT_MUTATION,
       variables: {
         input: {
-          chain_id: chainData.createRestaurantChain.id,
+          chain_id: createdChainId,
           name: trimmedRestaurantName,
           opening_hours: trimmedOpeningHours,
           closing_hours: trimmedClosingHours,
@@ -795,6 +811,7 @@ export async function registerRestaurantUser({
         },
       },
     })
+    createdRestaurantId = restaurantData.createRestaurant.id
 
     await graphqlRequest({
       query: CREATE_USER_MUTATION,
@@ -804,12 +821,35 @@ export async function registerRestaurantUser({
           email: trimmedEmail,
           password: trimmedPassword,
           user_type: 'CHAIN_MANAGER',
-          chain_id: chainData.createRestaurantChain.id,
-          restaurant_id: restaurantData.createRestaurant.id,
+          chain_id: createdChainId,
+          restaurant_id: createdRestaurantId,
         },
       },
     })
   } catch (error) {
+    // Rollback: tentar apagar chain+restaurant orfaos se a criacao do user falhou
+    // depois de eles existirem. Falhas no rollback sao silenciadas (best-effort).
+    if (createdRestaurantId) {
+      try {
+        await graphqlRequest({
+          query: DELETE_RESTAURANT_MUTATION,
+          variables: { id: createdRestaurantId },
+        })
+      } catch {
+        // ignore
+      }
+    }
+    if (createdChainId) {
+      try {
+        await graphqlRequest({
+          query: DELETE_RESTAURANT_CHAIN_MUTATION,
+          variables: { id: createdChainId },
+        })
+      } catch {
+        // ignore
+      }
+    }
+
     const message = String(error?.message ?? '')
     if (
       message.includes('users_email_unique') ||
