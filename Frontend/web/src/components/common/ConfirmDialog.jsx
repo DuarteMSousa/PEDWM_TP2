@@ -24,12 +24,16 @@ export function ConfirmDialog({
       }
     }
     window.addEventListener('keydown', onKey)
-    // Auto-focus confirm button for accessibility
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, loading, onCancel])
+
+  useEffect(() => {
+    if (!open) return
+    // Auto-focus confirm button only when dialog opens.
     if (confirmButtonRef.current) {
       confirmButtonRef.current.focus()
     }
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, loading, onCancel])
+  }, [open])
 
   if (!open) {
     return null
