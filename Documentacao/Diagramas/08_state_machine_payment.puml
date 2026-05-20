@@ -1,0 +1,38 @@
+@startuml FastBite_StateMachine_Payment
+title FastBite — Maquina de Estados de um Pagamento
+
+skinparam shadowing false
+skinparam state {
+  BackgroundColor #FAFAFA
+  BorderColor #555
+  ArrowColor #555
+}
+
+[*] --> PENDING : Payment criado no checkout\n[PAYMENT_CREATED]
+
+PENDING --> COMPLETED : gateway confirma\n[PAYMENT_COMPLETED]\n+ dispara ORDER_CONFIRMED
+PENDING --> FAILED : gateway recusa / erro\n[PAYMENT_FAILED]
+PENDING --> CANCELLED : cliente cancela\nou expira (timeout)\n[PAYMENT_CANCELLED] | [PAYMENT_EXPIRED]
+
+COMPLETED --> [*]
+FAILED --> [*]
+CANCELLED --> [*]
+
+note right of PENDING #LightYellow
+  Padrao **State** implementado em
+  App\Domain\StateMachines\Payments\
+    PaymentStateFactory
+  Apenas PENDING tem transicoes
+  validas; COMPLETED, FAILED e
+  CANCELLED sao estados terminais.
+end note
+
+note bottom of COMPLETED
+  Ao concluir o pagamento, o PaymentService
+  emite um evento via OutboxService que
+  desencadeia a transicao da Order para
+  CONFIRMED (ORDER_PAYMENT_COMPLETED ->
+  ORDER_CONFIRMED).
+end note
+
+@enduml

@@ -51,6 +51,7 @@ enum PaymentStatus {
     PENDING
     COMPLETED
     FAILED
+    CANCELLED
 }
 
 enum DeliveryStatus {
@@ -125,12 +126,7 @@ enum DiscountTarget {
     CATEGORY
 }
 
-enum DiscountOriginType {
-    PROMOTION
-    COUPON
-}
-
-enum PromotionItemParentType {
+enum CampaignMorphType {
     PROMOTION
     COUPON
 }
@@ -301,7 +297,7 @@ class OrderDiscount {
     +discountAmount: float
     +discountType: DiscountType
     +discountTarget: DiscountTarget
-    +originType: DiscountOriginType
+    +originType: CampaignMorphType
     +originId: UUID
 }
 
@@ -419,7 +415,7 @@ class Promotion {
 
 class PromotionItem {
     +id: UUID
-    +parentType: PromotionItemParentType
+    +parentType: CampaignMorphType
     +parentId: UUID
     +itemId: UUID
 }

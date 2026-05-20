@@ -346,7 +346,7 @@ entity promotions {
 entity promotion_items {
   *id : UUID <<PK>>
   --
-  parent_type : enum
+  parent_type : enum (CampaignMorphType)
   parent_id : UUID
   item_id : UUID
 }
@@ -356,7 +356,7 @@ entity order_discounts {
   --
   order_id : UUID <<FK>>
   order_item_id : UUID <<FK>>
-  origin_type : enum
+  origin_type : enum (CampaignMorphType)
   origin_id : UUID
   discount_amount : float
   discount_type : string

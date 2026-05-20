@@ -1,0 +1,46 @@
+@startuml FastBite_StateMachine_Delivery
+title FastBite — Maquina de Estados de uma Entrega
+
+skinparam shadowing false
+skinparam state {
+  BackgroundColor #FAFAFA
+  BorderColor #555
+  ArrowColor #555
+}
+
+[*] --> PENDING : Delivery criada\napos ORDER_PREPARING\n+ AssignCourierToDeliveryJob
+
+PENDING --> PICKED_UP : estafeta confirma pickup\n[DELIVERY_PICKED_UP]\n[ORDER_PICKED_UP]
+PENDING --> FAILED : sem estafetas /\n3 ofertas rejeitadas\n[DELIVERY_FAILED]
+
+PICKED_UP --> IN_TRANSIT : estafeta arranca\n[DELIVERY_IN_TRANSIT]\n+ updateCourierLocation
+PICKED_UP --> FAILED : incidente\n[DELIVERY_FAILED]
+
+IN_TRANSIT --> DELIVERED : cliente recebe\n[DELIVERY_DELIVERED]\n[ORDER_DELIVERED]
+IN_TRANSIT --> FAILED : nao entregue\n[DELIVERY_FAILED]
+
+DELIVERED --> [*]
+FAILED --> [*]
+
+note right of PENDING #LightYellow
+  Padrao **State** implementado em
+  App\Domain\StateMachines\Deliveries\
+    DeliveryStateFactory
+  DELIVERED e FAILED sao estados
+  terminais (sem transicoes).
+end note
+
+note bottom of IN_TRANSIT
+  Durante IN_TRANSIT, o estafeta envia
+  updateCourierLocation periodicamente.
+  A posicao e' transmitida em real-time
+  no canal "order.{id}.tracking".
+end note
+
+note left of PENDING
+  As DeliveryOffer (TTL 30s) sao criadas
+  pelo AssignCourierToDeliveryJob.
+  Ate 3 tentativas antes de FAILED.
+end note
+
+@enduml

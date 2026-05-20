@@ -13,39 +13,10 @@ skinparam component {
 ' =======================
 
 package "Tipos de Eventos (Backend/app/Enums)" as Enums {
-  enum OrderEventType {
-    ORDER_CREATED
-    ORDER_PAYMENT_COMPLETED
-    ORDER_CONFIRMED
-    ORDER_PREPARING
-    ORDER_READY
-    ORDER_PICKED_UP
-    ORDER_OUT_FOR_DELIVERY
-    ORDER_DELIVERED
-    ORDER_CANCELLED
-    ORDER_COURIER_ASSIGNED
-    ORDER_REJECTED
-  }
-  enum PaymentEventType {
-    PAYMENT_CREATED
-    PAYMENT_COMPLETED
-    PAYMENT_FAILED
-    PAYMENT_EXPIRED
-    PAYMENT_CANCELLED
-  }
-  enum DeliveryEventType {
-    DELIVERY_ACCEPTED
-    DELIVERY_PICKED_UP
-    DELIVERY_IN_TRANSIT
-    DELIVERY_DELIVERED
-    DELIVERY_FAILED
-  }
-  enum DeliveryOfferEventType {
-    JOB_OFFERED
-    JOB_ACCEPTED
-    JOB_REJECTED
-    JOB_EXPIRED
-  }
+  card "OrderEventType\n----\nORDER_CREATED\nORDER_PAYMENT_COMPLETED\nORDER_CONFIRMED\nORDER_PREPARING\nORDER_READY\nORDER_PICKED_UP\nORDER_OUT_FOR_DELIVERY\nORDER_DELIVERED\nORDER_CANCELLED\nORDER_COURIER_ASSIGNED\nORDER_REJECTED" as EnumOrder
+  card "PaymentEventType\n----\nPAYMENT_CREATED\nPAYMENT_COMPLETED\nPAYMENT_FAILED\nPAYMENT_EXPIRED\nPAYMENT_CANCELLED" as EnumPayment
+  card "DeliveryEventType\n----\nDELIVERY_ACCEPTED\nDELIVERY_PICKED_UP\nDELIVERY_IN_TRANSIT\nDELIVERY_DELIVERED\nDELIVERY_FAILED" as EnumDelivery
+  card "DeliveryOfferEventType\n----\nJOB_OFFERED\nJOB_ACCEPTED\nJOB_REJECTED\nJOB_EXPIRED" as EnumOffer
 }
 
 ' =======================
@@ -53,7 +24,7 @@ package "Tipos de Eventos (Backend/app/Enums)" as Enums {
 ' =======================
 
 package "Backend (Laravel)" as BE {
-  component "OrderService\n#[Transactional]" as OrderSvc
+  component "OrderService\n<<Transactional>>" as OrderSvc
   component "DeliveryService" as DeliverySvc
   component "PaymentService" as PaymentSvc
   database "order_events\npayment_events\ndelivery_events" as EventsTable
