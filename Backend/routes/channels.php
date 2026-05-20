@@ -2,6 +2,7 @@
 
 use App\Enums\UserType;
 use App\Models\ChainManager;
+use App\Models\Chat;
 use App\Models\Delivery;
 use App\Models\ChatParticipant;
 use App\Models\LocalManager;
@@ -9,6 +10,7 @@ use App\Models\Order;
 use App\Models\Restaurant;
 use App\Models\User;
 use Illuminate\Support\Facades\Broadcast;
+use Illuminate\Support\Facades\Request;
 
 if (! function_exists('resolveBroadcastUser')) {
     function resolveBroadcastUser(?User $user): ?User
@@ -21,7 +23,7 @@ if (! function_exists('resolveBroadcastUser')) {
             return null;
         }
 
-        $devUserId = request()->header('X-Dev-User-Id');
+        $devUserId = Request::header('X-Dev-User-Id');
 
         if (! $devUserId) {
             return null;
@@ -102,10 +104,37 @@ Broadcast::channel('chat.{chatId}', function (?User $user, string $chatId): bool
         return false;
     }
 
-    return ChatParticipant::query()
+    // 1. Participante direto do chat
+    $isParticipant = ChatParticipant::query()
         ->where('chat_id', $chatId)
         ->where('user_id', $user->id)
         ->exists();
+
+    if ($isParticipant) {
+        return true;
+    }
+
+    // 2. Local manager do restaurante da order associada ao chat
+    if ($user->user_type === UserType::LOCAL_MANAGER) {
+        return Chat::query()
+            ->whereKey($chatId)
+            ->whereHas('order.restaurant.localManager', function ($query) use ($user): void {
+                $query->where('user_id', $user->id);
+            })
+            ->exists();
+    }
+
+    // 3. Chain manager da cadeia do restaurante da order associada ao chat
+    if ($user->user_type === UserType::CHAIN_MANAGER) {
+        return Chat::query()
+            ->whereKey($chatId)
+            ->whereHas('order.restaurant.chain.chainManagers', function ($query) use ($user): void {
+                $query->where('user_id', $user->id);
+            })
+            ->exists();
+    }
+
+    return false;
 });
 
 Broadcast::channel('user.{userId}.notifications', function (?User $user, string $userId): bool {

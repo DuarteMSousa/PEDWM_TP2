@@ -6,6 +6,7 @@ use App\Aspects\Transactional;
 use App\DTOs\Chat\CreateOrderChatDTO;
 use App\DTOs\Chat\SendMessageDTO;
 use App\Enums\OrderStatus;
+use App\Enums\UserType;
 use App\Models\Chat;
 use App\Models\ChatParticipant;
 use App\Models\Message;
@@ -68,7 +69,9 @@ class ChatService implements ChatServiceInterface
     #[Transactional]
     public function sendChatMessage(string $senderUserId, SendMessageDTO $data): Message
     {
-        $chat = Chat::query()->with('order')->findOrFail($data->chat_id);
+        $chat = Chat::query()
+            ->with(['order.restaurant.localManager', 'order.restaurant.chain.chainManagers'])
+            ->findOrFail($data->chat_id);
 
         if ($chat->closed_at !== null) {
             throw ValidationException::withMessages([
@@ -85,7 +88,26 @@ class ChatService implements ChatServiceInterface
         $participant = ChatParticipant::query()
             ->where('chat_id', $data->chat_id)
             ->where('user_id', $senderUserId)
-            ->firstOrFail();
+            ->first();
+
+        // Auto-adicionar managers autorizados que ainda nao sejam participantes.
+        // Espelha a logica de authorization do canal broadcast chat.{chatId}.
+        if (! $participant) {
+            $sender = User::query()->findOrFail($senderUserId);
+
+            if (! $this->isAuthorizedManagerForChat($sender, $chat)) {
+                throw ValidationException::withMessages([
+                    'sender_user_id' => 'User is not a participant of this chat.',
+                ]);
+            }
+
+            $participant = ChatParticipant::query()->create([
+                'chat_id' => $data->chat_id,
+                'user_id' => $sender->id,
+                'user_type' => $sender->user_type->value ?? $sender->user_type,
+                'joined_at' => now(),
+            ]);
+        }
 
         return Message::query()->create([
             'chat_id' => $data->chat_id,
@@ -93,5 +115,26 @@ class ChatService implements ChatServiceInterface
             'content' => $data->content,
             'timestamp' => now(),
         ]);
+    }
+
+    private function isAuthorizedManagerForChat(User $user, Chat $chat): bool
+    {
+        $restaurant = $chat->order?->restaurant;
+
+        if (! $restaurant) {
+            return false;
+        }
+
+        if ($user->user_type === UserType::LOCAL_MANAGER) {
+            return $restaurant->localManager
+                && $restaurant->localManager->user_id === $user->id;
+        }
+
+        if ($user->user_type === UserType::CHAIN_MANAGER) {
+            return $restaurant->chain
+                && $restaurant->chain->chainManagers->contains('user_id', $user->id);
+        }
+
+        return false;
     }
 }
