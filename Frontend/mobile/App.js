@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { LogBox } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
@@ -7,6 +8,14 @@ import { CustomerAppScreen } from './src/screens/CustomerAppScreen';
 import { CourierAppScreen } from './src/screens/CourierAppScreen';
 import { registerDevicePushToken } from './src/services/pushNotificationService';
 import { ErrorBoundary } from './src/components/common/ErrorBoundary';
+
+// Expo Go (Android, SDK 53+) ja nao suporta push remoto. O modulo expo-notifications
+// emite warning automatico atraves do seu TokenAutoRegistration listener antes
+// do nosso codigo correr. Em dev build/iOS a feature funciona normalmente.
+LogBox.ignoreLogs([
+  'expo-notifications: Android Push notifications',
+  '`expo-notifications` functionality is not fully supported in Expo Go',
+]);
 
 const SESSION_STORAGE_KEY = 'fastbite_mobile_session';
 

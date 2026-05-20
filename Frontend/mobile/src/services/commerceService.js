@@ -113,7 +113,7 @@ function mapTracking(payload) {
 
 const RESTAURANTS_QUERY = `
   query Restaurants($input: SearchRestaurantsInput) {
-    restaurants(input: $input) {
+    searchRestaurants(input: $input) {
       id
       name
       rating_sum
@@ -123,15 +123,9 @@ const RESTAURANTS_QUERY = `
   }
 `
 
-const AVAILABLE_COURIERS_COUNT_QUERY = `
-  query AvailableCouriersCount {
-    availableCouriersCount
-  }
-`
-
 const PRODUCT_OPTION_GROUPS_QUERY = `
   query ProductOptionGroups($productId: ID!) {
-    productOptionGroups(product_id: $productId) {
+    getProductOptionGroups(product_id: $productId) {
       id
       name
       min_options
@@ -148,7 +142,7 @@ const PRODUCT_OPTION_GROUPS_QUERY = `
 
 const RESTAURANT_MENU_QUERY = `
   query RestaurantMenu($restaurantId: ID!) {
-    restaurantMenu(restaurant_id: $restaurantId) {
+    getRestaurantMenu(restaurant_id: $restaurantId) {
       categories { id name }
       products {
         id
@@ -171,7 +165,7 @@ const RESTAURANT_MENU_QUERY = `
 
 const CART_QUERY = `
   query ClientCart($userId: ID!) {
-    clientCart(user_id: $userId) {
+    getCartByUserId(user_id: $userId) {
       id
       total
       items {
@@ -190,7 +184,7 @@ const CART_QUERY = `
 
 const CLIENT_ADDRESSES_QUERY = `
   query ClientAddresses($userId: ID!) {
-    clientAddresses(user_id: $userId) {
+    getUserAddressesByUserId(user_id: $userId) {
       id
       label
       street
@@ -206,7 +200,7 @@ const CLIENT_ADDRESSES_QUERY = `
 
 const CREATE_CLIENT_ADDRESS_MUTATION = `
   mutation CreateClientAddress($userId: ID!, $input: CreateUserAddressInput!) {
-    createClientAddress(user_id: $userId, input: $input) {
+    createUserAddress(user_id: $userId, input: $input) {
       id
       label
       street
@@ -222,7 +216,7 @@ const CREATE_CLIENT_ADDRESS_MUTATION = `
 
 const UPDATE_CLIENT_ADDRESS_MUTATION = `
   mutation UpdateClientAddress($userId: ID!, $addressId: ID!, $input: UpdateUserAddressInput!) {
-    updateClientAddress(user_id: $userId, address_id: $addressId, input: $input) {
+    updateUserAddress(user_id: $userId, address_id: $addressId, input: $input) {
       id
       label
       street
@@ -238,13 +232,13 @@ const UPDATE_CLIENT_ADDRESS_MUTATION = `
 
 const DELETE_CLIENT_ADDRESS_MUTATION = `
   mutation DeleteClientAddress($userId: ID!, $addressId: ID!) {
-    deleteClientAddress(user_id: $userId, address_id: $addressId)
+    deleteUserAddress(user_id: $userId, address_id: $addressId)
   }
 `
 
 const SET_DEFAULT_CLIENT_ADDRESS_MUTATION = `
   mutation SetDefaultClientAddress($userId: ID!, $addressId: ID!) {
-    setDefaultClientAddress(user_id: $userId, address_id: $addressId) {
+    setDefaultUserAddress(user_id: $userId, address_id: $addressId) {
       id
       is_default
     }
@@ -253,7 +247,7 @@ const SET_DEFAULT_CLIENT_ADDRESS_MUTATION = `
 
 const COUPON_BY_CODE_QUERY = `
   query CouponByCode($code: String!) {
-    couponByCode(code: $code) {
+    getCouponByCode(code: $code) {
       id
       code
       description
@@ -266,7 +260,7 @@ const COUPON_BY_CODE_QUERY = `
 
 const ORDERS_QUERY = `
   query ClientOrders($userId: ID!, $statuses: [OrderStatus!], $perPage: Int) {
-    clientOrders(user_id: $userId, statuses: $statuses, per_page: $perPage) {
+    getClientOrders(user_id: $userId, statuses: $statuses, per_page: $perPage) {
       id
       status
       total
@@ -280,7 +274,7 @@ const ORDERS_QUERY = `
 
 const ORDERS_HISTORY_QUERY = `
   query ClientOrdersHistory($userId: ID!, $statuses: [OrderStatus!], $page: Int, $perPage: Int) {
-    clientOrders(user_id: $userId, statuses: $statuses, page: $page, per_page: $perPage) {
+    getClientOrders(user_id: $userId, statuses: $statuses, page: $page, per_page: $perPage) {
       id
       restaurant_id
       status
@@ -303,7 +297,7 @@ const ORDERS_HISTORY_QUERY = `
 
 const CANCEL_CLIENT_ORDER_MUTATION = `
   mutation CancelClientOrder($userId: ID!, $orderId: ID!, $reason: String) {
-    cancelClientOrder(user_id: $userId, order_id: $orderId, reason: $reason) {
+    cancelOrderByClient(user_id: $userId, order_id: $orderId, reason: $reason) {
       id
       status
     }
@@ -329,7 +323,7 @@ const REPEAT_CLIENT_ORDER_MUTATION = `
 
 const CLIENT_ORDER_DETAIL_QUERY = `
   query ClientOrderDetail($userId: ID!, $orderId: ID!) {
-    clientOrder(user_id: $userId, order_id: $orderId) {
+    getClientOrder(user_id: $userId, order_id: $orderId) {
       id
       restaurant_id
       status
@@ -387,7 +381,7 @@ const ORDER_TRACKING_QUERY = `
 
 const COURIER_DELIVERIES_QUERY = `
   query CourierDeliveries($courierId: ID!, $statuses: [DeliveryStatus!]) {
-    courierDeliveries(courier_id: $courierId, statuses: $statuses) {
+    getDeliveriesByCourierId(courier_id: $courierId, statuses: $statuses) {
       id
       order_id
       status
@@ -407,7 +401,7 @@ const COURIER_DELIVERIES_QUERY = `
 
 const COURIER_OFFERS_QUERY = `
   query CourierOffers($courierId: ID!) {
-    courierDeliveryOffers(courier_id: $courierId) {
+    getDeliveryOffersByCourierId(courier_id: $courierId) {
       id
       expires_at
       delivery {
@@ -429,7 +423,7 @@ const COURIER_OFFERS_QUERY = `
 
 const ADD_CART_ITEM_MUTATION = `
   mutation AddCartItem($input: AddCartItemInput!) {
-    addClientCartItem(input: $input) {
+    addCartItem(input: $input) {
       id
       total
       items {
@@ -446,7 +440,7 @@ const ADD_CART_ITEM_MUTATION = `
 
 const UPDATE_CART_ITEM_MUTATION = `
   mutation UpdateCartItem($cartItemId: ID!, $input: UpdateCartItemInput!) {
-    updateClientCartItem(cart_item_id: $cartItemId, input: $input) {
+    updateCartItem(cart_item_id: $cartItemId, input: $input) {
       id
       total
       items {
@@ -461,9 +455,15 @@ const UPDATE_CART_ITEM_MUTATION = `
   }
 `
 
+const CLEAR_CART_MUTATION = `
+  mutation ClearCart($userId: ID!) {
+    clearCart(user_id: $userId)
+  }
+`
+
 const REMOVE_CART_ITEM_MUTATION = `
   mutation RemoveCartItem($userId: ID!, $cartItemId: ID!) {
-    removeClientCartItem(user_id: $userId, cart_item_id: $cartItemId) {
+    removeCartItem(user_id: $userId, cart_item_id: $cartItemId) {
       id
       total
       items {
@@ -480,7 +480,7 @@ const REMOVE_CART_ITEM_MUTATION = `
 
 const ORDER_CHATS_QUERY = `
   query OrderChats($orderId: ID!) {
-    orderChats(order_id: $orderId) {
+    getChatsByOrderId(order_id: $orderId) {
       id
       order_id
       type
@@ -503,7 +503,7 @@ const ORDER_CHATS_QUERY = `
 
 const CHAT_MESSAGES_QUERY = `
   query ChatMessages($chatId: ID!, $perPage: Int) {
-    chatMessages(chat_id: $chatId, per_page: $perPage) {
+    getMessagesByChatId(chat_id: $chatId, per_page: $perPage) {
       id
       chat_id
       sender_participant_id
@@ -532,21 +532,12 @@ const CREATE_ORDER_CHAT_MUTATION = `
 
 const SEND_MESSAGE_MUTATION = `
   mutation SendMessage($input: SendMessageInput!) {
-    sendMessage(input: $input) {
+    sendChatMessage(input: $input) {
       id
       chat_id
       sender_participant_id
       content
       timestamp
-    }
-  }
-`
-
-const MARK_CHAT_READ_MUTATION = `
-  mutation MarkChatAsRead($chatId: ID!, $userId: ID!) {
-    markChatAsRead(chat_id: $chatId, user_id: $userId) {
-      id
-      last_read_at
     }
   }
 `
@@ -582,7 +573,7 @@ const DELETE_REVIEW_MUTATION = `
 
 const CLIENT_REVIEWS_QUERY = `
   query ClientReviews($userId: ID!, $perPage: Int) {
-    clientReviews(user_id: $userId, per_page: $perPage) {
+    getReviewsByUserId(user_id: $userId, per_page: $perPage) {
       id
       rating
       comment
@@ -605,7 +596,7 @@ const UPDATE_USER_MUTATION = `
 
 const PAY_PAYMENT_MUTATION = `
   mutation PayPayment($paymentId: ID!, $transactionId: String) {
-    payPayment(payment_id: $paymentId, transaction_id: $transactionId) {
+    confirmPayment(payment_id: $paymentId, transaction_id: $transactionId) {
       id
       status
       method
@@ -617,7 +608,7 @@ const PAY_PAYMENT_MUTATION = `
 
 const ORDER_PAYMENT_QUERY = `
   query OrderPayment($orderId: ID!) {
-    orderPayment(order_id: $orderId) {
+    getPaymentByOrderId(order_id: $orderId) {
       id
       status
       method
@@ -631,7 +622,7 @@ const ORDER_PAYMENT_QUERY = `
 
 const CHECKOUT_MUTATION = `
   mutation Checkout($input: CheckoutInput!) {
-    checkout(input: $input) {
+    checkoutOrder(input: $input) {
       order {
         id
         status
@@ -647,8 +638,8 @@ const CHECKOUT_MUTATION = `
 `
 
 const SET_COURIER_STATUS_MUTATION = `
-  mutation SetCourierStatus($userId: ID!, $status: CourierStatus!) {
-    setCourierStatus(user_id: $userId, status: $status) {
+  mutation UpdateCourierStatus($userId: ID!, $status: CourierStatus!) {
+    updateCourierStatus(user_id: $userId, status: $status) {
       user_id
       status
     }
@@ -717,7 +708,7 @@ const UPDATE_COURIER_LOCATION_MUTATION = `
 
 const CLIENT_NOTIFICATIONS_QUERY = `
   query ClientNotifications($userId: ID!, $unreadOnly: Boolean!, $limit: Int!) {
-    clientNotifications(user_id: $userId, unread_only: $unreadOnly, limit: $limit) {
+    getNotificationsByUserId(user_id: $userId, unread_only: $unreadOnly, limit: $limit) {
       id
       type
       title
@@ -730,7 +721,7 @@ const CLIENT_NOTIFICATIONS_QUERY = `
 
 const MARK_NOTIFICATION_READ_MUTATION = `
   mutation MarkNotificationRead($userId: ID!, $notificationId: ID!) {
-    markNotificationRead(user_id: $userId, notification_id: $notificationId) {
+    markNotificationAsRead(user_id: $userId, notification_id: $notificationId) {
       ok
       notification_id
       read_at
@@ -740,7 +731,7 @@ const MARK_NOTIFICATION_READ_MUTATION = `
 
 const MARK_ALL_NOTIFICATIONS_READ_MUTATION = `
   mutation MarkAllClientNotificationsRead($userId: ID!) {
-    markAllClientNotificationsRead(user_id: $userId) {
+    markAllNotificationsAsRead(user_id: $userId) {
       ok
       affected_count
     }
@@ -759,32 +750,24 @@ const MARK_DELIVERY_FAILED_MUTATION = `
 `
 
 export async function fetchRestaurants(session, filters = {}) {
-  const input = {
-    q: filters.q ?? '',
-    name: filters.name ?? '',
-    chainName: filters.chainName ?? '',
-    city: filters.city ?? '',
-    country: filters.country ?? '',
-    postalCode: filters.postalCode ?? '',
-    pageNumber: filters.pageNumber ?? 1,
-    pageSize: filters.pageSize ?? 20,
+  // Importante: o middleware ConvertEmptyStringsToNull do Laravel converte '' em null
+  // antes do DTO ser construido. Para evitar erro de tipo, so passamos campos com valor.
+  const input = {}
+  const stringFields = ['q', 'name', 'chainName', 'city', 'country', 'postalCode']
+  for (const field of stringFields) {
+    const value = String(filters[field] ?? '').trim()
+    if (value !== '') input[field] = value
   }
+  if (filters.pageNumber) input.pageNumber = filters.pageNumber
+  if (filters.pageSize) input.pageSize = filters.pageSize
+
   const data = await graphqlRequest({
     query: RESTAURANTS_QUERY,
-    variables: { input },
+    variables: { input: Object.keys(input).length > 0 ? input : null },
     ...requestOptions(session),
   })
 
-  return (data.restaurants ?? []).map(mapRestaurant)
-}
-
-export async function fetchAvailableCouriersCount(session) {
-  const data = await graphqlRequest({
-    query: AVAILABLE_COURIERS_COUNT_QUERY,
-    ...requestOptions(session),
-  })
-
-  return Number(data?.availableCouriersCount ?? 0)
+  return (data.searchRestaurants ?? []).map(mapRestaurant)
 }
 
 export async function fetchProductOptionGroups({ session, productId }) {
@@ -794,7 +777,7 @@ export async function fetchProductOptionGroups({ session, productId }) {
     ...requestOptions(session),
   })
 
-  return (data.productOptionGroups ?? []).map((group) => ({
+  return (data.getProductOptionGroups ?? []).map((group) => ({
     id: group.id,
     name: group.name,
     min_options: Number(group.min_options ?? 0),
@@ -815,8 +798,8 @@ export async function fetchRestaurantMenu({ session, restaurantId }) {
     ...requestOptions(session),
   })
 
-  return (data.restaurantMenu?.products ?? []).map((item) =>
-    mapMenuProduct(item, data.restaurantMenu?.categories ?? []),
+  return (data.getRestaurantMenu?.products ?? []).map((item) =>
+    mapMenuProduct(item, data.getRestaurantMenu?.categories ?? []),
   )
 }
 
@@ -828,7 +811,7 @@ export async function fetchMyCart(session) {
     ...requestOptions(session),
   })
 
-  return mapCart(data.clientCart)
+  return mapCart(data.getCartByUserId)
 }
 
 function mapAddress(address) {
@@ -853,10 +836,10 @@ export async function fetchClientAddresses(session) {
     ...requestOptions(session),
   })
 
-  return (data.clientAddresses ?? []).map(mapAddress)
+  return (data.getUserAddressesByUserId ?? []).map(mapAddress)
 }
 
-export async function createClientAddress({ session, input }) {
+export async function createUserAddress({ session, input }) {
   const data = await graphqlRequest({
     query: CREATE_CLIENT_ADDRESS_MUTATION,
     variables: {
@@ -875,10 +858,10 @@ export async function createClientAddress({ session, input }) {
     ...requestOptions(session),
   })
 
-  return mapAddress(data.createClientAddress)
+  return mapAddress(data.createUserAddress)
 }
 
-export async function updateClientAddress({ session, addressId, input }) {
+export async function updateUserAddress({ session, addressId, input }) {
   const data = await graphqlRequest({
     query: UPDATE_CLIENT_ADDRESS_MUTATION,
     variables: {
@@ -889,10 +872,10 @@ export async function updateClientAddress({ session, addressId, input }) {
     ...requestOptions(session),
   })
 
-  return mapAddress(data.updateClientAddress)
+  return mapAddress(data.updateUserAddress)
 }
 
-export async function deleteClientAddress({ session, addressId }) {
+export async function deleteUserAddress({ session, addressId }) {
   const data = await graphqlRequest({
     query: DELETE_CLIENT_ADDRESS_MUTATION,
     variables: {
@@ -902,10 +885,10 @@ export async function deleteClientAddress({ session, addressId }) {
     ...requestOptions(session),
   })
 
-  return { ok: Boolean(data.deleteClientAddress) }
+  return { ok: Boolean(data.deleteUserAddress) }
 }
 
-export async function setDefaultClientAddress({ session, addressId }) {
+export async function setDefaultUserAddress({ session, addressId }) {
   const data = await graphqlRequest({
     query: SET_DEFAULT_CLIENT_ADDRESS_MUTATION,
     variables: {
@@ -915,7 +898,7 @@ export async function setDefaultClientAddress({ session, addressId }) {
     ...requestOptions(session),
   })
 
-  return { ok: true, id: data.setDefaultClientAddress.id }
+  return { ok: true, id: data.setDefaultUserAddress.id }
 }
 
 export async function fetchOrderChats({ session, orderId }) {
@@ -925,7 +908,7 @@ export async function fetchOrderChats({ session, orderId }) {
     ...requestOptions(session),
   })
 
-  return (data.orderChats ?? []).map((chat) => ({
+  return (data.getChatsByOrderId ?? []).map((chat) => ({
     id: chat.id,
     order_id: chat.order_id,
     type: chat.type,
@@ -942,7 +925,7 @@ export async function fetchChatMessages({ session, chatId, limit = 50 }) {
     ...requestOptions(session),
   })
 
-  return data.chatMessages ?? []
+  return data.getMessagesByChatId ?? []
 }
 
 export async function createOrderChat({ session, orderId, type, participantUserIds }) {
@@ -979,17 +962,7 @@ export async function sendChatMessage({ session, chatId, content }) {
     ...requestOptions(session),
   })
 
-  return data.sendMessage
-}
-
-export async function markChatRead({ session, chatId }) {
-  const data = await graphqlRequest({
-    query: MARK_CHAT_READ_MUTATION,
-    variables: { chatId, userId: sessionUserId(session) },
-    ...requestOptions(session),
-  })
-
-  return data.markChatAsRead
+  return data.sendChatMessage
 }
 
 export async function createClientReview({ session, rating, comment = null, targetType, targetId }) {
@@ -1051,7 +1024,7 @@ export async function fetchClientReviewsHistory({ session, limit = 50 } = {}) {
     },
     ...requestOptions(session),
   })
-  return data.clientReviews ?? []
+  return data.getReviewsByUserId ?? []
 }
 
 export async function updateClientUser({ session, name = null, email = null }) {
@@ -1082,7 +1055,7 @@ export async function fetchOrderPayment({ session, orderId }) {
     ...requestOptions(session),
   })
 
-  return data.orderPayment
+  return data.getPaymentByOrderId
 }
 
 export async function payPaymentNow({ session, paymentId, transactionId = null }) {
@@ -1095,7 +1068,7 @@ export async function payPaymentNow({ session, paymentId, transactionId = null }
     ...requestOptions(session),
   })
 
-  return data.payPayment
+  return data.confirmPayment
 }
 
 export async function fetchCouponByCode({ session, code }) {
@@ -1105,7 +1078,7 @@ export async function fetchCouponByCode({ session, code }) {
     ...requestOptions(session),
   })
 
-  return data.couponByCode
+  return data.getCouponByCode
 }
 
 async function fetchDefaultAddressId(session) {
@@ -1116,7 +1089,7 @@ async function fetchDefaultAddressId(session) {
     ...requestOptions(session),
   })
 
-  const addresses = data.clientAddresses ?? []
+  const addresses = data.getUserAddressesByUserId ?? []
   return addresses.find((address) => address.is_default)?.id ?? addresses[0]?.id ?? null
 }
 
@@ -1139,7 +1112,7 @@ export async function addCartItem({
     ...requestOptions(session),
   })
 
-  return mapCart(data.addClientCartItem)
+  return mapCart(data.addCartItem)
 }
 
 export async function updateCartItem({ session, cartItemId, quantity }) {
@@ -1155,7 +1128,7 @@ export async function updateCartItem({ session, cartItemId, quantity }) {
     ...requestOptions(session),
   })
 
-  return mapCart(data.updateClientCartItem)
+  return mapCart(data.updateCartItem)
 }
 
 export async function removeCartItem({ session, cartItemId }) {
@@ -1168,7 +1141,17 @@ export async function removeCartItem({ session, cartItemId }) {
     ...requestOptions(session),
   })
 
-  return mapCart(data.removeClientCartItem)
+  return mapCart(data.removeCartItem)
+}
+
+export async function clearCart({ session }) {
+  const data = await graphqlRequest({
+    query: CLEAR_CART_MUTATION,
+    variables: { userId: sessionUserId(session) },
+    ...requestOptions(session),
+  })
+
+  return Boolean(data.clearCart)
 }
 
 export async function checkoutCart(
@@ -1192,12 +1175,12 @@ export async function checkoutCart(
 
   return {
     ok: true,
-    order_id: data.checkout.order.id,
-    payment_id: data.checkout.payment?.id ?? null,
-    order_status: data.checkout.order.status,
-    payment_status: data.checkout.payment?.status ?? null,
-    payment_method: data.checkout.payment?.method ?? paymentMethod,
-    total: data.checkout.order.total,
+    order_id: data.checkoutOrder.order.id,
+    payment_id: data.checkoutOrder.payment?.id ?? null,
+    order_status: data.checkoutOrder.order.status,
+    payment_status: data.checkoutOrder.payment?.status ?? null,
+    payment_method: data.checkoutOrder.payment?.method ?? paymentMethod,
+    total: data.checkoutOrder.order.total,
   }
 }
 
@@ -1212,7 +1195,7 @@ export async function fetchMyOrders(session, { activeOnly = false, limit = 10 } 
     ...requestOptions(session),
   })
 
-  return (data.clientOrders ?? []).map(mapOrderSummary)
+  return (data.getClientOrders ?? []).map(mapOrderSummary)
 }
 
 export async function fetchClientOrdersHistory({
@@ -1232,7 +1215,7 @@ export async function fetchClientOrdersHistory({
     ...requestOptions(session),
   })
 
-  return (data.clientOrders ?? []).map((order) => ({
+  return (data.getClientOrders ?? []).map((order) => ({
     id: order.id,
     restaurant_id: order.restaurant_id,
     status: order.status,
@@ -1268,8 +1251,8 @@ export async function cancelClientOrderById({ session, orderId, reason = null })
 
   return {
     ok: true,
-    order_id: data.cancelClientOrder.id,
-    order_status: data.cancelClientOrder.status,
+    order_id: data.cancelOrderByClient.id,
+    order_status: data.cancelOrderByClient.status,
   }
 }
 
@@ -1292,7 +1275,7 @@ export async function fetchClientOrderDetail({ session, orderId }) {
     variables: { userId: sessionUserId(session), orderId },
     ...requestOptions(session),
   })
-  return data.clientOrder
+  return data.getClientOrder
 }
 
 export async function fetchOrderTracking({ session, orderId }) {
@@ -1318,7 +1301,7 @@ export async function toggleCourierAvailability({ session, status }) {
     ...requestOptions(session),
   })
 
-  return data.setCourierStatus
+  return data.updateCourierStatus
 }
 
 export async function fetchCourierDeliveriesHistory({
@@ -1332,7 +1315,7 @@ export async function fetchCourierDeliveriesHistory({
     ...requestOptions(session),
   })
 
-  return (data.courierDeliveries ?? []).map((delivery) => ({
+  return (data.getDeliveriesByCourierId ?? []).map((delivery) => ({
     delivery_id: delivery.id,
     order_id: delivery.order_id,
     delivery_status: delivery.status,
@@ -1356,7 +1339,7 @@ export async function fetchCourierAvailableDeliveries(session) {
     ...requestOptions(session),
   })
 
-  return (data.courierDeliveryOffers ?? []).map((offer) => ({
+  return (data.getDeliveryOffersByCourierId ?? []).map((offer) => ({
     delivery_id: offer.delivery?.id,
     offer_token: offer.id,
     order_id: offer.delivery?.order_id,
@@ -1474,7 +1457,7 @@ export async function fetchClientNotifications({
     ...requestOptions(session),
   })
 
-  return (data.clientNotifications ?? []).map((notification) => ({
+  return (data.getNotificationsByUserId ?? []).map((notification) => ({
     id: notification.id,
     type: notification.type,
     title: notification.title,
@@ -1495,10 +1478,10 @@ export async function markClientNotificationRead({ session, notificationId }) {
     ...requestOptions(session),
   })
 
-  return data.markNotificationRead
+  return data.markNotificationAsRead
 }
 
-export async function markAllClientNotificationsRead({ session }) {
+export async function markAllNotificationsAsRead({ session }) {
   const data = await graphqlRequest({
     query: MARK_ALL_NOTIFICATIONS_READ_MUTATION,
     variables: {
@@ -1507,7 +1490,7 @@ export async function markAllClientNotificationsRead({ session }) {
     ...requestOptions(session),
   })
 
-  return data.markAllClientNotificationsRead
+  return data.markAllNotificationsAsRead
 }
 
 export async function markDeliveryFailed({ session, deliveryId, reason }) {

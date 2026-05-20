@@ -44,10 +44,8 @@ import {
   createOrderChat,
   fetchChatMessages,
   fetchOrderChats,
-  markChatRead,
   sendChatMessage,
   updateClientUser,
-  fetchAvailableCouriersCount,
   fetchClientAddresses,
   fetchClientNotifications,
   fetchClientOrderDetail,
@@ -499,7 +497,7 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
 
     try {
       setLoading(true)
-      const [nextRestaurants, nextCart, activeOrders, notifications, addressList, courierCount] =
+      const [nextRestaurants, nextCart, activeOrders, notifications, addressList] =
         await Promise.all([
           fetchRestaurants(session),
           fetchMyCart(session),
@@ -508,7 +506,6 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
             () => [],
           ),
           fetchClientAddresses(session).catch(() => []),
-          fetchAvailableCouriersCount(session).catch(() => null),
         ])
 
       setRestaurants(nextRestaurants)
@@ -523,7 +520,6 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
       }
 
       setInboxItems(notifications)
-      setAvailableCouriers(courierCount)
       setAddresses(addressList)
       const defaultAddress = addressList.find((address) => address.is_default) ?? addressList[0]
       if (defaultAddress) {
@@ -863,10 +859,6 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
         participants: target.participants ?? [],
       })
       setErrorText('')
-
-      if (target.id) {
-        markChatRead({ session, chatId: target.id }).catch(() => {})
-      }
     } catch (error) {
       setErrorText(error.message)
     } finally {
@@ -1108,13 +1100,11 @@ export function CustomerAppScreen({ session, pushStatus, onLogout, deepLink, onC
   }
 
   async function refreshAvailableCouriers() {
-    try {
-      const count = await fetchAvailableCouriersCount(session)
-      setAvailableCouriers(count)
-      return count
-    } catch {
-      return availableCouriers
-    }
+    // availableCouriersCount foi removido do schema GraphQL.
+    // Retorna null (= desconhecido); o checkout deixa de bloquear neste check
+    // e o backend trata da atribuicao de estafeta atraves do
+    // AssignCourierToDeliveryJob (com fallback FAILED se nao houver).
+    return null
   }
 
   async function openRestaurant(id) {

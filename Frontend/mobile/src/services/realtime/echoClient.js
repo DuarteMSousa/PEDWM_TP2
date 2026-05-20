@@ -1,5 +1,5 @@
 import Echo from 'laravel-echo'
-import Pusher from 'pusher-js/react-native'
+import Pusher from 'pusher-js'
 
 const REVERB_APP_KEY = process.env.EXPO_PUBLIC_REVERB_APP_KEY ?? ''
 const REVERB_HOST = process.env.EXPO_PUBLIC_REVERB_HOST ?? '127.0.0.1'

@@ -27,6 +27,7 @@ import {
   startBackgroundLocation,
   stopBackgroundLocation,
 } from '../services/backgroundLocationTask'
+import { openGoogleMaps, openWaze } from '../services/navigationLinks'
 
 const OFFER_EXPIRY_FALLBACK_SECONDS = 30
 
@@ -1160,6 +1161,58 @@ export function CourierAppScreen({ session, pushStatus, onLogout, deepLink, onCo
               positions={tracking?.positions ?? []}
             />
           ) : null}
+
+          {activeDelivery && !isCompleted ? (() => {
+            // Destino muda consoante a fase: ate PICKED_UP vai ao restaurante,
+            // a partir dai vai ao cliente.
+            const goingToRestaurant = isPickup
+            const navTarget = goingToRestaurant
+              ? {
+                  lat: tracking?.pickup_latitude,
+                  lng: tracking?.pickup_longitude,
+                  label: 'Restaurante',
+                  address: activeDelivery?.pickup_address,
+                }
+              : {
+                  lat: tracking?.dropoff_latitude,
+                  lng: tracking?.dropoff_longitude,
+                  label: 'Cliente',
+                  address: activeDelivery?.dropoff_address,
+                }
+            const hasCoords =
+              navTarget.lat !== null &&
+              navTarget.lat !== undefined &&
+              navTarget.lng !== null &&
+              navTarget.lng !== undefined
+            if (!hasCoords) return null
+
+            return (
+              <View style={styles.navigateCard}>
+                <Text style={styles.navigateLabel}>
+                  {goingToRestaurant ? 'A caminho do restaurante' : 'A caminho do cliente'}
+                </Text>
+                {navTarget.address ? (
+                  <Text style={styles.navigateAddress} numberOfLines={2}>
+                    {navTarget.address}
+                  </Text>
+                ) : null}
+                <View style={styles.navigateRow}>
+                  <Pressable
+                    style={[styles.navigateBtn, styles.navigateBtnMaps]}
+                    onPress={() => openGoogleMaps(navTarget)}
+                  >
+                    <Text style={styles.navigateBtnMapsText}>Google Maps</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.navigateBtn, styles.navigateBtnWaze]}
+                    onPress={() => openWaze(navTarget)}
+                  >
+                    <Text style={styles.navigateBtnWazeText}>Waze</Text>
+                  </Pressable>
+                </View>
+              </View>
+            )
+          })() : null}
 
           {activeDelivery && !isCompleted ? (
             <View style={styles.chatButtonsRow}>

@@ -12,8 +12,8 @@ const CREATE_USER_MUTATION = `
 `
 
 const LOGIN_USER_MUTATION = `
-  mutation LoginUser($email: String!, $password: String!) {
-    loginUser(email: $email, password: $password) {
+  mutation AuthenticateByCredentials($email: String!, $password: String!) {
+    authenticateByCredentials(email: $email, password: $password) {
       id
       name
       email
@@ -66,7 +66,7 @@ export async function loginMobileUser({ email, password, token = '' }) {
     },
   })
 
-  const user = data?.loginUser
+  const user = data?.authenticateByCredentials
 
   if (!user?.id) {
     throw new Error('Nao foi possivel autenticar o utilizador.')

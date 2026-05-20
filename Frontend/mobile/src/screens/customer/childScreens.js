@@ -107,18 +107,6 @@ export function HomeScreen({
           </Pressable>
         </View>
 
-        {pushStatus && pushStatus !== 'idle' ? (
-          <View style={styles.pushBanner}>
-            <Text style={styles.pushBannerText}>
-              Push: {pushStatus === 'registered'
-                ? 'ativo'
-                : pushStatus === 'permission_denied'
-                  ? 'permissao negada'
-                  : 'indisponivel'}
-            </Text>
-          </View>
-        ) : null}
-
         {!isOnline ? (
           <View style={styles.offlineBanner}>
             <Text style={styles.offlineBannerText}>Sem internet. A app entrou em modo offline.</Text>
@@ -144,17 +132,33 @@ export function HomeScreen({
           </Pressable>
         ) : null}
 
-        {hasActiveOrder ? (
-          <Pressable style={styles.activeOrderBtn} onPress={onOpenTracking}>
-            <Text style={styles.activeOrderBtnText}>
-              Ver pedido ativo ({notificationState === 'live' ? 'notif live' : notificationState})
-            </Text>
-          </Pressable>
-        ) : null}
+        <View style={styles.headerActionsRow}>
+          {hasActiveOrder ? (
+            <Pressable style={styles.activeOrderBtn} onPress={onOpenTracking}>
+              <View
+                style={[
+                  styles.statusDot,
+                  notificationState === 'live'
+                    ? styles.statusDotLive
+                    : notificationState === 'connecting'
+                      ? styles.statusDotConnecting
+                      : styles.statusDotOffline,
+                ]}
+              />
+              <Text style={styles.activeOrderBtnText}>Ver pedido ativo</Text>
+            </Pressable>
+          ) : null}
 
-        <Pressable style={styles.ordersLink} onPress={onOpenOrders}>
-          <Text style={styles.ordersLinkText}>Meus pedidos</Text>
-        </Pressable>
+          <Pressable style={styles.ordersLink} onPress={onOpenOrders}>
+            <Text style={styles.ordersLinkText}>Meus pedidos</Text>
+          </Pressable>
+        </View>
+
+        {pushStatus === 'permission_denied' || pushStatus === 'error' ? (
+          <Text style={styles.pushChip}>
+            Push desativado · ativa nas definicoes para receber atualizacoes
+          </Text>
+        ) : null}
       </View>
 
       <ScrollView
@@ -176,20 +180,24 @@ export function HomeScreen({
             style={styles.restaurantCard}
             onPress={() => onOpenRestaurant(item.id)}
           >
-            <View style={styles.restaurantCover}>
-              <Text style={styles.coverEmoji}>{'\u{1F355}'}</Text>
-            </View>
+            <View style={styles.restaurantStripe} />
             <View style={styles.restaurantBody}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.restaurantName}>{item.name}</Text>
-                <View style={styles.ratingPill}>
-                  <Text style={styles.ratingText}>
-                    {ICON.star} {Number(item.rating ?? 0).toFixed(1)}
-                  </Text>
-                </View>
+              <View style={styles.restaurantIconCircle}>
+                <Text style={styles.restaurantIcon}>{'\u{1F355}'}</Text>
               </View>
-
-              <Text style={styles.cuisine}>{item.city || 'Cidade nao definida'}</Text>
+              <View style={styles.restaurantInfo}>
+                <Text style={styles.restaurantName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.cuisine} numberOfLines={1}>
+                  {item.city || 'Cidade nao definida'}
+                </Text>
+              </View>
+              <View style={styles.ratingPill}>
+                <Text style={styles.ratingText}>
+                  {ICON.star} {Number(item.rating ?? 0).toFixed(1)}
+                </Text>
+              </View>
             </View>
           </Pressable>
         ))}
