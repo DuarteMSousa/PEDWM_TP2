@@ -24,8 +24,7 @@ function emptyPromotionDraft() {
     start_date: '',
     end_date: '',
     discount: '',
-    product_id: '',
-    category_id: '',
+    item_id: '',
   }
 }
 
@@ -36,13 +35,16 @@ function emptyCouponDraft() {
     type: 'PERCENTAGE',
     target: 'ORDER',
     discount: '',
-    product_id: '',
-    category_id: '',
-    min_order_total: '',
-    max_discount_amount: '',
-    max_uses: '',
+    item_id: '',
     expiry_date: '',
   }
+}
+
+function buildItems(draft) {
+  if (draft.target === 'PRODUCT' || draft.target === 'CATEGORY') {
+    return draft.item_id ? [{ item_id: draft.item_id }] : []
+  }
+  return []
 }
 
 export function RestaurantCampaignsScreen({ session }) {
@@ -91,42 +93,31 @@ export function RestaurantCampaignsScreen({ session }) {
     queueMicrotask(() => load())
   }, [load])
 
-  function buildPromotionItems(draft) {
-    const discount = Number(draft.discount ?? 0)
-    if (draft.target === 'PRODUCT') {
-      return draft.product_id ? [{ product_id: draft.product_id, discount }] : []
-    }
-    if (draft.target === 'CATEGORY') {
-      return draft.category_id ? [{ category_id: draft.category_id, discount }] : []
-    }
-    return [{ discount }]
-  }
-
   async function handleSavePromotion() {
     if (!promotionDraft.name.trim()) {
       setErrorText('Nome obrigatorio.')
       return
     }
-    if (promotionDraft.target === 'PRODUCT' && !promotionDraft.product_id) {
+    if (promotionDraft.target === 'PRODUCT' && !promotionDraft.item_id) {
       setErrorText('Escolhe o produto.')
       return
     }
-    if (promotionDraft.target === 'CATEGORY' && !promotionDraft.category_id) {
+    if (promotionDraft.target === 'CATEGORY' && !promotionDraft.item_id) {
       setErrorText('Escolhe a categoria.')
       return
     }
 
     try {
       setSaving(true)
-      const items = buildPromotionItems(promotionDraft)
       const input = {
         name: promotionDraft.name,
         description: promotionDraft.description || null,
         type: promotionDraft.type,
         target: promotionDraft.target,
+        discount: Number(promotionDraft.discount ?? 0),
         start_date: promotionDraft.start_date || null,
         end_date: promotionDraft.end_date || null,
-        items,
+        items: buildItems(promotionDraft),
       }
       if (editingPromotionId) {
         await updateChainPromotion({ session, promotionId: editingPromotionId, input })
@@ -147,7 +138,7 @@ export function RestaurantCampaignsScreen({ session }) {
   }
 
   function startEditPromotion(promotion) {
-    const item = promotion.promotionItems?.[0] ?? {}
+    const firstItem = promotion.promotionItems?.[0]
     setEditingPromotionId(promotion.id)
     setPromotionDraft({
       name: promotion.name,
@@ -156,9 +147,8 @@ export function RestaurantCampaignsScreen({ session }) {
       target: promotion.target,
       start_date: promotion.start_date ?? '',
       end_date: promotion.end_date ?? '',
-      discount: String(item.discount ?? 10),
-      product_id: item.product_id ?? '',
-      category_id: item.category_id ?? '',
+      discount: String(promotion.discount ?? 10),
+      item_id: firstItem?.item_id ?? '',
     })
     setShowPromotionForm(true)
   }
@@ -183,6 +173,14 @@ export function RestaurantCampaignsScreen({ session }) {
       setErrorText('Codigo de cupao obrigatorio.')
       return
     }
+    if (couponDraft.target === 'PRODUCT' && !couponDraft.item_id) {
+      setErrorText('Escolhe o produto.')
+      return
+    }
+    if (couponDraft.target === 'CATEGORY' && !couponDraft.item_id) {
+      setErrorText('Escolhe a categoria.')
+      return
+    }
     try {
       setSaving(true)
       const input = {
@@ -190,13 +188,9 @@ export function RestaurantCampaignsScreen({ session }) {
         description: couponDraft.description || null,
         type: couponDraft.type,
         target: couponDraft.target,
-        discount: couponDraft.discount,
-        product_id: couponDraft.target === 'PRODUCT' ? couponDraft.product_id || null : null,
-        category_id: couponDraft.target === 'CATEGORY' ? couponDraft.category_id || null : null,
-        min_order_total: couponDraft.min_order_total,
-        max_discount_amount: couponDraft.max_discount_amount,
-        max_uses: couponDraft.max_uses,
+        discount: Number(couponDraft.discount ?? 0),
         expiry_date: couponDraft.expiry_date || null,
+        items: buildItems(couponDraft),
       }
       if (editingCouponId) {
         await updateChainCoupon({ session, couponId: editingCouponId, input })
@@ -217,6 +211,7 @@ export function RestaurantCampaignsScreen({ session }) {
   }
 
   function startEditCoupon(coupon) {
+    const firstItem = coupon.promotionItems?.[0]
     setEditingCouponId(coupon.id)
     setCouponDraft({
       code: coupon.code,
@@ -224,12 +219,7 @@ export function RestaurantCampaignsScreen({ session }) {
       type: coupon.type,
       target: coupon.target,
       discount: String(coupon.discount ?? 10),
-      product_id: coupon.product_id ?? '',
-      category_id: coupon.category_id ?? '',
-      min_order_total: coupon.min_order_total != null ? String(coupon.min_order_total) : '',
-      max_discount_amount:
-        coupon.max_discount_amount != null ? String(coupon.max_discount_amount) : '',
-      max_uses: coupon.max_uses != null ? String(coupon.max_uses) : '',
+      item_id: firstItem?.item_id ?? '',
       expiry_date: coupon.expiry_date ?? '',
     })
     setShowCouponForm(true)
@@ -319,7 +309,11 @@ export function RestaurantCampaignsScreen({ session }) {
               <select
                 value={promotionDraft.target}
                 onChange={(event) =>
-                  setPromotionDraft((current) => ({ ...current, target: event.target.value }))
+                  setPromotionDraft((current) => ({
+                    ...current,
+                    target: event.target.value,
+                    item_id: '',
+                  }))
                 }
               >
                 {DISCOUNT_TARGETS.map((target) => (
@@ -345,9 +339,9 @@ export function RestaurantCampaignsScreen({ session }) {
               <label>
                 Produto
                 <select
-                  value={promotionDraft.product_id}
+                  value={promotionDraft.item_id}
                   onChange={(event) =>
-                    setPromotionDraft((current) => ({ ...current, product_id: event.target.value }))
+                    setPromotionDraft((current) => ({ ...current, item_id: event.target.value }))
                   }
                 >
                   <option value="">— escolher —</option>
@@ -363,11 +357,11 @@ export function RestaurantCampaignsScreen({ session }) {
               <label>
                 Categoria
                 <select
-                  value={promotionDraft.category_id}
+                  value={promotionDraft.item_id}
                   onChange={(event) =>
                     setPromotionDraft((current) => ({
                       ...current,
-                      category_id: event.target.value,
+                      item_id: event.target.value,
                     }))
                   }
                 >
@@ -500,7 +494,11 @@ export function RestaurantCampaignsScreen({ session }) {
               <select
                 value={couponDraft.target}
                 onChange={(event) =>
-                  setCouponDraft((current) => ({ ...current, target: event.target.value }))
+                  setCouponDraft((current) => ({
+                    ...current,
+                    target: event.target.value,
+                    item_id: '',
+                  }))
                 }
               >
                 {DISCOUNT_TARGETS.map((target) => (
@@ -526,9 +524,9 @@ export function RestaurantCampaignsScreen({ session }) {
               <label>
                 Produto
                 <select
-                  value={couponDraft.product_id}
+                  value={couponDraft.item_id}
                   onChange={(event) =>
-                    setCouponDraft((current) => ({ ...current, product_id: event.target.value }))
+                    setCouponDraft((current) => ({ ...current, item_id: event.target.value }))
                   }
                 >
                   <option value="">— escolher —</option>
@@ -544,9 +542,9 @@ export function RestaurantCampaignsScreen({ session }) {
               <label>
                 Categoria
                 <select
-                  value={couponDraft.category_id}
+                  value={couponDraft.item_id}
                   onChange={(event) =>
-                    setCouponDraft((current) => ({ ...current, category_id: event.target.value }))
+                    setCouponDraft((current) => ({ ...current, item_id: event.target.value }))
                   }
                 >
                   <option value="">— escolher —</option>
@@ -558,47 +556,6 @@ export function RestaurantCampaignsScreen({ session }) {
                 </select>
               </label>
             ) : null}
-            <label>
-              Total minimo (opcional)
-              <input
-                type="number"
-                step="0.01"
-                value={couponDraft.min_order_total}
-                onChange={(event) =>
-                  setCouponDraft((current) => ({
-                    ...current,
-                    min_order_total: event.target.value,
-                  }))
-                }
-                placeholder="Ex: 15"
-              />
-            </label>
-            <label>
-              Desconto maximo (opcional)
-              <input
-                type="number"
-                step="0.01"
-                value={couponDraft.max_discount_amount}
-                onChange={(event) =>
-                  setCouponDraft((current) => ({
-                    ...current,
-                    max_discount_amount: event.target.value,
-                  }))
-                }
-                placeholder="Ex: 5"
-              />
-            </label>
-            <label>
-              Numero maximo de usos (opcional)
-              <input
-                type="number"
-                value={couponDraft.max_uses}
-                onChange={(event) =>
-                  setCouponDraft((current) => ({ ...current, max_uses: event.target.value }))
-                }
-                placeholder="Ex: 100"
-              />
-            </label>
             <label>
               Validade (ISO)
               <input

@@ -179,14 +179,9 @@ export function RestaurantProfileScreen({ session, onSessionChange }) {
 
   return (
     <section className="rb-page">
-      <header className="rb-page-head rb-page-head-row">
-        <div>
-          <h2>Perfil</h2>
-          <p>Dados da cadeia, unidade ativa e informacao publica do restaurante.</p>
-        </div>
-        <button type="button" className="rb-btn-outline" onClick={load} disabled={loading}>
-          {loading ? 'A carregar...' : 'Atualizar'}
-        </button>
+      <header className="rb-page-head">
+        <h2>Perfil</h2>
+        <p>Dados da cadeia, unidade ativa e informacao publica do restaurante.</p>
       </header>
 
       {errorText ? <p className="rb-chat-error">{errorText}</p> : null}
@@ -207,19 +202,23 @@ export function RestaurantProfileScreen({ session, onSessionChange }) {
                   placeholder="Ex: FastBite"
                 />
               </label>
-              <button
-                type="button"
-                className="rb-btn-accept"
-                onClick={handleSaveChain}
-                disabled={savingChain || !session.chainId}
-              >
-                {savingChain ? 'A guardar...' : 'Guardar cadeia'}
-              </button>
+              <div className="rb-form-actions">
+                <button
+                  type="button"
+                  className="rb-btn-accept rb-btn-small"
+                  onClick={handleSaveChain}
+                  disabled={savingChain || !session.chainId}
+                >
+                  {savingChain ? 'A guardar...' : 'Guardar cadeia'}
+                </button>
+              </div>
             </div>
 
             <div className="rb-detail-row">
               <span>ID da cadeia</span>
-              <strong>{chain?.id ?? session.chainId ?? '-'}</strong>
+              <code className="rb-mono" title={chain?.id ?? session.chainId ?? '-'}>
+                {chain?.id ?? session.chainId ?? '-'}
+              </code>
             </div>
             <div className="rb-detail-row">
               <span>Unidades</span>
@@ -252,7 +251,9 @@ export function RestaurantProfileScreen({ session, onSessionChange }) {
 
             <div className="rb-detail-row">
               <span>ID da unidade</span>
-              <strong>{activeRestaurant?.id ?? selectedRestaurantId}</strong>
+              <code className="rb-mono" title={activeRestaurant?.id ?? selectedRestaurantId}>
+                {activeRestaurant?.id ?? selectedRestaurantId}
+              </code>
             </div>
             <div className="rb-detail-row">
               <span>Horario</span>
@@ -367,14 +368,16 @@ export function RestaurantProfileScreen({ session, onSessionChange }) {
             />
           </label>
 
-          <button
-            type="button"
-            className="rb-btn-accept"
-            onClick={handleSaveRestaurant}
-            disabled={savingRestaurant || !selectedRestaurantId}
-          >
-            {savingRestaurant ? 'A guardar...' : 'Guardar restaurante'}
-          </button>
+          <div className="rb-form-actions">
+            <button
+              type="button"
+              className="rb-btn-accept rb-btn-small"
+              onClick={handleSaveRestaurant}
+              disabled={savingRestaurant || !selectedRestaurantId}
+            >
+              {savingRestaurant ? 'A guardar...' : 'Guardar restaurante'}
+            </button>
+          </div>
         </div>
       </article>
     </section>

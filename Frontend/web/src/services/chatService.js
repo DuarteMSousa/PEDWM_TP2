@@ -1,8 +1,8 @@
 import { buildAuthHeaders, graphqlRequest } from './apiClient'
 
 const ORDER_CHATS_QUERY = `
-  query OrderChats($orderId: ID!) {
-    orderChats(order_id: $orderId) {
+  query GetChatsByOrderId($orderId: ID!) {
+    getChatsByOrderId(order_id: $orderId) {
       id
       order_id
       type
@@ -47,8 +47,8 @@ const CREATE_ORDER_CHAT_MUTATION = `
 `
 
 const SEND_MESSAGE_MUTATION = `
-  mutation SendMessage($input: SendMessageInput!) {
-    sendMessage(input: $input) {
+  mutation SendChatMessage($input: SendMessageInput!) {
+    sendChatMessage(input: $input) {
       id
       chat_id
       sender_participant_id
@@ -101,7 +101,7 @@ export async function fetchOrderChats({ session, orderId }) {
     headers: requestHeaders(session),
   })
 
-  return (data.orderChats ?? []).map(mapChat)
+  return (data.getChatsByOrderId ?? []).map(mapChat)
 }
 
 export async function createOrderChat({
@@ -153,11 +153,11 @@ export async function sendChatMessage({ session, chatId, content }) {
   })
 
   return {
-    id: data.sendMessage.id,
-    chat_id: data.sendMessage.chat_id,
-    content: data.sendMessage.content,
-    sender_participant_id: data.sendMessage.sender_participant_id,
+    id: data.sendChatMessage.id,
+    chat_id: data.sendChatMessage.chat_id,
+    content: data.sendChatMessage.content,
+    sender_participant_id: data.sendChatMessage.sender_participant_id,
     sender_user_id: senderUserId,
-    timestamp: data.sendMessage.timestamp,
+    timestamp: data.sendChatMessage.timestamp,
   }
 }

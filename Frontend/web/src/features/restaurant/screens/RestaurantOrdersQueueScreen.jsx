@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   acceptRestaurantOrder,
-  cancelRestaurantOrder,
   fetchRestaurantActiveOrders,
   rejectRestaurantOrder,
 } from '../../../services/restaurantOpsService'
@@ -33,8 +32,6 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
   const [busyOrderId, setBusyOrderId] = useState('')
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
-  const [cancelTarget, setCancelTarget] = useState(null)
-  const [cancelReason, setCancelReason] = useState('')
   const [dialogLoading, setDialogLoading] = useState(false)
   const [realtimeState, setRealtimeState] = useState('offline')
   useAutoToast({ message: infoText, kind: 'success' })
@@ -119,11 +116,6 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
     setRejectReason('')
   }
 
-  function requestCancel(order) {
-    setCancelTarget(order)
-    setCancelReason('')
-  }
-
   async function handleConfirmReject() {
     if (!rejectTarget) return
     try {
@@ -146,27 +138,6 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
     }
   }
 
-  async function handleConfirmCancel() {
-    if (!cancelTarget) return
-    try {
-      setDialogLoading(true)
-      setBusyOrderId(cancelTarget.order_id)
-      await cancelRestaurantOrder({
-        session,
-        orderId: cancelTarget.order_id,
-        reason: cancelReason,
-      })
-      setInfoText('Encomenda cancelada.')
-      setCancelTarget(null)
-      setCancelReason('')
-      await loadOrders()
-    } catch (error) {
-      setErrorText(error.message)
-    } finally {
-      setBusyOrderId('')
-      setDialogLoading(false)
-    }
-  }
 
   function handleOpenChat(orderId) {
     if (onSelectOrder) onSelectOrder(orderId)
@@ -303,16 +274,6 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
                       </div>
                     ) : (
                       <div className="rb-kitchen-actions">
-                        {['CONFIRMED', 'PREPARING', 'READY'].includes(order.order_status) ? (
-                          <button
-                            type="button"
-                            className="rb-btn-outline"
-                            disabled={busyOrderId === order.order_id}
-                            onClick={() => requestCancel(order)}
-                          >
-                            Cancelar pedido
-                          </button>
-                        ) : null}
                         <button
                           type="button"
                           className="rb-btn-outline"
@@ -365,31 +326,6 @@ export function RestaurantOrdersQueueScreen({ session, onSelectOrder, onNavigate
         </label>
       </ConfirmDialog>
 
-      <ConfirmDialog
-        open={Boolean(cancelTarget)}
-        title="Cancelar encomenda ja aceite"
-        description="O cliente recebera notificacao de cancelamento. Indica o motivo (opcional)."
-        confirmLabel="Cancelar encomenda"
-        destructive
-        loading={dialogLoading}
-        onCancel={() => {
-          if (!dialogLoading) {
-            setCancelTarget(null)
-            setCancelReason('')
-          }
-        }}
-        onConfirm={handleConfirmCancel}
-      >
-        <label>
-          Motivo (opcional)
-          <textarea
-            value={cancelReason}
-            onChange={(event) => setCancelReason(event.target.value)}
-            placeholder="Ex: problema com fornecedor"
-            disabled={dialogLoading}
-          />
-        </label>
-      </ConfirmDialog>
     </section>
   )
 }

@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   acceptRestaurantOrder,
-  cancelRestaurantOrder,
   fetchRestaurantOrderDetail,
   markRestaurantOrderReady,
   rejectRestaurantOrder,
   startPreparingRestaurantOrder,
-  updateOrderItemStatus,
 } from '../../../services/restaurantOpsService'
 import { ConfirmDialog } from '../../../components/common/ConfirmDialog'
 import { DeliveryLeafletMap } from '../../../components/common/DeliveryLeafletMap'
@@ -60,8 +58,6 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
   const [infoText, setInfoText] = useState('')
   const [rejectOpen, setRejectOpen] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
-  const [cancelOpen, setCancelOpen] = useState(false)
-  const [cancelReason, setCancelReason] = useState('')
   const [courierPosition, setCourierPosition] = useState(null)
   useAutoToast({ message: infoText, kind: 'success' })
   useAutoToast({ message: errorText, kind: 'error' })
@@ -449,16 +445,6 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
             Marcar pronto
           </button>
         ) : null}
-        {['CONFIRMED', 'PREPARING', 'READY'].includes(order.status) ? (
-          <button
-            type="button"
-            className="rb-btn-outline"
-            disabled={busy}
-            onClick={() => setCancelOpen(true)}
-          >
-            Cancelar pedido
-          </button>
-        ) : null}
         <button type="button" className="rb-btn-outline" onClick={handleOpenChat}>
           Abrir chat
         </button>
@@ -508,43 +494,6 @@ export function RestaurantOrderDetailScreen({ session, selectedOrderId, onSelect
         </label>
       </ConfirmDialog>
 
-      <ConfirmDialog
-        open={cancelOpen}
-        title="Cancelar encomenda"
-        confirmLabel="Cancelar encomenda"
-        destructive
-        loading={busy}
-        onCancel={() => {
-          if (!busy) {
-            setCancelOpen(false)
-            setCancelReason('')
-          }
-        }}
-        onConfirm={() =>
-          withBusy(
-            () =>
-              cancelRestaurantOrder({
-                session,
-                orderId: order.id,
-                reason: cancelReason,
-              }),
-            'Encomenda cancelada.',
-          ).then(() => {
-            setCancelOpen(false)
-            setCancelReason('')
-          })
-        }
-      >
-        <label>
-          Motivo (opcional)
-          <textarea
-            value={cancelReason}
-            onChange={(event) => setCancelReason(event.target.value)}
-            placeholder="Ex: avaria de equipamento"
-            disabled={busy}
-          />
-        </label>
-      </ConfirmDialog>
     </section>
   )
 }

@@ -76,60 +76,18 @@ function mapNotification(notification) {
 }
 
 const LOGIN_USER_MUTATION = `
-  mutation LoginUser($email: String!, $password: String!) {
-    loginUser(email: $email, password: $password) {
+  mutation AuthenticateByCredentials($email: String!, $password: String!) {
+    authenticateByCredentials(email: $email, password: $password) {
       id
       name
       user_type
     }
-  }
-`
-
-const CREATE_USER_MUTATION = `
-  mutation CreateUser($input: CreateUserInput!) {
-    createUser(input: $input) {
-      id
-      name
-      email
-      user_type
-    }
-  }
-`
-
-const CREATE_RESTAURANT_CHAIN_MUTATION = `
-  mutation CreateRestaurantChain($input: CreateRestaurantChainInput!) {
-    createRestaurantChain(input: $input) {
-      id
-      name
-    }
-  }
-`
-
-const CREATE_RESTAURANT_MUTATION = `
-  mutation CreateRestaurant($input: CreateRestaurantInput!) {
-    createRestaurant(input: $input) {
-      id
-      name
-      chain_id
-    }
-  }
-`
-
-const DELETE_RESTAURANT_MUTATION = `
-  mutation DeleteRestaurant($id: ID!) {
-    deleteRestaurant(id: $id)
-  }
-`
-
-const DELETE_RESTAURANT_CHAIN_MUTATION = `
-  mutation DeleteRestaurantChain($id: ID!) {
-    deleteRestaurantChain(id: $id)
   }
 `
 
 const OPERATOR_RESTAURANT_QUERY = `
-  query OperatorRestaurant($userId: ID!) {
-    operatorRestaurant(user_id: $userId) {
+  query GetRestaurantByLocalManagerUserId($userId: ID!) {
+    getRestaurantByLocalManagerUserId(user_id: $userId) {
       id
       name
       chain_id
@@ -138,8 +96,8 @@ const OPERATOR_RESTAURANT_QUERY = `
 `
 
 const RESTAURANT_ORDER_DETAIL_QUERY = `
-  query RestaurantOrder($restaurantId: ID!, $orderId: ID!) {
-    restaurantOrder(restaurant_id: $restaurantId, order_id: $orderId) {
+  query GetRestaurantOrder($restaurantId: ID!, $orderId: ID!) {
+    getRestaurantOrder(restaurant_id: $restaurantId, order_id: $orderId) {
       id
       user_id
       restaurant_id
@@ -194,8 +152,8 @@ const RESTAURANT_ORDER_DETAIL_QUERY = `
 `
 
 const RESTAURANT_ORDERS_HISTORY_QUERY = `
-  query RestaurantOrdersHistory($restaurantId: ID!, $statuses: [OrderStatus!], $page: Int, $perPage: Int) {
-    restaurantOrders(restaurant_id: $restaurantId, statuses: $statuses, page: $page, per_page: $perPage) {
+  query GetRestaurantOrders($restaurantId: ID!, $statuses: [OrderStatus!], $page: Int, $perPage: Int) {
+    getRestaurantOrders(restaurant_id: $restaurantId, statuses: $statuses, page: $page, per_page: $perPage) {
       id
       user_id
       status
@@ -212,8 +170,8 @@ const RESTAURANT_ORDERS_HISTORY_QUERY = `
 `
 
 const RESTAURANT_ACTIVE_ORDERS_QUERY = `
-  query RestaurantActiveOrders($restaurantId: ID!) {
-    restaurantActiveOrders(restaurant_id: $restaurantId) {
+  query GetActiveRestaurantOrders($restaurantId: ID!) {
+    getActiveRestaurantOrders(restaurant_id: $restaurantId) {
       id
       user_id
       restaurant_id
@@ -236,8 +194,8 @@ const RESTAURANT_ACTIVE_ORDERS_QUERY = `
 `
 
 const ACCEPT_RESTAURANT_ORDER_MUTATION = `
-  mutation AcceptRestaurantOrder($input: RestaurantOrderDecisionInput!) {
-    acceptRestaurantOrder(input: $input) {
+  mutation AcceptOrderByRestaurant($input: RestaurantOrderDecisionInput!) {
+    acceptOrderByRestaurant(input: $input) {
       id
       status
     }
@@ -245,17 +203,8 @@ const ACCEPT_RESTAURANT_ORDER_MUTATION = `
 `
 
 const REJECT_RESTAURANT_ORDER_MUTATION = `
-  mutation RejectRestaurantOrder($input: RestaurantOrderDecisionInput!) {
-    rejectRestaurantOrder(input: $input) {
-      id
-      status
-    }
-  }
-`
-
-const CANCEL_RESTAURANT_ORDER_MUTATION = `
-  mutation CancelRestaurantOrder($input: RestaurantOrderDecisionInput!) {
-    cancelRestaurantOrder(input: $input) {
+  mutation RejectOrderByRestaurant($input: RestaurantOrderDecisionInput!) {
+    rejectOrderByRestaurant(input: $input) {
       id
       status
     }
@@ -294,8 +243,8 @@ const UPDATE_ORDER_ITEM_STATUS_MUTATION = `
 `
 
 const RESTAURANT_MENU_QUERY = `
-  query RestaurantMenu($restaurantId: ID!) {
-    restaurantMenu(restaurant_id: $restaurantId) {
+  query GetRestaurantMenu($restaurantId: ID!) {
+    getRestaurantMenu(restaurant_id: $restaurantId) {
       categories { id name }
       products {
         id
@@ -317,33 +266,35 @@ const RESTAURANT_MENU_QUERY = `
 `
 
 const CHAIN_PROMOTIONS_QUERY = `
-  query ChainPromotions($chainId: ID!) {
-    chainPromotions(chain_id: $chainId) {
+  query GetPromotionsByChainId($chainId: ID!) {
+    getPromotionsByChainId(chain_id: $chainId) {
       id
       name
       description
       type
       target
+      discount
       start_date
       end_date
       promotionItems {
         id
-        product_id
-        category_id
-        discount
+        parent_type
+        parent_id
+        item_id
       }
     }
   }
 `
 
 const CHAIN_COUPONS_QUERY = `
-  query ChainCoupons($chainId: ID!) {
-    chainCoupons(chain_id: $chainId) {
+  query GetCouponsByChainId($chainId: ID!) {
+    getCouponsByChainId(chain_id: $chainId) {
       id
       code
       description
       type
       target
+      discount
       expiry_date
     }
   }
@@ -377,8 +328,8 @@ const UPDATE_COUPON_MUTATION = `
 `
 
 const CHAIN_PRODUCTS_QUERY = `
-  query ChainProducts($chainId: ID!) {
-    chainCategories(chain_id: $chainId) {
+  query GetCategoriesByChainId($chainId: ID!) {
+    getCategoriesByChainId(chain_id: $chainId) {
       id
       name
       products { id name }
@@ -408,8 +359,8 @@ const DELETE_COUPON_MUTATION = `
 `
 
 const TARGET_REVIEWS_QUERY = `
-  query TargetReviews($targetType: ReviewTargetTypeInput!, $targetId: ID!, $perPage: Int) {
-    targetReviews(target_type: $targetType, target_id: $targetId, per_page: $perPage) {
+  query GetReviewsByTarget($targetType: ReviewTargetTypeInput!, $targetId: ID!, $perPage: Int) {
+    getReviewsByTarget(target_type: $targetType, target_id: $targetId, per_page: $perPage) {
       id
       user_id
       rating
@@ -422,8 +373,8 @@ const TARGET_REVIEWS_QUERY = `
 `
 
 const RESTAURANT_QUERY = `
-  query Restaurant($id: ID!) {
-    restaurant(id: $id) {
+  query GetRestaurantById($id: ID!) {
+    getRestaurantById(id: $id) {
       id
       name
       chain_id
@@ -446,8 +397,8 @@ const RESTAURANT_QUERY = `
 `
 
 const RESTAURANT_CHAIN_QUERY = `
-  query RestaurantChain($id: ID!) {
-    restaurantChain(id: $id) {
+  query GetRestaurantChainById($id: ID!) {
+    getRestaurantChainById(id: $id) {
       id
       name
       created_at
@@ -457,8 +408,8 @@ const RESTAURANT_CHAIN_QUERY = `
 `
 
 const CHAIN_RESTAURANTS_QUERY = `
-  query ChainManagerRestaurants($chainId: ID!) {
-    chainManagerRestaurants(chain_id: $chainId) {
+  query GetRestaurantsByChainId($chainId: ID!) {
+    getRestaurantsByChainId(chain_id: $chainId) {
       id
       name
       chain_id
@@ -514,8 +465,8 @@ const UPDATE_RESTAURANT_CHAIN_MUTATION = `
 `
 
 const CHAIN_CATEGORIES_QUERY = `
-  query ChainCategories($chainId: ID!) {
-    chainCategories(chain_id: $chainId) {
+  query GetCategoriesByChainId($chainId: ID!) {
+    getCategoriesByChainId(chain_id: $chainId) {
       id
       name
     }
@@ -538,8 +489,8 @@ const DELETE_CATEGORY_MUTATION = `
 `
 
 const PRODUCT_OPTION_GROUPS_QUERY_ADMIN = `
-  query ProductOptionGroupsAdmin($productId: ID!) {
-    productOptionGroups(product_id: $productId) {
+  query GetProductOptionGroups($productId: ID!) {
+    getProductOptionGroups(product_id: $productId) {
       id
       name
       min_options
@@ -619,8 +570,8 @@ const SET_RESTAURANT_PRODUCT_AVAILABILITY_MUTATION = `
 `
 
 const CLIENT_NOTIFICATIONS_QUERY = `
-  query ClientNotifications($userId: ID!, $unreadOnly: Boolean!, $limit: Int!) {
-    clientNotifications(user_id: $userId, unread_only: $unreadOnly, limit: $limit) {
+  query GetNotificationsByUserId($userId: ID!, $unreadOnly: Boolean!, $limit: Int!) {
+    getNotificationsByUserId(user_id: $userId, unread_only: $unreadOnly, limit: $limit) {
       id
       type
       title
@@ -632,8 +583,8 @@ const CLIENT_NOTIFICATIONS_QUERY = `
 `
 
 const MARK_NOTIFICATION_READ_MUTATION = `
-  mutation MarkNotificationRead($userId: ID!, $notificationId: ID!) {
-    markNotificationRead(user_id: $userId, notification_id: $notificationId) {
+  mutation MarkNotificationAsRead($userId: ID!, $notificationId: ID!) {
+    markNotificationAsRead(user_id: $userId, notification_id: $notificationId) {
       ok
       notification_id
       read_at
@@ -642,8 +593,8 @@ const MARK_NOTIFICATION_READ_MUTATION = `
 `
 
 const MARK_ALL_NOTIFICATIONS_READ_MUTATION = `
-  mutation MarkAllClientNotificationsRead($userId: ID!) {
-    markAllClientNotificationsRead(user_id: $userId) {
+  mutation MarkAllNotificationsAsRead($userId: ID!) {
+    markAllNotificationsAsRead(user_id: $userId) {
       ok
       affected_count
     }
@@ -674,11 +625,11 @@ export async function bootstrapRestaurantSession({
     },
   })
 
-  if (!userData.loginUser) {
+  if (!userData.authenticateByCredentials) {
     throw new Error('Nao foi possivel autenticar o utilizador.')
   }
 
-  const authenticatedUser = userData.loginUser
+  const authenticatedUser = userData.authenticateByCredentials
   const requestSession = {
     devUserId: authenticatedUser.id,
     token: trimmedToken,
@@ -704,7 +655,7 @@ export async function bootstrapRestaurantSession({
           variables: { userId: authenticatedUser.id },
           ...requestOptions(requestSession),
         })
-      ).operatorRestaurant
+      ).getRestaurantByLocalManagerUserId
 
   if (!resolvedRestaurant?.id) {
     throw new Error('Conta sem restaurante associado. Cria um restaurante ou pede associacao ao administrador.')
@@ -722,158 +673,6 @@ export async function bootstrapRestaurantSession({
   }
 }
 
-export async function registerRestaurantUser({
-  email,
-  password,
-  managerName,
-  chainName,
-  restaurant,
-  openingHours,
-  closingHours,
-  deliveryRadius,
-  street,
-  city,
-  postalCode,
-  country,
-  latitude,
-  longitude,
-  restaurantId,
-  token,
-}) {
-  const trimmedEmail = String(email ?? '').trim()
-  const trimmedPassword = String(password ?? '').trim()
-  const trimmedChainName = String(chainName ?? '').trim()
-  const trimmedRestaurantName = String(restaurant ?? '').trim()
-  const trimmedOpeningHours = String(openingHours ?? '').trim()
-  const trimmedClosingHours = String(closingHours ?? '').trim()
-  const trimmedStreet = String(street ?? '').trim()
-  const trimmedCity = String(city ?? '').trim()
-  const trimmedPostalCode = String(postalCode ?? '').trim()
-  const trimmedCountry = String(country ?? '').trim()
-  const parsedDeliveryRadius = Number(deliveryRadius)
-  const parsedLatitude = Number(latitude)
-  const parsedLongitude = Number(longitude)
-
-  if (!trimmedEmail || !trimmedPassword) {
-    throw new Error('Preenche email e password.')
-  }
-
-  if (!trimmedChainName || !trimmedRestaurantName) {
-    throw new Error('Preenche o nome da cadeia e do restaurante.')
-  }
-
-  if (!trimmedOpeningHours || !trimmedClosingHours || Number.isNaN(parsedDeliveryRadius)) {
-    throw new Error('Preenche horarios e raio de entrega validos.')
-  }
-
-  if (
-    !trimmedStreet ||
-    !trimmedCity ||
-    !trimmedPostalCode ||
-    !trimmedCountry ||
-    Number.isNaN(parsedLatitude) ||
-    Number.isNaN(parsedLongitude)
-  ) {
-    throw new Error('Preenche a morada e coordenadas do restaurante.')
-  }
-
-  const defaultName = String(managerName ?? '').trim() || trimmedEmail.split('@')[0] || 'manager'
-
-  let createdChainId = null
-  let createdRestaurantId = null
-
-  try {
-    const chainData = await graphqlRequest({
-      query: CREATE_RESTAURANT_CHAIN_MUTATION,
-      variables: {
-        input: {
-          name: trimmedChainName,
-        },
-      },
-    })
-    createdChainId = chainData.createRestaurantChain.id
-
-    const restaurantData = await graphqlRequest({
-      query: CREATE_RESTAURANT_MUTATION,
-      variables: {
-        input: {
-          chain_id: createdChainId,
-          name: trimmedRestaurantName,
-          opening_hours: trimmedOpeningHours,
-          closing_hours: trimmedClosingHours,
-          delivery_radius: parsedDeliveryRadius,
-          street: trimmedStreet,
-          city: trimmedCity,
-          postal_code: trimmedPostalCode,
-          country: trimmedCountry,
-          latitude: parsedLatitude,
-          longitude: parsedLongitude,
-        },
-      },
-    })
-    createdRestaurantId = restaurantData.createRestaurant.id
-
-    await graphqlRequest({
-      query: CREATE_USER_MUTATION,
-      variables: {
-        input: {
-          name: defaultName,
-          email: trimmedEmail,
-          password: trimmedPassword,
-          user_type: 'CHAIN_MANAGER',
-          chain_id: createdChainId,
-          restaurant_id: createdRestaurantId,
-        },
-      },
-    })
-  } catch (error) {
-    // Rollback: tentar apagar chain+restaurant orfaos se a criacao do user falhou
-    // depois de eles existirem. Falhas no rollback sao silenciadas (best-effort).
-    if (createdRestaurantId) {
-      try {
-        await graphqlRequest({
-          query: DELETE_RESTAURANT_MUTATION,
-          variables: { id: createdRestaurantId },
-        })
-      } catch {
-        // ignore
-      }
-    }
-    if (createdChainId) {
-      try {
-        await graphqlRequest({
-          query: DELETE_RESTAURANT_CHAIN_MUTATION,
-          variables: { id: createdChainId },
-        })
-      } catch {
-        // ignore
-      }
-    }
-
-    const message = String(error?.message ?? '')
-    if (
-      message.includes('users_email_unique') ||
-      message.toLowerCase().includes('unique constraint') ||
-      message.toLowerCase().includes('unique') ||
-      message.toLowerCase().includes('ja esta registado') ||
-      message.toLowerCase().includes('duplicate') ||
-      message.toLowerCase().includes('already')
-    ) {
-      throw new Error('Este email ja esta registado.', { cause: error })
-    }
-
-    throw error
-  }
-
-  return bootstrapRestaurantSession({
-    email: trimmedEmail,
-    password: trimmedPassword,
-    restaurant: trimmedRestaurantName,
-    restaurantId,
-    token,
-  })
-}
-
 export async function fetchRestaurantOrderDetail({ session, orderId }) {
   if (!orderId) return null
   const data = await graphqlRequest({
@@ -884,7 +683,7 @@ export async function fetchRestaurantOrderDetail({ session, orderId }) {
     },
     ...requestOptions(session),
   })
-  return data.restaurantOrder ?? null
+  return data.getRestaurantOrder ?? null
 }
 
 export async function fetchRestaurantOrdersHistory({
@@ -903,7 +702,7 @@ export async function fetchRestaurantOrdersHistory({
     },
     ...requestOptions(session),
   })
-  return (data.restaurantOrders ?? []).map(mapOrder)
+  return (data.getRestaurantOrders ?? []).map(mapOrder)
 }
 
 export async function fetchRestaurantActiveOrders(session) {
@@ -915,7 +714,7 @@ export async function fetchRestaurantActiveOrders(session) {
     ...requestOptions(session),
   })
 
-  return (data.restaurantActiveOrders ?? []).map(mapOrder)
+  return (data.getActiveRestaurantOrders ?? []).map(mapOrder)
 }
 
 export async function acceptRestaurantOrder({ session, orderId }) {
@@ -932,8 +731,8 @@ export async function acceptRestaurantOrder({ session, orderId }) {
 
   return {
     ok: true,
-    order_id: data.acceptRestaurantOrder.id,
-    status: data.acceptRestaurantOrder.status,
+    order_id: data.acceptOrderByRestaurant.id,
+    status: data.acceptOrderByRestaurant.status,
   }
 }
 
@@ -952,28 +751,8 @@ export async function rejectRestaurantOrder({ session, orderId, reason = null })
 
   return {
     ok: true,
-    order_id: data.rejectRestaurantOrder.id,
-    status: data.rejectRestaurantOrder.status,
-  }
-}
-
-export async function cancelRestaurantOrder({ session, orderId, reason = null }) {
-  const data = await graphqlRequest({
-    query: CANCEL_RESTAURANT_ORDER_MUTATION,
-    variables: {
-      input: {
-        actor_user_id: actorUserId(session),
-        order_id: orderId,
-        reason: reason && String(reason).trim() !== '' ? String(reason).trim() : null,
-      },
-    },
-    ...requestOptions(session),
-  })
-
-  return {
-    ok: true,
-    order_id: data.cancelRestaurantOrder.id,
-    status: data.cancelRestaurantOrder.status,
+    order_id: data.rejectOrderByRestaurant.id,
+    status: data.rejectOrderByRestaurant.status,
   }
 }
 
@@ -1051,8 +830,8 @@ export async function fetchRestaurantMenuProducts(session) {
     ...requestOptions(session),
   })
 
-  return (data.restaurantMenu?.products ?? []).map((item) =>
-    mapRestaurantProduct(item, data.restaurantMenu?.categories ?? []),
+  return (data.getRestaurantMenu?.products ?? []).map((item) =>
+    mapRestaurantProduct(item, data.getRestaurantMenu?.categories ?? []),
   )
 }
 
@@ -1065,7 +844,7 @@ async function fetchRestaurantChainId(session) {
     ...requestOptions(session),
   })
 
-  return data.restaurant?.chain_id
+  return data.getRestaurantById?.chain_id
 }
 
 async function resolveCategoryId({ session, chainId, categoryName }) {
@@ -1075,7 +854,7 @@ async function resolveCategoryId({ session, chainId, categoryName }) {
     ...requestOptions(session),
   })
 
-  const existingCategory = (categoryData.chainCategories ?? []).find(
+  const existingCategory = (categoryData.getCategoriesByChainId ?? []).find(
     (category) => normalizeCategoryName(category.name) === normalizeCategoryName(categoryName),
   )
 
@@ -1208,7 +987,7 @@ export async function fetchChainPromotions({ session, chainId }) {
     variables: { chainId: chainId ?? session.chainId },
     ...requestOptions(session),
   })
-  return data.chainPromotions ?? []
+  return data.getPromotionsByChainId ?? []
 }
 
 export async function fetchChainCoupons({ session, chainId }) {
@@ -1217,7 +996,7 @@ export async function fetchChainCoupons({ session, chainId }) {
     variables: { chainId: chainId ?? session.chainId },
     ...requestOptions(session),
   })
-  return data.chainCoupons ?? []
+  return data.getCouponsByChainId ?? []
 }
 
 export async function createChainPromotion({ session, input }) {
@@ -1273,14 +1052,8 @@ export async function updateChainCoupon({ session, couponId, input }) {
         type: input.type,
         target: input.target,
         discount: Number(input.discount),
-        product_id: input.product_id ?? null,
-        category_id: input.category_id ?? null,
-        min_order_total: input.min_order_total ? Number(input.min_order_total) : null,
-        max_discount_amount: input.max_discount_amount
-          ? Number(input.max_discount_amount)
-          : null,
-        max_uses: input.max_uses ? Number(input.max_uses) : null,
         expiry_date: input.expiry_date ?? null,
+        items: input.items ?? [],
       },
     },
     ...requestOptions(session),
@@ -1294,8 +1067,8 @@ export async function fetchChainProductsAndCategories({ session, chainId }) {
     variables: { chainId: chainId ?? session.chainId },
     ...requestOptions(session),
   })
-  const categories = (data.chainCategories ?? []).map((cat) => ({ id: cat.id, name: cat.name }))
-  const products = (data.chainCategories ?? []).flatMap((cat) =>
+  const categories = (data.getCategoriesByChainId ?? []).map((cat) => ({ id: cat.id, name: cat.name }))
+  const products = (data.getCategoriesByChainId ?? []).flatMap((cat) =>
     (cat.products ?? []).map((product) => ({
       id: product.id,
       name: product.name,
@@ -1326,16 +1099,8 @@ export async function createChainCoupon({ session, input }) {
         type: input.type,
         target: input.target,
         discount: Number(input.discount),
-        product_id: input.product_id ?? null,
-        category_id: input.category_id ?? null,
-        min_order_total: input.min_order_total
-          ? Number(input.min_order_total)
-          : null,
-        max_discount_amount: input.max_discount_amount
-          ? Number(input.max_discount_amount)
-          : null,
-        max_uses: input.max_uses ? Number(input.max_uses) : null,
         expiry_date: input.expiry_date ?? null,
+        items: input.items ?? [],
       },
     },
     ...requestOptions(session),
@@ -1362,7 +1127,7 @@ export async function fetchRestaurantReviews({ session, restaurantId, limit = 30
     },
     ...requestOptions(session),
   })
-  return data.targetReviews ?? []
+  return data.getReviewsByTarget ?? []
 }
 
 export async function fetchChainCategories({ session, chainId }) {
@@ -1371,7 +1136,7 @@ export async function fetchChainCategories({ session, chainId }) {
     variables: { chainId: chainId ?? session.chainId },
     ...requestOptions(session),
   })
-  return data.chainCategories ?? []
+  return data.getCategoriesByChainId ?? []
 }
 
 export async function createChainCategory({ session, chainId, name }) {
@@ -1410,7 +1175,7 @@ export async function fetchRestaurantProfile({ session, restaurantId }) {
     ...requestOptions(session),
   })
 
-  return data.restaurant ?? null
+  return data.getRestaurantById ?? null
 }
 
 export async function fetchRestaurantChainProfile({ session, chainId }) {
@@ -1420,7 +1185,7 @@ export async function fetchRestaurantChainProfile({ session, chainId }) {
     ...requestOptions(session),
   })
 
-  return data.restaurantChain ?? null
+  return data.getRestaurantChainById ?? null
 }
 
 export async function fetchChainRestaurants({ session, chainId }) {
@@ -1430,7 +1195,7 @@ export async function fetchChainRestaurants({ session, chainId }) {
     ...requestOptions(session),
   })
 
-  return data.chainManagerRestaurants ?? []
+  return data.getRestaurantsByChainId ?? []
 }
 
 export async function updateRestaurantProfile({ session, restaurantId, input }) {
@@ -1509,7 +1274,7 @@ export async function fetchProductOptionGroupsAdmin({ session, productId }) {
     variables: { productId },
     ...requestOptions(session),
   })
-  return (data.productOptionGroups ?? []).map((group) => ({
+  return (data.getProductOptionGroups ?? []).map((group) => ({
     id: group.id,
     name: group.name,
     min_options: Number(group.min_options ?? 0),
@@ -1538,7 +1303,7 @@ export async function fetchOperatorNotifications({
     ...requestOptions(session),
   })
 
-  return (data.clientNotifications ?? []).map(mapNotification)
+  return (data.getNotificationsByUserId ?? []).map(mapNotification)
 }
 
 export async function markOperatorNotificationRead({ session, notificationId }) {
@@ -1551,7 +1316,7 @@ export async function markOperatorNotificationRead({ session, notificationId }) 
     ...requestOptions(session),
   })
 
-  return data.markNotificationRead
+  return data.markNotificationAsRead
 }
 
 export async function markAllOperatorNotificationsRead({ session }) {
@@ -1563,5 +1328,5 @@ export async function markAllOperatorNotificationsRead({ session }) {
     ...requestOptions(session),
   })
 
-  return data.markAllClientNotificationsRead
+  return data.markAllNotificationsAsRead
 }

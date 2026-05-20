@@ -9,48 +9,34 @@ export function FastBiteLogo({ size = 40, withFrame = true }) {
       role="img"
     >
       <defs>
-        <linearGradient id="fb-plate" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#fb923c" />
+        <linearGradient id="fb-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ff8a3d" />
           <stop offset="100%" stopColor="#ea580c" />
-        </linearGradient>
-        <linearGradient id="fb-bolt" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#fef08a" />
-          <stop offset="100%" stopColor="#eab308" />
         </linearGradient>
       </defs>
 
-      {/* Prato (circulo principal) */}
-      <circle cx="32" cy="32" r="28" fill="url(#fb-plate)" />
+      {/* Fundo arredondado laranja */}
+      <rect width="64" height="64" rx="14" fill="url(#fb-bg)" />
 
-      {/* Borda interna do prato */}
-      <circle
-        cx="32"
-        cy="32"
-        r="22"
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="1.4"
-        opacity="0.35"
+      {/* Corpo do saco de delivery */}
+      <path
+        d="M 16 22 L 48 22 L 46 52 Q 46 54 44 54 L 20 54 Q 18 54 18 52 Z"
+        fill="#ffffff"
       />
 
-      {/* Raio amarelo: zigzag classico atravessando o prato */}
+      {/* Alca do saco */}
       <path
-        d="M 36 14 L 24 34 L 30 34 L 26 50 L 40 30 L 34 30 Z"
-        fill="url(#fb-bolt)"
-        stroke="#b45309"
-        strokeWidth="0.8"
-        strokeLinejoin="round"
+        d="M 24 22 Q 24 14 32 14 Q 40 14 40 22"
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth="2.4"
         strokeLinecap="round"
       />
 
-      {/* Brilho subtil no raio para profundidade */}
+      {/* Raio (FastBite mark) */}
       <path
-        d="M 35 16 L 27 30 L 30 30"
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth="1"
-        strokeLinecap="round"
-        opacity="0.5"
+        d="M 34 28 L 26 40 L 31 40 L 28 48 L 38 36 L 33 36 Z"
+        fill="#ea580c"
       />
     </svg>
   )

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   acceptRestaurantOrder,
-  cancelRestaurantOrder,
   fetchRestaurantActiveOrders,
   markRestaurantOrderReady,
   rejectRestaurantOrder,
@@ -71,8 +70,6 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
   const [infoText, setInfoText] = useState('')
   const [rejectTarget, setRejectTarget] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
-  const [cancelTarget, setCancelTarget] = useState(null)
-  const [cancelReason, setCancelReason] = useState('')
   const [dialogLoading, setDialogLoading] = useState(false)
   const [pendingAlerts, setPendingAlerts] = useState([])
   const [realtimeState, setRealtimeState] = useState('offline')
@@ -163,7 +160,12 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
   )
 
   const prepOrders = useMemo(
-    () => orders.filter((order) => ['CONFIRMED', 'PREPARING', 'READY'].includes(order.order_status)),
+    () => orders.filter((order) => ['CONFIRMED', 'PREPARING'].includes(order.order_status)),
+    [orders],
+  )
+
+  const readyOrders = useMemo(
+    () => orders.filter((order) => order.order_status === 'READY'),
     [orders],
   )
 
@@ -185,11 +187,6 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
     setRejectReason('')
   }
 
-  function requestCancel(order) {
-    setCancelTarget(order)
-    setCancelReason('')
-  }
-
   async function handleConfirmReject() {
     if (!rejectTarget) return
     try {
@@ -203,28 +200,6 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
       setInfoText('Encomenda rejeitada.')
       setRejectTarget(null)
       setRejectReason('')
-      await loadOrders()
-    } catch (error) {
-      setErrorText(error.message)
-    } finally {
-      setBusyOrderId('')
-      setDialogLoading(false)
-    }
-  }
-
-  async function handleConfirmCancel() {
-    if (!cancelTarget) return
-    try {
-      setDialogLoading(true)
-      setBusyOrderId(cancelTarget.order_id)
-      await cancelRestaurantOrder({
-        session,
-        orderId: cancelTarget.order_id,
-        reason: cancelReason,
-      })
-      setInfoText('Encomenda cancelada.')
-      setCancelTarget(null)
-      setCancelReason('')
       await loadOrders()
     } catch (error) {
       setErrorText(error.message)
@@ -291,17 +266,17 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
           <h2>Cozinha Virtual</h2>
           <p>Gerir encomendas e preparacao de pratos</p>
         </div>
-        <div className="rb-toast">
+        <div className={`rb-realtime-pill rb-realtime-${realtimeState}`}>
+          <span className="rb-realtime-dot" />
           <strong>
             {realtimeState === 'live'
               ? 'Realtime ativo'
               : realtimeState === 'connecting'
-                ? 'A ligar realtime...'
+                ? 'A ligar...'
                 : realtimeState === 'error'
-                  ? 'Realtime offline (fallback 30s)'
-                  : 'Offline (fallback 30s)'}
+                  ? 'Realtime offline'
+                  : 'Offline'}
           </strong>
-          <span>Dados reais do backend com estados por item.</span>
         </div>
       </header>
 
@@ -522,16 +497,55 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
             >
               Detalhe
             </button>
-            {['CONFIRMED', 'PREPARING', 'READY'].includes(order.order_status) ? (
-              <button
-                type="button"
-                className="rb-btn-outline"
-                onClick={() => requestCancel(order)}
-                disabled={busyOrderId === order.order_id}
-              >
-                Cancelar pedido
-              </button>
-            ) : null}
+          </footer>
+        </article>
+      ))}
+
+      <h3 className="rb-section-title">
+        Prontas para entrega <span className="green">{readyOrders.length}</span>
+      </h3>
+
+      {readyOrders.length === 0 ? <p>Sem encomendas prontas.</p> : null}
+
+      {readyOrders.map((order) => (
+        <article className="rb-prep-detail rb-prep-detail-ready" key={order.order_id}>
+          <header className="rb-prep-header">
+            <div>
+              <h4>#{String(order.order_id).slice(0, 8)}</h4>
+              <p>{formatTime(order.created_at)}</p>
+            </div>
+            <div className="rb-kitchen-price">
+              <strong>{Number(order.total).toFixed(2)} EUR</strong>
+              <span className={`rb-chip ${mapOrderTone(order.order_status)}`}>
+                {mapStatusLabel(order.order_status)}
+              </span>
+            </div>
+          </header>
+
+          <div className="rb-kitchen-contact">
+            <p>{order.customer_name ?? `Cliente ${String(order.customer_id).slice(0, 8)}`}</p>
+            <p>{order.delivery_address ?? 'Morada indisponivel'}</p>
+          </div>
+
+          <p className="rb-prep-note">A aguardar estafeta. Ja podes tirar do balcao quando ele chegar.</p>
+
+          <footer className="rb-prep-actions">
+            <button
+              type="button"
+              className="rb-btn-outline"
+              onClick={() => handleOpenChat(order.order_id)}
+              disabled={busyOrderId === order.order_id}
+            >
+              Abrir chat
+            </button>
+            <button
+              type="button"
+              className="rb-btn-outline"
+              onClick={() => handleOpenDetail(order.order_id)}
+              disabled={busyOrderId === order.order_id}
+            >
+              Detalhe
+            </button>
           </footer>
         </article>
       ))}
@@ -565,31 +579,6 @@ export function RestaurantVirtualKitchenScreen({ session, onSelectOrder, onNavig
         </label>
       </ConfirmDialog>
 
-      <ConfirmDialog
-        open={Boolean(cancelTarget)}
-        title="Cancelar encomenda em preparacao"
-        description="O cliente recebera notificacao de cancelamento. Indica o motivo (opcional)."
-        confirmLabel="Cancelar encomenda"
-        destructive
-        loading={dialogLoading}
-        onCancel={() => {
-          if (!dialogLoading) {
-            setCancelTarget(null)
-            setCancelReason('')
-          }
-        }}
-        onConfirm={handleConfirmCancel}
-      >
-        <label>
-          Motivo (opcional)
-          <textarea
-            value={cancelReason}
-            onChange={(event) => setCancelReason(event.target.value)}
-            placeholder="Ex: avaria de equipamento"
-            disabled={dialogLoading}
-          />
-        </label>
-      </ConfirmDialog>
     </section>
   )
 }
