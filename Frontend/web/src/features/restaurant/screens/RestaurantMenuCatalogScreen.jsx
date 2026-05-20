@@ -56,6 +56,13 @@ export function RestaurantMenuCatalogScreen({ session }) {
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null)
   const [productOptionGroups, setProductOptionGroups] = useState([])
 
+  const categoryOptions = useMemo(() => {
+    const normalized = chainCategories
+      .map((entry) => entry?.name?.trim())
+      .filter(Boolean)
+    return Array.from(new Set(normalized))
+  }, [chainCategories])
+
   const loadProducts = useCallback(async () => {
     try {
       setLoading(true)
@@ -316,6 +323,11 @@ export function RestaurantMenuCatalogScreen({ session }) {
     setShowCategoriesModal(true)
     loadCategoriesForModal()
   }
+
+  useEffect(() => {
+    if (!showCreateForm) return
+    loadCategoriesForModal()
+  }, [showCreateForm])
 
   async function handleCreateCategory() {
     const name = newCategoryName.trim()
@@ -713,17 +725,27 @@ export function RestaurantMenuCatalogScreen({ session }) {
         <div className="rb-login-form rb-create-product-modal-form">
           <label>
             Categoria
-            <input
+            <select
               value={newProduct.category}
-              onChange={(event) => setNewProduct((state) => ({ ...state, category: event.target.value }))}
-              placeholder="Ex: Pizzas"
-            />
+              onChange={(event) =>
+                setNewProduct((current) => ({ ...current, category: event.target.value }))
+              }
+            >
+              <option value="">Seleciona uma categoria</option>
+              {categoryOptions.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Nome
             <input
               value={newProduct.name}
-              onChange={(event) => setNewProduct((state) => ({ ...state, name: event.target.value }))}
+              onChange={(event) =>
+                setNewProduct((current) => ({ ...current, name: event.target.value }))
+              }
               placeholder="Ex: Pizza margherita"
             />
           </label>
@@ -734,7 +756,9 @@ export function RestaurantMenuCatalogScreen({ session }) {
               min="0"
               step="0.01"
               value={newProduct.price}
-              onChange={(event) => setNewProduct((state) => ({ ...state, price: event.target.value }))}
+              onChange={(event) =>
+                setNewProduct((current) => ({ ...current, price: event.target.value }))
+              }
               placeholder="Ex: 9.50"
             />
           </label>
@@ -745,7 +769,10 @@ export function RestaurantMenuCatalogScreen({ session }) {
               min="1"
               value={newProduct.estimated_preparation_time_min}
               onChange={(event) =>
-                setNewProduct((state) => ({ ...state, estimated_preparation_time_min: event.target.value }))
+                setNewProduct((current) => ({
+                  ...current,
+                  estimated_preparation_time_min: event.target.value,
+                }))
               }
               placeholder="Ex: 15"
             />
@@ -754,7 +781,9 @@ export function RestaurantMenuCatalogScreen({ session }) {
             Descricao
             <input
               value={newProduct.description}
-              onChange={(event) => setNewProduct((state) => ({ ...state, description: event.target.value }))}
+              onChange={(event) =>
+                setNewProduct((current) => ({ ...current, description: event.target.value }))
+              }
               placeholder="Ex: Tomate, mozzarella e manjericao"
             />
           </label>
@@ -762,7 +791,9 @@ export function RestaurantMenuCatalogScreen({ session }) {
             <input
               type="checkbox"
               checked={newProduct.is_available}
-              onChange={(event) => setNewProduct((state) => ({ ...state, is_available: event.target.checked }))}
+              onChange={(event) =>
+                setNewProduct((current) => ({ ...current, is_available: event.target.checked }))
+              }
             />
             {' '}Disponivel
           </label>
