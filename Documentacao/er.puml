@@ -431,7 +431,7 @@ entity OrderDiscount {
     +discountType: DiscountType
     +discountTarget: DiscountTarget
     +orderItemId: UUID?
-    +originType:DiscountOriginType
+    +originType: CampaignMorphType
     +originId: UUID
 }
 

@@ -64,12 +64,7 @@ enum DiscountTarget {
   CATEGORY
 }
 
-enum DiscountOriginType {
-  PROMOTION
-  COUPON
-}
-
-enum PromotionItemParentType {
+enum CampaignMorphType {
   PROMOTION
   COUPON
 }
@@ -298,7 +293,7 @@ type OrderDiscount {
   discount_type: DiscountType!
   discount_target: DiscountTarget!
   order_item_id: ID
-  origin_type: DiscountOriginType!
+  origin_type: CampaignMorphType!
   origin_id: ID!
 }
 
@@ -391,7 +386,7 @@ type Promotion {
 
 type PromotionItem {
   id: ID!
-  parent_type: PromotionItemParentType!
+  parent_type: CampaignMorphType!
   parent_id: ID!
   item_id: ID!
 }

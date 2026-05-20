@@ -99,12 +99,7 @@ enum ReviewTargetType {
     COURIER
 }
 
-enum DiscountOriginType {
-    PROMOTION
-    COUPON
-}
-
-enum PromotionItemParentType {
+enum CampaignMorphType {
     PROMOTION
     COUPON
 }
@@ -275,7 +270,7 @@ class OrderDiscount {
     +discountType: DiscountType
     +discountTarget: DiscountTarget
     +orderItemId: UUID?
-    +originType:DiscountOriginType
+    +originType: CampaignMorphType
     +originId: UUID
 }
 
@@ -437,7 +432,7 @@ class Promotion {
 
 class PromotionItem {
     +id: UUID
-    +parentType: PromotionItemParentType
+    +parentType: CampaignMorphType
     +parentId: UUID
     +itemId: UUID
 }
