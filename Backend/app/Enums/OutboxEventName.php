@@ -1,0 +1,10 @@
+<?php
+
+namespace App\Enums;
+
+enum OutboxEventName: string
+{
+    case COURIER_POSITION_UPDATED = 'COURIER_POSITION_UPDATED';
+    case CHAT_MESSAGE_SENT = 'CHAT_MESSAGE_SENT';
+    case USER_NOTIFICATION_CREATED = 'USER_NOTIFICATION_CREATED';
+}

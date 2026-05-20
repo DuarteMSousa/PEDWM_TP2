@@ -4,6 +4,7 @@ namespace App\Services\TrackingService;
 
 use App\Aspects\Transactional;
 use App\DTOs\Tracking\UpdateCourierLocationDTO;
+use App\Enums\OutboxEventName;
 use App\Models\CourierPositionHistory;
 use App\Models\Delivery;
 use App\Models\Order;
@@ -78,9 +79,9 @@ class TrackingService implements TrackingServiceInterface
             'timestamp' => $timestamp,
         ]);
 
-        app(OutboxService::class)->enqueue('delivery', $delivery->id, 'COURIER_POSITION_UPDATED', [
+        app(OutboxService::class)->enqueue('delivery', $delivery->id, OutboxEventName::COURIER_POSITION_UPDATED->value, [
             'eventId' => (string) Str::uuid(),
-            'eventName' => 'COURIER_POSITION_UPDATED',
+            'eventName' => OutboxEventName::COURIER_POSITION_UPDATED->value,
             'orderId' => $delivery->order_id,
             'deliveryId' => $delivery->id,
             'courierId' => $data->courier_id,

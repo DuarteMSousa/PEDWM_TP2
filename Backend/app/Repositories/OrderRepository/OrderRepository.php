@@ -4,9 +4,7 @@ namespace App\Repositories\OrderRepository;
 
 use App\DTOs\Order\CreateOrderDTO;
 use App\DTOs\Order\UpdateOrderDTO;
-use App\Enums\OrderEventType;
 use App\Models\Order;
-use Illuminate\Support\Facades\DB;
 
 class OrderRepository implements OrderRepositoryInterface
 {
@@ -106,13 +104,6 @@ class OrderRepository implements OrderRepositoryInterface
                     'payload' => $eventDTO->payload,
                 ]);
             }
-        } else {
-            // talvez devesser colocado na camada de service
-            $order->events()->create([
-                'event_type' => OrderEventType::ORDER_CREATED->value,
-                'timestamp' => now(),
-                'payload' => null,
-            ]);
         }
 
         if ($data->discounts !== null) {

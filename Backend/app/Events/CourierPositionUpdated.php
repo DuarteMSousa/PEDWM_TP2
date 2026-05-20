@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Enums\OutboxEventName;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -28,7 +29,7 @@ class CourierPositionUpdated implements ShouldBroadcastNow
 
     public function broadcastAs(): string
     {
-        return 'COURIER_POSITION_UPDATED';
+        return OutboxEventName::COURIER_POSITION_UPDATED->value;
     }
 
     /**

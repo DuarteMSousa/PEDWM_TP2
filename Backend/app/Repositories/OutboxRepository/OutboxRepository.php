@@ -3,6 +3,7 @@
 namespace App\Repositories\OutboxRepository;
 
 use App\DTOs\Outbox\CreateOutboxEventDTO;
+use App\Enums\OutboxStatus;
 use App\Models\OutboxEvent;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -16,7 +17,7 @@ class OutboxRepository implements OutboxRepositoryInterface
             'aggregate_id' => $data->aggregateId,
             'event_name' => $data->eventName,
             'payload' => $data->payload,
-            'status' => 'PENDING',
+            'status' => OutboxStatus::PENDING,
             'retry_count' => 0,
             'next_attempt_at' => now(),
         ]);
@@ -29,7 +30,7 @@ class OutboxRepository implements OutboxRepositoryInterface
 
     public function markProcessing(OutboxEvent $outbox): OutboxEvent
     {
-        $outbox->update(['status' => 'PROCESSING']);
+        $outbox->update(['status' => OutboxStatus::PROCESSING]);
 
         return $outbox;
     }
@@ -37,7 +38,7 @@ class OutboxRepository implements OutboxRepositoryInterface
     public function markPublished(OutboxEvent $outbox): OutboxEvent
     {
         $outbox->update([
-            'status' => 'PUBLISHED',
+            'status' => OutboxStatus::PUBLISHED,
             'published_at' => now(),
             'last_error' => null,
         ]);
@@ -52,7 +53,7 @@ class OutboxRepository implements OutboxRepositoryInterface
             $isTerminal = $retryCount >= $maxRetries;
 
             $outbox->update([
-                'status' => $isTerminal ? 'FAILED' : 'PENDING',
+                'status' => $isTerminal ? OutboxStatus::FAILED : OutboxStatus::PENDING,
                 'retry_count' => $retryCount,
                 'next_attempt_at' => $isTerminal ? null : now()->addSeconds(min(300, 2 ** $retryCount)),
                 'last_error' => mb_substr($exception->getMessage(), 0, 2000),

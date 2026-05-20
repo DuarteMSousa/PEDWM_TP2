@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Enums\OutboxEventName;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
@@ -28,7 +29,7 @@ class ChatMessageSent implements ShouldBroadcastNow
 
     public function broadcastAs(): string
     {
-        return 'CHAT_MESSAGE_SENT';
+        return OutboxEventName::CHAT_MESSAGE_SENT->value;
     }
 
     /**

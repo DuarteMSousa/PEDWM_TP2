@@ -5,6 +5,7 @@ namespace App\Services\NotificationService;
 use App\Aspects\Transactional;
 use App\DTOs\Notification\CreateNotificationDTO;
 use App\Enums\NotificationType;
+use App\Enums\OutboxEventName;
 use App\Jobs\SendPushNotificationJob;
 use App\Models\Notification;
 use App\Notifications\UserSystemNotification;
@@ -102,9 +103,9 @@ class NotificationService implements NotificationServiceInterface
             return;
         }
 
-        $response = Http::timeout(8)
+        $response = Http::timeout((int) config('services.expo.timeout_seconds', 8))
             ->acceptJson()
-            ->post('https://exp.host/--/api/v2/push/send', [
+            ->post((string) config('services.expo.push_url'), [
                 'to' => $pushToken->token,
                 'title' => (string) ($payload['title'] ?? 'FastBite'),
                 'body' => (string) ($payload['message'] ?? ''),
@@ -135,7 +136,7 @@ class NotificationService implements NotificationServiceInterface
 
         $payload = [
             'eventId' => (string) Str::uuid(),
-            'eventName' => 'USER_NOTIFICATION_CREATED',
+            'eventName' => OutboxEventName::USER_NOTIFICATION_CREATED->value,
             'notificationId' => $notification->id,
             'userId' => $notification->user_id,
             'type' => $notification->type->value,
@@ -149,7 +150,7 @@ class NotificationService implements NotificationServiceInterface
         $this->outboxService->enqueue(
             aggregateType: 'notification',
             aggregateId: $notification->id,
-            eventName: 'USER_NOTIFICATION_CREATED',
+            eventName: OutboxEventName::USER_NOTIFICATION_CREATED->value,
             payload: $payload
         );
 

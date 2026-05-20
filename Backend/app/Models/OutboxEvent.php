@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OutboxStatus;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 
@@ -28,6 +29,7 @@ class OutboxEvent extends Model
             'retry_count' => 'integer',
             'next_attempt_at' => 'datetime',
             'published_at' => 'datetime',
+            'status' => OutboxStatus::class,
         ];
     }
 }

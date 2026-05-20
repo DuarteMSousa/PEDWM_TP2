@@ -6,6 +6,10 @@ use App\Aspects\Transactional;
 use App\Domain\Geo\GeoMath;
 use App\Domain\StateMachines\Orders\OrderStateFactory;
 use App\DTOs\Order\CheckoutDTO;
+use App\DTOs\Order\CreateOrderDTO;
+use App\DTOs\Order\OrderAddress\CreateOrderAddressDTO;
+use App\DTOs\Order\OrderItem\CreateOrderItemDTO;
+use App\DTOs\Order\OrderItemOption\CreateOrderItemOptionDTO;
 use App\Enums\OrderEventType;
 use App\Enums\OrderItemStatus;
 use App\Enums\OrderStatus;
@@ -22,6 +26,7 @@ use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Restaurant;
 use App\Models\UserAddress;
+use App\Repositories\OrderRepository\OrderRepositoryInterface;
 use App\Services\CartService\CartServiceInterface;
 use App\Services\DeliveryService\DeliveryServiceInterface;
 use App\Services\OrderPricingService;
@@ -31,6 +36,7 @@ use BackedEnum;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Spatie\LaravelData\DataCollection;
 
 class OrderService implements OrderServiceInterface
 {
@@ -128,34 +134,10 @@ class OrderService implements OrderServiceInterface
         $paymentStatus = $method === PaymentMethod::CASH ? PaymentStatus::COMPLETED : PaymentStatus::PENDING;
         $orderStatus = $paymentStatus === PaymentStatus::COMPLETED ? OrderStatus::CONFIRMED : OrderStatus::PENDING;
 
-        $order = Order::query()->create([
-            'user_id' => $clientUserId,
-            'restaurant_id' => $restaurant->id,
-            'status' => $orderStatus->value,
-            'total' => $pricing['total'],
-            'restaurant_name_snapshot' => $restaurant->name,
-        ]);
-
-        $cartItemToOrderItem = [];
-        foreach ($cart->items as $cartItem) {
-            $orderItem = $order->items()->create([
-                'restaurant_product_id' => $cartItem->restaurant_product_id,
-                'status' => OrderItemStatus::PENDING->value,
-                'quantity' => $cartItem->quantity,
-                'unit_price' => $cartItem->unit_price,
-                'product_name_snapshot' => $cartItem->restaurantProduct->product->name,
-                'total_price' => $cartItem->total_price,
-            ]);
-            $cartItemToOrderItem[$cartItem->id] = $orderItem->id;
-
-            foreach ($cartItem->options as $cartOption) {
-                $orderItem->options()->create([
-                    'product_option_id' => $cartOption->product_option_id,
-                    'option_name_snapshot' => $cartOption->productOption->name,
-                    'extra_price' => $cartOption->extra_price,
-                ]);
-            }
-        }
+        $order = app(OrderRepositoryInterface::class)->createOrder(
+            $this->checkoutCreateOrderDTO($clientUserId, $restaurant, $address, $cart, $pricing, $orderStatus)
+        );
+        $cartItemToOrderItem = $this->mapCartItemsToOrderItems($cart, $order);
 
         foreach ($pricing['discounts'] as $discount) {
             $order->discounts()->create([
@@ -171,15 +153,6 @@ class OrderService implements OrderServiceInterface
                 'origin_id' => $discount['origin_id'],
             ]);
         }
-
-        $order->address()->create([
-            'street' => $address->street,
-            'city' => $address->city,
-            'postal_code' => $address->postal_code,
-            'country' => $address->country,
-            'latitude' => $address->latitude,
-            'longitude' => $address->longitude,
-        ]);
 
         $payment = $order->payment()->create([
             'method' => $method->value,
@@ -457,6 +430,69 @@ class OrderService implements OrderServiceInterface
                 'address_id' => 'Delivery address is outside the restaurant delivery radius.',
             ]);
         }
+    }
+
+    private function checkoutCreateOrderDTO(
+        string $clientUserId,
+        Restaurant $restaurant,
+        UserAddress $address,
+        Cart $cart,
+        array $pricing,
+        OrderStatus $orderStatus
+    ): CreateOrderDTO {
+        $items = $cart->items->map(function ($cartItem): CreateOrderItemDTO {
+            $options = $cartItem->options->map(fn ($cartOption): CreateOrderItemOptionDTO => new CreateOrderItemOptionDTO(
+                product_option_id: $cartOption->product_option_id,
+                option_name_snapshot: $cartOption->productOption->name,
+                extra_price: (float) $cartOption->extra_price
+            ));
+
+            return new CreateOrderItemDTO(
+                restaurant_product_id: $cartItem->restaurant_product_id,
+                status: OrderItemStatus::PENDING,
+                quantity: (int) $cartItem->quantity,
+                unit_price: (float) $cartItem->unit_price,
+                product_name_snapshot: $cartItem->restaurantProduct->product->name,
+                total_price: (float) $cartItem->total_price,
+                options: new DataCollection(CreateOrderItemOptionDTO::class, $options)
+            );
+        });
+
+        return new CreateOrderDTO(
+            user_id: $clientUserId,
+            restaurant_id: $restaurant->id,
+            status: $orderStatus,
+            total: (float) $pricing['total'],
+            restaurant_name_snapshot: $restaurant->name,
+            items: new DataCollection(CreateOrderItemDTO::class, $items),
+            address: new CreateOrderAddressDTO(
+                street: $address->street,
+                city: $address->city,
+                postal_code: $address->postal_code,
+                country: $address->country,
+                latitude: (float) $address->latitude,
+                longitude: (float) $address->longitude,
+            )
+        );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function mapCartItemsToOrderItems(Cart $cart, Order $order): array
+    {
+        $orderItems = $order->items()->oldest()->get()->values();
+        $cartItemToOrderItem = [];
+
+        foreach ($cart->items->values() as $index => $cartItem) {
+            $orderItem = $orderItems->get($index);
+
+            if ($orderItem) {
+                $cartItemToOrderItem[$cartItem->id] = $orderItem->id;
+            }
+        }
+
+        return $cartItemToOrderItem;
     }
 
     private function cancelPaymentForOrder(string $orderId, string $reason): void
